@@ -43,7 +43,7 @@ class IndikasiJarakKunjunganDrawerTest extends AdminTestCase
             ->assertJsonCount(1, 'indikasi_jarak_kunjungan')
             ->assertJsonPath('indikasi_jarak_kunjungan.0.jumlah', 4)
             ->assertJsonPath('indikasi_jarak_kunjungan.0.outlet_id', [11, 12, 13, 14])
-            ->assertJsonPath('indikasi_jarak_kunjungan.0.saran.kategori', 'pola_kunjungan_tidak_wajar');
+            ->assertJsonPath('indikasi_jarak_kunjungan.0.saran.kategori', 'kunjungan_tidak_wajar');
     }
 
     public function test_ambang_dari_query_menentukan_indikasi(): void

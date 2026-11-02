@@ -177,7 +177,7 @@ class AnomaliJarakKunjunganTest extends TestCase
         $hasil = AnomaliJarakKunjungan::analisis($k, 5, 4)[0];
 
         $this->assertSame([10, 11], $hasil['outlet_id']);
-        $this->assertSame('pola_kunjungan_tidak_wajar', $hasil['saran']['kategori']);
+        $this->assertSame('kunjungan_tidak_wajar', $hasil['saran']['kategori']);
         $this->assertStringContainsString('4 kunjungan outlet berturutan berjarak kurang dari 5 m', $hasil['saran']['catatan']);
         $this->assertStringContainsString('dari jam 08:00 sampai 08:15', $hasil['saran']['catatan']);
     }

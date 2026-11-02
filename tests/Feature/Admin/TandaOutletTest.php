@@ -6,7 +6,8 @@ use App\Models\User;
 use App\Support\Akses\Akses;
 use Illuminate\Support\Facades\DB;
 
-// Tanda outlet (potensi kecurangan dll.), melekat ke outlet (bukan per kunjungan/motoris): hak, validasi, cabut, audit.
+// Tanda outlet (potensi outlet fiktif), melekat ke outlet (bukan per kunjungan/motoris): hak, validasi, cabut, audit.
+// Hanya satu kategori (outlet_fiktif, spec 059) — tidak ada input kategori di request.
 class TandaOutletTest extends AdminTestCase
 {
     private const URL = '/outlet_all/tanda';
@@ -37,7 +38,7 @@ class TandaOutletTest extends AdminTestCase
     private function tandai(User $user, int $outlet = 10, array $lain = [])
     {
         return $this->actingAs($user)->postJson(self::URL, $lain + [
-            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'catatan' => 'Alamat tidak ditemukan',
+            'outlet_id' => $outlet, 'catatan' => 'Alamat tidak ditemukan',
         ]);
     }
 
@@ -73,22 +74,21 @@ class TandaOutletTest extends AdminTestCase
         $this->assertStringContainsString('Outlet fiktif', $catatan->keterangan);
     }
 
-    public function test_tanda_kembar_pada_outlet_dan_kategori_yang_sama_ditolak_dengan_nama_penanda(): void
+    public function test_tanda_kembar_pada_outlet_yang_sama_ditolak_dengan_nama_penanda(): void
     {
         $koor = $this->koordinator();
         $this->tandai($koor)->assertCreated();
 
-        $this->tandai($koor)->assertUnprocessable()->assertJsonValidationErrors('kategori');
+        $this->tandai($koor)->assertUnprocessable()->assertJsonValidationErrors('outlet_id');
         $res = $this->tandai($koor);
-        $this->assertStringContainsString('sudah ditandai oleh koor', $res->json('errors.kategori.0'));
+        $this->assertStringContainsString('sudah ditandai oleh koor', $res->json('errors.outlet_id.0'));
         $this->assertSame(1, DB::table('tanda_outlet')->where('outlet_id', 10)->count());
 
-        // Kategori lain pada outlet yang sama, dan kategori yang sama pada outlet lain, tetap boleh.
-        $this->tandai($koor, 10, ['kategori' => 'alamat_tidak_sesuai'])->assertCreated();
+        // Outlet lain tetap boleh ditandai.
         $this->tandai($koor, 20)->assertCreated();
     }
 
-    public function test_kategori_yang_tandanya_sudah_dicabut_boleh_ditandai_lagi(): void
+    public function test_outlet_yang_tandanya_sudah_dicabut_boleh_ditandai_lagi(): void
     {
         $koor = $this->koordinator();
         $id = $this->tandai($koor)->json('id');
@@ -105,16 +105,16 @@ class TandaOutletTest extends AdminTestCase
     public function test_daftar_hanya_memuat_tanda_aktif_pada_outlet_yang_diminta(): void
     {
         $koor = $this->koordinator();
-        $aktif = $this->tandai($koor)->json('id');
-        $dicabut = $this->tandai($koor, 10, ['kategori' => 'alamat_tidak_sesuai'])->json('id');
-        $this->tandai($koor, 20);
+        $dicabut = $this->tandai($koor)->json('id');
         $this->actingAs($koor)->deleteJson(self::URL.'/'.$dicabut)->assertOk();
+        $aktif = $this->tandai($koor)->json('id');
+        $this->tandai($koor, 20);
 
         $res = $this->actingAs($koor)->getJson(self::URL.'?outlet_id=10')->assertOk();
 
         $this->assertSame([$aktif], array_column($res->json('tanda'), 'id'));
         $res->assertJsonPath('bisa_tambah', true)
-            ->assertJsonPath('kategori.alamat_tidak_sesuai', 'Alamat/lokasi tidak sesuai');
+            ->assertJsonPath('kategori.outlet_fiktif', 'Outlet fiktif');
     }
 
     public function test_daftar_memuat_pendaftar_outlet_dan_waktunya(): void
@@ -161,8 +161,7 @@ class TandaOutletTest extends AdminTestCase
     {
         $koor = $this->koordinator();
 
-        $this->tandai($koor, 10, ['kategori' => 'tidak_dikenal'])->assertUnprocessable()->assertJsonValidationErrors('kategori');
-        $this->tandai($koor, 10, ['kategori' => null])->assertUnprocessable()->assertJsonValidationErrors('kategori');
+        $this->tandai($koor, 10, ['outlet_id' => null])->assertUnprocessable()->assertJsonValidationErrors('outlet_id');
         $this->tandai($koor, 10, ['catatan' => str_repeat('a', 501)])->assertUnprocessable()->assertJsonValidationErrors('catatan');
         $this->tandai($koor, 10, ['catatan' => str_repeat('a', 500)])->assertCreated();
         $this->actingAs($koor)->getJson(self::URL)->assertUnprocessable()->assertJsonValidationErrors('outlet_id');
