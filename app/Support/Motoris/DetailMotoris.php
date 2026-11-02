@@ -59,7 +59,7 @@ class DetailMotoris
     {
         $target = Pengaturan::depo($this->motoris->depo_id ? (int) $this->motoris->depo_id : null)['target'] ?? config('mobile.target_default');
 
-        return ['call' => (int) $target['call'], 'ec' => (int) $target['ec']];
+        return ['call' => (int) $target['call'], 'ec' => (int) $target['ec'], 'ipt' => (float) $target['ipt']];
     }
 
     /** Tanda motoris pada tanggal dalam periode (yang sudah dicabut tetap tampil sebagai riwayat), terbaru dulu. */
@@ -122,6 +122,30 @@ class DetailMotoris
         ];
     }
 
+    /**
+     * Pembagi kehadiran dan target: jumlah hari antara dua tanggal (termasuk) selain hari Minggu dan hari libur nasional
+     * (holiday_dates). Sengaja tidak mengikuti waktu_aktif_app seperti LaporanMotoris::hariKerja.
+     */
+    public static function hariKerja(string $dari, string $sampai): int
+    {
+        if ($sampai < $dari) {
+            return 0;
+        }
+
+        $libur = Pengaturan::libur($dari, $sampai);
+        $zona = Pengaturan::zona();
+        $akhir = CarbonImmutable::parse($sampai, $zona);
+        $jumlah = 0;
+
+        for ($hari = CarbonImmutable::parse($dari, $zona); $hari->lte($akhir); $hari = $hari->addDay()) {
+            if (! $hari->isSunday() && ! isset($libur[$hari->toDateString()])) {
+                $jumlah++;
+            }
+        }
+
+        return $jumlah;
+    }
+
     private static function masaKerja(string $masuk): string
     {
         $selisih = CarbonImmutable::parse($masuk, Pengaturan::zona())->diff(Pengaturan::sekarang()->startOfDay());
@@ -143,26 +167,28 @@ class DetailMotoris
             ->selectRaw('COUNT(*) AS hadir, SUM(CASE WHEN terlambat THEN 1 ELSE 0 END) AS terlambat')->first();
         $kunjungan = DB::table('trx_kunjungan')->where('karyawan_id', $id)->whereBetween('tanggal', $rentang)->count();
         $jual = DB::table('trx_penjualan')->where('karyawan_id', $id)->whereBetween('tanggal', $rentang)->whereNull('dibatalkan_at')
-            ->selectRaw('COUNT(*) AS transaksi, SUM(CASE WHEN is_effective_call THEN 1 ELSE 0 END) AS ec, SUM(total_qty) AS qty, SUM(total) AS nilai')
+            ->selectRaw('COUNT(*) AS transaksi, SUM(CASE WHEN is_effective_call THEN 1 ELSE 0 END) AS ec, AVG(jumlah_sku) AS ipt, SUM(total_qty) AS qty, SUM(total) AS nilai')
             ->first();
 
         $hadir = (int) $absen->hadir;
         $ec = (int) $jual->ec;
         $nilai = (int) $jual->nilai;
         $hariIni = Pengaturan::sekarang()->toDateString();
-        $hariKerja = LaporanMotoris::hariKerja($this->dari, min($this->sampai, $hariIni));
+        $hariKerja = self::hariKerja($this->dari, min($this->sampai, $hariIni));
         $target = $this->targetHarian();
 
         return [
             'hari_kerja' => $hariKerja,
             'target_call' => $target['call'] * $hariKerja,
             'target_ec' => $target['ec'] * $hariKerja,
+            // IPT = rata-rata jenis SKU per transaksi aktif; rata-rata, jadi targetnya per transaksi (tidak dikali hari kerja).
+            'target_ipt' => $target['ipt'],
             'hadir' => $hadir,
             'terlambat' => (int) $absen->terlambat,
             'kunjungan' => $kunjungan,
             'transaksi' => (int) $jual->transaksi,
             'ec' => $ec,
-            'rasio_ec' => $kunjungan ? round($ec / $kunjungan * 100, 1) : 0,
+            'ipt' => $jual->ipt === null ? 0.0 : round((float) $jual->ipt, 1),
             'penjualan' => $nilai,
             'qty' => self::angka($jual->qty),
             'rata_penjualan' => $hadir ? (int) round($nilai / $hadir) : 0,
@@ -181,7 +207,7 @@ class DetailMotoris
         $kunjungan = DB::table('trx_kunjungan')->where('karyawan_id', $id)->whereBetween('tanggal', $rentang)
             ->groupBy('tanggal')->selectRaw('tanggal, COUNT(*) AS n')->get()->keyBy(fn ($r) => $tgl($r->tanggal));
         $jual = DB::table('trx_penjualan')->where('karyawan_id', $id)->whereBetween('tanggal', $rentang)->whereNull('dibatalkan_at')
-            ->groupBy('tanggal')->selectRaw('tanggal, COUNT(*) AS transaksi, SUM(CASE WHEN is_effective_call THEN 1 ELSE 0 END) AS ec, SUM(total) AS nilai')
+            ->groupBy('tanggal')->selectRaw('tanggal, COUNT(*) AS transaksi, SUM(CASE WHEN is_effective_call THEN 1 ELSE 0 END) AS ec, AVG(jumlah_sku) AS ipt, SUM(total) AS nilai')
             ->get()->keyBy(fn ($r) => $tgl($r->tanggal));
 
         $tanggal = collect([...$absen->keys(), ...$kunjungan->keys(), ...$jual->keys()])->unique()->sort()->values();
@@ -193,6 +219,7 @@ class DetailMotoris
             'terlambat' => (bool) ($absen[$t]->terlambat ?? false),
             'kunjungan' => (int) ($kunjungan[$t]->n ?? 0),
             'ec' => (int) ($jual[$t]->ec ?? 0),
+            'ipt' => round((float) ($jual[$t]->ipt ?? 0), 1),
             'transaksi' => (int) ($jual[$t]->transaksi ?? 0),
             'penjualan' => (int) ($jual[$t]->nilai ?? 0),
         ])->all();

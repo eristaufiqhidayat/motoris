@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Akses\Akses;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Motoris\DetailMotoris;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 // Modal Detail Motoris di Lacak Motoris (spec 060): profil dan historis transaksi motoris pada satu periode.
@@ -38,6 +40,24 @@ class DetailMotorisController extends Controller
         abort_unless($detail, 404);
 
         return response()->json($detail->toArray($request->user()));
+    }
+
+    /**
+     * Daftar motoris (sales aktif dalam cakupan role akun) untuk pemilih "ganti motoris" di modal. Motoris yang sedang
+     * dibuka (parameter id) selalu ikut, walau sudah tidak aktif, supaya pemilih bisa menampilkannya.
+     */
+    public function pilihan(Request $request): JsonResponse
+    {
+        $saatIni = $request->integer('id');
+
+        $motoris = Akses::batasiKaryawan(
+            DB::table('mk_karyawan as k')->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')->where('k.kategori', 'sales')
+                ->where(fn ($w) => $w->where('k.aktif', true)->when($saatIni, fn ($x) => $x->orWhere('k.id', $saatIni))),
+            $request->user()
+        )->orderBy('k.nama')->get(['k.id', 'k.nama', 'd.nama as depo'])
+            ->map(fn ($m) => ['value' => (string) $m->id, 'label' => $m->nama.($m->depo ? " · {$m->depo}" : '')]);
+
+        return response()->json(['motoris' => $motoris->values()]);
     }
 
     /** Transaksi motoris pada satu tanggal, untuk detail baris tabel Harian. */

@@ -552,7 +552,7 @@ function filterTabel(table, { nilai, operator }) {
         </Modal>
         <!-- Modal Detail Motoris, dibuka dari nama motoris di tabel Tracking Last Seen Sales: hampir sepenuh layar untuk analisa kinerja. -->
         <Modal :show="motorisTerpilih !== null" :title="motorisTerpilih ? `Detail Motoris · ${motorisTerpilih.nama}` : ''" size="full" @close="motorisTerpilih = null">
-            <DetailMotoris v-if="motorisTerpilih" :key="motorisTerpilih.id" :sales-id="motorisTerpilih.id" />
+            <DetailMotoris v-if="motorisTerpilih" :sales-id="motorisTerpilih.id" @ganti="motorisTerpilih = $event" />
         </Modal>
         <!-- Drawer peta lokasi depo, dibuka dari tombol Peta di tabel master_depo. -->
         <Modal :show="depoPeta !== null" :title="depoPeta ? `Peta ${depoPeta.nama}` : ''" placement="kanan" @close="depoPeta = null">

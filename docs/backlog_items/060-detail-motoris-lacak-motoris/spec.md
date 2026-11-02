@@ -21,8 +21,8 @@ Detail Motoris** berisi profil motoris dan historis transaksinya pada periode ya
 3. Sebagai koordinator, saya memilih periode (tanggal dari–sampai; bawaan awal bulan ini s.d. hari ini) dan semua
    angka mengikuti periode itu.
 4. Sebagai koordinator, saya melihat ringkasan kinerja periode: hari hadir dibanding hari kerja standar, jumlah
-   terlambat, kunjungan (call), effective call dan rasionya, jumlah transaksi, total penjualan, total qty, dan
-   rata-rata penjualan per hari hadir.
+   terlambat, kunjungan (call), effective call, IPT, dan
+   rata-rata penjualan per hari hadir (total penjualan dan jumlah transaksi tidak dijadikan kartu KPI; ada di tabel Harian).
 5. Sebagai koordinator, saya melihat grafik dan tabel per hari (jam masuk, jam pulang, kunjungan, EC, transaksi,
    penjualan) untuk menemukan hari-hari yang tidak wajar.
 6. Sebagai koordinator, saya mengklik satu tanggal di tabel Harian untuk melihat transaksi penjualan motoris pada
@@ -46,15 +46,22 @@ Detail Motoris** berisi profil motoris dan historis transaksinya pada periode ya
   `trx_penjualan_item`, `mk_produk`, `mk_outlet`. Controller tipis.
 - **Definisi angka sama dengan Motoris Report** (`LaporanMotoris`): hari hadir = baris `trx_absensi`; kunjungan =
   baris `trx_kunjungan`; transaksi, EC (`is_effective_call`), qty, dan nilai dari `trx_penjualan` yang **tidak
-  dibatalkan**; hari kerja standar = `LaporanMotoris::hariKerja(dari, sampai)` (sampai dibatasi hari ini).
+  dibatalkan**; hari kerja = `DetailMotoris::hariKerja(dari, sampai)`: jumlah hari dalam periode selain hari Minggu dan hari libur nasional (`holiday_dates`), `sampai` dibatasi hari ini; tidak mengikuti `waktu_aktif_app`.
 - **Transaksi per tanggal**: tidak ikut payload utama (tab Transaksi dihapus karena terlalu banyak data dan kurang
   berguna untuk analisa; ringkasan dan tabel Harian sudah memuat jumlah transaksi dan penjualan). Klik baris Harian
   memanggil `GET /tracking_sales/{id}/detail/transaksi?tanggal=Y-m-d` (hak dan cakupan sama), maks. 200 transaksi hari itu
   (batas pengaman), urut jam turun; transaksi batal tetap tampil berstatus "Batal" tapi tidak ikut ringkasan. Waktu
   `recorded_at` (UTC) ditampilkan jam lokal lewat `JamLokal`.
 - **Target**: Call/EC per hari dari pengaturan depo motoris (`Pengaturan::depo`, bawaan `mobile.target_default`) — sama
-  dengan KPI di aplikasi HP. Target periode = target harian × hari kerja standar (seperti Motoris Report); persen
+  dengan KPI di aplikasi HP. Target periode = target harian × hari kerja (selain Minggu dan libur nasional); persen
   dihitung di frontend (`persenTarget`). Baris harian dibandingkan dengan target harian.
+- **IPT** = rata-rata jumlah jenis SKU per transaksi aktif (satu desimal; rumus sama dengan KPI di aplikasi HP dan Riwayat
+  Lacak Motoris), target `ipt` dari pengaturan depo/bawaan. Karena rata-rata, target IPT periode sama dengan target
+  harian (tidak dikali hari kerja). Tampil sebagai KPI card (dengan bar target) dan kolom di tabel Harian.
+- **Pemuatan**: pengambilan detail (pertama kali dan ganti periode) hanya ditandai spinner di tombol Tampilkan (`Button loading`); data lama tetap tampil. Dialog transaksi per tanggal, yang tidak punya tombol, menampilkan `Spinner` dan teks selama data dimuat.
+- **Ganti motoris**: kolom `Motoris` (Combobox, bisa diketik untuk mencari) di baris atas modal berisi sales aktif dalam cakupan
+  role akun (`GET /tracking_sales/pilihan-motoris?id=`; motoris yang sedang dibuka selalu ikut). Memilih motoris lain
+  mengganti isi dan judul modal tanpa menutupnya; periode dan tab tetap, dialog transaksi ditutup.
 - **Jam pulang** dari `trx_absensi.pulang_at` (jam lokal); kosong bila belum absen pulang.
 - **Tab Ditandai**: tanda motoris (`tanda_motoris`) pada tanggal dalam periode, yang dicabut tetap tampil berstatus
   Dicabut; tanda outlet aktif pada outlet yang didaftarkan motoris ini (`TandaOutletMotoris::aktif`, jendela hari
@@ -66,7 +73,8 @@ Detail Motoris** berisi profil motoris dan historis transaksinya pada periode ya
   kinerja.
 - **UI**: `Pages/Menu/partials/DetailMotoris.vue` dalam `Modal size="full"` dari `Menu/Show.vue`, dibuka dari slot
   `#cell-nama` tabel `tracking_last_seen_sales`. Isi: baris periode (dua `DatePicker` + tombol Tampilkan), kartu
-  profil, kartu KPI, lalu `Tabs` Harian (grafik `BarChart` + `DataTable` yang barisnya bisa diklik membuka dialog
+  profil, kartu KPI, lalu `Tabs` Harian (grafik garis Call dan Effective Call per tanggal lewat
+  `LineChart` + `DataTable` yang barisnya bisa diklik membuka dialog
   transaksi tanggal itu) / Produk Terlaris / Ditandai. Semua dari komponen `Components/ui`.
 
 ## Testing

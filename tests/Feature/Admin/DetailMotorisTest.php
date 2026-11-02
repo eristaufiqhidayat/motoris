@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
-use App\Support\Motoris\LaporanMotoris;
+use App\Support\Motoris\DetailMotoris;
 use Illuminate\Support\Facades\DB;
 
 // Modal Detail Motoris di Lacak Motoris: profil, ringkasan & harian per periode, transaksi per tanggal, produk terlaris, hak & cakupan.
@@ -97,13 +97,15 @@ class DetailMotorisTest extends AdminTestCase
     {
         $res = $this->getJson($this->url())->assertOk();
 
-        $res->assertJsonPath('ringkasan.hari_kerja', LaporanMotoris::hariKerja('2026-11-01', '2026-11-15'))
+        // 1–15 Nov 2026: 15 hari - 3 Minggu (1, 8, 15) = 12.
+        $res->assertJsonPath('ringkasan.hari_kerja', 12)
             ->assertJsonPath('ringkasan.hadir', 2)
             ->assertJsonPath('ringkasan.terlambat', 1)
             ->assertJsonPath('ringkasan.kunjungan', 3)
             ->assertJsonPath('ringkasan.transaksi', 1)
             ->assertJsonPath('ringkasan.ec', 1)
-            ->assertJsonPath('ringkasan.rasio_ec', 33.3)
+            ->assertJsonPath('ringkasan.ipt', 2)
+            ->assertJsonPath('ringkasan.target_ipt', 3)
             ->assertJsonPath('ringkasan.penjualan', 150000)
             ->assertJsonPath('ringkasan.qty', 5)
             ->assertJsonPath('ringkasan.rata_penjualan', 75000);
@@ -113,6 +115,30 @@ class DetailMotorisTest extends AdminTestCase
             ->assertJsonPath('ringkasan.hadir', 1)
             ->assertJsonPath('ringkasan.penjualan', 40000)
             ->assertJsonPath('harian.0.tanggal', '2026-10-20');
+    }
+
+    public function test_ipt_adalah_rata_rata_sku_per_transaksi_aktif(): void
+    {
+        // Tambah transaksi 3 Nov dengan 5 SKU: (2 + 5) / 2 = 3,5; transaksi batal (PJ-2, 4 Nov) tidak dihitung.
+        DB::table('trx_penjualan')->insert([
+            'kode' => 'PJ-3', 'kunjungan_id' => 1, 'karyawan_id' => 1, 'outlet_id' => 70, 'tanggal' => '2026-11-03', 'jumlah_sku' => 5,
+            'total_qty' => 5, 'total' => 1000, 'total_diskon' => 0, 'is_effective_call' => false, 'recorded_at' => '2026-11-03 04:30:00',
+        ]);
+
+        $res = $this->getJson($this->url())->assertOk()->assertJsonPath('ringkasan.ipt', 3.5)->assertJsonPath('target.ipt', 3);
+
+        $this->assertSame(3.5, $res->json('harian.0.ipt'));
+    }
+
+    public function test_hari_kerja_tidak_menghitung_minggu_dan_libur_nasional(): void
+    {
+        // Oktober 2026: 31 hari - 4 Minggu (4, 11, 18, 25) = 27; libur 20 Okt (Selasa) = 26; libur 25 Okt jatuh di Minggu, tidak dihitung dua kali.
+        DB::table('holiday_dates')->insert([
+            ['nama_libur' => 'Libur Contoh', 'tanggal' => '2026-10-20'],
+            ['nama_libur' => 'Libur Minggu', 'tanggal' => '2026-10-25'],
+        ]);
+
+        $this->assertSame(26, DetailMotoris::hariKerja('2026-10-01', '2026-10-31'));
     }
 
     public function test_rekap_harian(): void
@@ -125,12 +151,13 @@ class DetailMotorisTest extends AdminTestCase
         $this->assertNull($harian[1]['pulang']);
         $this->assertTrue($harian[0]['terlambat']);
         $this->assertSame([2, 1, 1, 150000], [$harian[0]['kunjungan'], $harian[0]['ec'], $harian[0]['transaksi'], $harian[0]['penjualan']]);
+        $this->assertEquals([2, 0], [$harian[0]['ipt'], $harian[1]['ipt']]);
         $this->assertSame([1, 0, 0, 0], [$harian[1]['kunjungan'], $harian[1]['ec'], $harian[1]['transaksi'], $harian[1]['penjualan']]);
     }
 
     public function test_target_call_dan_ec_dari_pengaturan_depo_dikali_hari_kerja(): void
     {
-        $hk = LaporanMotoris::hariKerja('2026-11-01', '2026-11-15');
+        $hk = 12;
         $res = $this->getJson($this->url())->assertOk();
 
         // Depo 46 tanpa pengaturan target: memakai bawaan config('mobile.target_default').
@@ -236,6 +263,34 @@ class DetailMotorisTest extends AdminTestCase
     {
         $this->getJson($this->url(1, ['dari' => '2026-11-10', 'sampai' => '2026-11-01']))->assertUnprocessable()->assertJsonValidationErrors('sampai');
         $this->getJson($this->url(1, ['dari' => '2025-01-01', 'sampai' => '2026-11-01']))->assertUnprocessable()->assertJsonValidationErrors('sampai');
+    }
+
+    public function test_pilihan_motoris_hanya_sales_aktif_dengan_depo(): void
+    {
+        $res = $this->getJson('/tracking_sales/pilihan-motoris')->assertOk();
+
+        // Super admin: Rudi, Sinta, Tegar (aktif); Joko (tidak aktif), koordinator, dan staf lain tidak ikut. Urut nama.
+        $this->assertSame(
+            [['value' => '1', 'label' => 'Rudi Hartono · Sidoarjo'], ['value' => '2', 'label' => 'Sinta Wulandari · Balaraja'], ['value' => '3', 'label' => 'Tegar Mahendra · Sidoarjo']],
+            $res->json('motoris')
+        );
+    }
+
+    public function test_pilihan_motoris_menyertakan_motoris_yang_sedang_dibuka_walau_tidak_aktif(): void
+    {
+        $nilai = fn ($res) => array_column($res->json('motoris'), 'value');
+
+        $this->assertNotContains('4', $nilai($this->getJson('/tracking_sales/pilihan-motoris')));
+        $this->assertContains('4', $nilai($this->getJson('/tracking_sales/pilihan-motoris?id=4')));
+    }
+
+    public function test_pilihan_motoris_mengikuti_cakupan_role_dan_hak(): void
+    {
+        $koor = $this->akun('koor', 'koordinator', 137);
+        $this->assertSame(['1', '3'], array_column($this->actingAs($koor)->getJson('/tracking_sales/pilihan-motoris')->json('motoris'), 'value'));
+
+        $role = $this->role('Tanpa Lacak', 'semua', ['karyawan_sales' => ['lihat']]);
+        $this->actingAs($this->akun('lain', 'koordinator', 137, ['role_id' => $role]))->getJson('/tracking_sales/pilihan-motoris')->assertForbidden();
     }
 
     public function test_bukan_sales_atau_tidak_ada_404(): void

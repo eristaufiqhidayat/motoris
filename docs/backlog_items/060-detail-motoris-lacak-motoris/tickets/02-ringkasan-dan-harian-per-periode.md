@@ -11,7 +11,7 @@ tab Harian (grafik penjualan + tabel per tanggal), dengan definisi angka yang sa
 
 ## Acceptance criteria
 
-- [x] `ringkasan`: hari kerja standar, hari hadir, terlambat, kunjungan, EC, rasio EC, transaksi, total penjualan,
+- [x] `ringkasan`: hari kerja standar, hari hadir, terlambat, kunjungan, EC, transaksi, total penjualan,
       total qty, rata-rata penjualan per hari hadir — transaksi batal tidak dihitung.
 - [x] `harian`: satu baris per tanggal yang punya absensi/kunjungan/penjualan (jam masuk lokal, kunjungan, EC,
       transaksi, penjualan), urut tanggal.
