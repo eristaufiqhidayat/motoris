@@ -2,16 +2,20 @@
 
 namespace App\Support\Master;
 
+use App\Support\Marketama\HalamanParser;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Definisi field form "Tambah Warehouse / Depo" (meniru /master_depo/add di Marketama) + helper
  * dropdown wilayah berjenjang (Provinsi → Kota/Kab → Kecamatan → Kelurahan), Project, dan City Group.
  * Dipakai MasterDepoController dan halaman Vue MasterDepo/Tambah.
  *
- * Disimpan ke mk_depo (tabel master Marketama di Enesis), bukan ke "master_depo" (tabel hasil impor CSV
- * lama yang dipakai menu daftar Master Warehouse / Depo yang sudah ada) — lihat catatan di migrasi kolom.
+ * Disimpan ke mk_depo (tabel master Marketama di Enesis) — menu daftar Master Warehouse / Depo yang sudah
+ * ada juga membaca mk_depo lewat App\Support\Menu\SumberMasterDepo, bukan lagi "master_depo" (tabel hasil
+ * impor CSV lama). satukanDariMasterDepo() mengisi kolom-kolom mk_depo untuk depo lama hasil
+ * `marketama:tarik` dari data admin di "master_depo" — jalankan sekali lewat `php artisan enesis:satukan-master-depo`.
  */
 class MasterDepo
 {
@@ -112,5 +116,69 @@ class MasterDepo
             ->orderByDesc('diubah_pada')
             ->limit($limit)
             ->get(['id', 'kode', 'nama', 'provinsi', 'kota_kabupaten', 'target_call', 'target_ec', 'aktif', 'foto', 'diubah_oleh', 'diubah_pada']);
+    }
+
+    /**
+     * Isi kolom-kolom baru mk_depo (target call/EC, kuota, lokasi, dll.) dari "master_depo" (tabel hasil
+     * impor CSV lama) untuk depo hasil `marketama:tarik` yang kolom barunya masih kosong — dicocokkan lewat
+     * nama (sama seperti cadangan yang sudah dipakai App\Support\Mobile\Pengaturan::depo() untuk aplikasi
+     * HP), karena kode belum tentu terisi sama di kedua tabel. Aman diulang: depo yang target_call-nya
+     * sudah terisi (baik dari sini atau diisi admin lewat form) tidak ditimpa.
+     *
+     * @return int jumlah depo yang diisi
+     */
+    public static function satukanDariMasterDepo(): int
+    {
+        if (! Schema::hasTable(self::TABEL) || ! Schema::hasTable('master_depo')) {
+            return 0;
+        }
+
+        $lamaPerNama = DB::table('master_depo')->get()->keyBy(fn ($b) => HalamanParser::kunciNama($b->nama));
+        $projectIdPerNama = DB::table('master_project')->pluck('id', 'nama_project');
+        $cityGroupIdPerNama = DB::table('city_group')->pluck('id', 'nama_city_group');
+
+        $angkaBulat = fn (?string $t) => ($n = HalamanParser::angka($t)) !== null ? (int) round($n) : null;
+        $angkaDesimal = fn (?string $t) => HalamanParser::angka($t);
+        $koordinat = fn (?string $t) => HalamanParser::angka($t, desimalTitik: true);
+        $teks = fn (?string $t) => $t !== null && $t !== '-' ? $t : null;
+
+        $jumlah = 0;
+
+        DB::table(self::TABEL)->whereNull('target_call')->orderBy('id')->get(['id', 'nama'])->each(
+            function ($depo) use ($lamaPerNama, $projectIdPerNama, $cityGroupIdPerNama, $angkaBulat, $angkaDesimal, $koordinat, $teks, &$jumlah) {
+                $lama = $lamaPerNama->get(HalamanParser::kunciNama($depo->nama));
+
+                if (! $lama) {
+                    return;
+                }
+
+                DB::table(self::TABEL)->where('id', $depo->id)->update([
+                    'project_id' => $teks($lama->projek) !== null ? ($projectIdPerNama[$lama->projek] ?? null) : null,
+                    'city_group_id' => $teks($lama->kota_besar) !== null ? ($cityGroupIdPerNama[$lama->kota_besar] ?? null) : null,
+                    'provinsi' => $teks($lama->provinsi),
+                    'kota_kabupaten' => $teks($lama->kota_kab),
+                    'kecamatan' => $teks($lama->kecamatan),
+                    'kelurahan_desa' => $teks($lama->kelurahan_desa),
+                    'alamat' => $teks($lama->alamat),
+                    'latitude' => $koordinat($lama->latitude),
+                    'longitude' => $koordinat($lama->longitude),
+                    'minimum_sku' => $angkaBulat($lama->minimum_sku),
+                    'kuota_koordinator' => $angkaBulat($lama->kuota_koordinator),
+                    'kuota_sales_motoris' => $angkaBulat($lama->kuota_sales_motoris),
+                    'target_call' => $angkaBulat($lama->target_call),
+                    'target_ec' => $angkaBulat($lama->target_ec),
+                    'durasi_tracking_gps' => $angkaBulat($lama->durasi_tracking_gps),
+                    'insentif_per_poin' => $angkaDesimal($lama->insentif_per_poin),
+                    'outlet_1_sku' => $angkaBulat($lama->outlet_1_sku),
+                    'minimal_value_transaksi' => $angkaDesimal($lama->minimal_value_transaksi),
+                    'multi_polygon_sales' => HalamanParser::aktif($lama->multi_polygon_sales) ?? false,
+                    'aktif' => HalamanParser::aktif($lama->status) ?? true,
+                ]);
+
+                $jumlah++;
+            }
+        );
+
+        return $jumlah;
     }
 }

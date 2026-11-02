@@ -39,9 +39,12 @@ class Pengaturan
             return null;
         }
 
-        $data = json_decode((string) $depo->data, true) ?: [];
+        // Kolom asli mk_depo (diisi lewat form Tambah/Edit Depo Enesis, atau backfill dari master_depo —
+        // lihat migrasi 2026_11_03_000001) diutamakan; JSON "data" hasil tarikan dipakai hanya untuk kolom
+        // yang masih kosong (array_filter buang null supaya kolom kosong tetap jatuh ke cadangan JSON).
+        $data = array_filter((array) $depo, fn ($v) => $v !== null) + (json_decode((string) $depo->data, true) ?: []);
 
-        // Cadangan: tabel master_depo lama (hasil scraping) dengan nama yang sama.
+        // Cadangan terakhir: tabel master_depo lama (hasil scraping) dengan nama yang sama.
         if (Schema::hasTable('master_depo') && (! isset($data['latitude']) || ! isset($data['minimal_value_transaksi']))) {
             $lama = DB::table('master_depo')->whereRaw('LOWER(TRIM(nama)) = ?', [HalamanParser::kunciNama($depo->nama)])->first();
             $data += $lama ? (array) $lama : [];
