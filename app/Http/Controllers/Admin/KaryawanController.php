@@ -47,7 +47,7 @@ class KaryawanController extends Controller
     private const DISK = 'local';
 
     private const JUDUL = [
-        'sales' => ['Karyawan Sales', 'sales'],
+        'sales' => ['Karyawan Motoris', 'motoris'],
         'koordinator' => ['Karyawan Koordinator', 'koordinator'],
         'supervisor' => ['Karyawan Supervisor', 'supervisor'],
         'lainnya' => ['Karyawan Lainnya', 'karyawan'],
@@ -59,7 +59,7 @@ class KaryawanController extends Controller
     {
         [$slug, $kategori] = $this->menu($request);
         $q = trim((string) $request->query('q'));
-        $status = in_array($request->query('status'), ['aktif', 'tidak_aktif'], true) ? $request->query('status') : 'semua';
+        $status = in_array($request->query('status'), ['semua', 'aktif', 'tidak_aktif'], true) ? $request->query('status') : 'aktif';
         $depo = $request->integer('depo') ?: null;
 
         $dasar = $this->query($request, $kategori);
@@ -240,12 +240,12 @@ class KaryawanController extends Controller
         $data = $request->validate([
             'tujuan_id' => ['required', 'integer', Rule::notIn([$id])],
             'mode' => ['required', Rule::in(['ganti', 'gabung'])],
-        ], ['tujuan_id.required' => 'Pilih sales tujuan.', 'tujuan_id.not_in' => 'Sales tujuan harus berbeda.']);
+        ], ['tujuan_id.required' => 'Pilih motoris tujuan.', 'tujuan_id.not_in' => 'Motoris tujuan harus berbeda.']);
 
         $tujuan = DB::table('mk_karyawan')->where('id', $data['tujuan_id'])->where('kategori', 'sales')->where('depo_id', $asal->depo_id)->first();
 
         if (! $tujuan) {
-            throw ValidationException::withMessages(['tujuan_id' => 'Sales tujuan harus sales di depo yang sama.']);
+            throw ValidationException::withMessages(['tujuan_id' => 'Motoris tujuan harus motoris di depo yang sama.']);
         }
 
         $area = DB::table('mk_karyawan_area')->where('karyawan_id', $id)->get();
@@ -508,7 +508,7 @@ class KaryawanController extends Controller
             'koordinator_id.in' => 'Pilih koordinator dari depo yang sama.',
             'area_ids.required' => 'Pilih minimal satu area.',
             'area_ids.*.in' => 'Area harus milik depo yang dipilih.',
-            'area_aktif_ids.*.in' => 'Area aktif harus salah satu area sales ini.',
+            'area_aktif_ids.*.in' => 'Area aktif harus salah satu area motoris ini.',
             'no_hp.regex' => 'No HP hanya boleh angka, spasi, + dan -.',
             'nik.digits' => 'NIK harus 16 digit angka.',
             'nik.unique' => 'NIK ini sudah dipakai karyawan lain.',

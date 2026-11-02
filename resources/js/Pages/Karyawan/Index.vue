@@ -14,6 +14,7 @@ import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
 import DataTable from '@/Components/ui/organisms/DataTable.vue';
 import FormKaryawan from './partials/FormKaryawan.vue';
 import FormSkeleton from '@/Components/ui/molecules/FormSkeleton.vue';
+import ReviewKaryawan from './partials/ReviewKaryawan.vue';
 import { useAmbilData } from '@/Support/ambilData.js';
 import { angka } from '@/Support/format.js';
 import { filterTabelTeks, urutkanTabel } from '@/Support/sortFilterTabel.js';
@@ -28,7 +29,7 @@ const props = defineProps({
     kolom: { type: Object, required: true },
     baris: { type: Object, required: true },
     q: { type: String, default: '' },
-    status: { type: String, default: 'semua' },
+    status: { type: String, default: 'aktif' },
     depo: { type: Number, default: null },
     jumlah: { type: Object, required: true },
     daftarDepo: { type: Array, default: () => [] },
@@ -51,12 +52,12 @@ const { memuat, berubah, ambil } = useAmbilData({
 });
 
 function kirimCari() {
-    ambil(base, bersih({ status: props.status !== 'semua' ? props.status : null, q: cari.value.q.trim(), depo: cari.value.depo }),
+    ambil(base, bersih({ status: props.status !== 'aktif' ? props.status : null, q: cari.value.q.trim(), depo: cari.value.depo }),
         { preserveState: true, replace: true });
 }
 
 function tautanStatus(kode) {
-    const query = new URLSearchParams(bersih({ status: kode === 'semua' ? null : kode, q: props.q, depo: props.depo })).toString();
+    const query = new URLSearchParams(bersih({ status: kode === 'aktif' ? null : kode, q: props.q, depo: props.depo })).toString();
     return query ? `${base}?${query}` : base;
 }
 
@@ -64,12 +65,15 @@ const formUrl = ref(null);
 const formData = ref(null);
 const formGagal = ref(false);
 const formSedangSimpan = ref(false);
+// 'review' (baca saja, dibuka saat klik nama) atau 'edit' (form, dibuka dari tombol Ubah di review atau Tambah).
+const mode = ref('edit');
 const bolehSimpan = computed(() => (formData.value?.item ? props.bisa.ubah : props.bisa.tambah));
 
-async function bukaForm(url) {
+async function bukaForm(url, modeAwal = 'edit') {
     formUrl.value = url;
     formData.value = null;
     formGagal.value = false;
+    mode.value = modeAwal;
 
     try {
         const respons = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -148,7 +152,7 @@ function tutupForm() {
                 </span>
             </template>
             <template #cell-nama="{ row }">
-                <button type="button" class="cursor-pointer font-semibold text-blue-600 hover:underline" @click="bukaForm(`${base}/${row.id}/edit`)">{{ row.nama }}</button>
+                <button type="button" class="cursor-pointer font-semibold text-blue-600 hover:underline" @click="bukaForm(`${base}/${row.id}/edit`, 'review')">{{ row.nama }}</button>
             </template>
             <template #cell-aktif="{ row }">
                 <Badge :variant="row.aktif === 'Aktif' ? 'success' : 'secondary'">{{ row.aktif }}</Badge>
@@ -160,7 +164,7 @@ function tutupForm() {
 
         <Modal
             :show="formUrl !== null"
-            :title="formData ? (formData.item ? `${bisa.ubah ? 'Edit' : 'Detail'} ${nama}: ${formData.item.nama}` : `Tambah ${nama}`) : judul"
+            :title="formData ? (formData.item ? `${mode === 'review' ? 'Detail' : 'Edit'} ${nama}: ${formData.item.nama}` : `Tambah ${nama}`) : judul"
             placement="kanan"
             @close="tutupForm"
         >
@@ -171,7 +175,16 @@ function tutupForm() {
                     ID {{ formData.item.id }}<template v-if="formData.item.akun.length"> · akun login: {{ formData.item.akun.join(', ') }}</template>
                     · <Link :href="`${base}/${formData.item.id}/edit`">buka halaman lengkap</Link>
                 </p>
+                <ReviewKaryawan
+                    v-if="mode === 'review'"
+                    :kategori="kategori"
+                    :nama="nama"
+                    :item="formData.item"
+                    :nilai="formData.nilai"
+                    :opsi="formData.opsi"
+                />
                 <FormKaryawan
+                    v-else
                     id="form-karyawan"
                     :slug="slug"
                     :kategori="kategori"
@@ -187,8 +200,9 @@ function tutupForm() {
             </template>
 
             <template v-if="formData" #footer>
-                <Button variant="light" @click="tutupForm">Batal</Button>
-                <Button v-if="bolehSimpan" type="submit" form="form-karyawan" :loading="formSedangSimpan">Simpan</Button>
+                <Button variant="light" @click="mode === 'edit' && formData.item ? (mode = 'review') : tutupForm()">{{ mode === 'review' ? 'Tutup' : 'Batal' }}</Button>
+                <Button v-if="mode === 'review' && bisa.ubah" @click="mode = 'edit'">{{ kategori === 'sales' ? 'Update Motoris' : `Ubah ${nama}` }}</Button>
+                <Button v-if="mode === 'edit' && bolehSimpan" type="submit" form="form-karyawan" :loading="formSedangSimpan">Simpan</Button>
             </template>
         </Modal>
     </AppLayout>

@@ -26,17 +26,17 @@ function pindahkan() {
 
 <template>
     <Card>
-        <template #header>Pindah area ke sales lain</template>
+        <template #header>Pindah area ke motoris lain</template>
         <form class="flex flex-col gap-3" @submit.prevent="pindahkan">
-            <p class="mb-0 text-gray-600">{{ jumlahArea }} area milik {{ item.nama }} dipindahkan ke sales tujuan di depo yang sama; {{ item.nama }} tidak lagi punya area.</p>
+            <p class="mb-0 text-gray-600">{{ jumlahArea }} area milik {{ item.nama }} dipindahkan ke motoris tujuan di depo yang sama; {{ item.nama }} tidak lagi punya area.</p>
             <div>
-                <Label for="tujuan_id">Sales tujuan</Label>
-                <Combobox id="tujuan_id" v-model="form.tujuan_id" :options="sales" placeholder="Cari sales di depo ini..." />
+                <Label for="tujuan_id">Motoris tujuan</Label>
+                <Combobox id="tujuan_id" v-model="form.tujuan_id" :options="sales" placeholder="Cari motoris di depo ini..." />
                 <FieldError v-if="form.errors.tujuan_id">{{ form.errors.tujuan_id }}</FieldError>
             </div>
             <div class="flex flex-col gap-1" role="radiogroup" aria-label="Cara memindahkan">
-                <label class="flex items-center gap-2"><Radio v-model="form.mode" name="mode" value="gabung" /> Gabungkan dengan area sales tujuan</label>
-                <label class="flex items-center gap-2"><Radio v-model="form.mode" name="mode" value="ganti" /> Ganti area sales tujuan</label>
+                <label class="flex items-center gap-2"><Radio v-model="form.mode" name="mode" value="gabung" /> Gabungkan dengan area motoris tujuan</label>
+                <label class="flex items-center gap-2"><Radio v-model="form.mode" name="mode" value="ganti" /> Ganti area motoris tujuan</label>
             </div>
             <div>
                 <Button type="submit" variant="outline-primary" :disabled="!form.tujuan_id || !jumlahArea" :loading="form.processing">Pindahkan area</Button>

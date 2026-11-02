@@ -651,7 +651,7 @@ return [
                         ],
                         [
                             'slug' => 'karyawan_sales',
-                            'title' => 'Karyawan Sales',
+                            'title' => 'Karyawan Motoris',
                             'icon' => 'id-card',
                         ],
                         [
