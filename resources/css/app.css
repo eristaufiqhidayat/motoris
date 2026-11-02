@@ -387,6 +387,8 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     /* Nama depo di tabel master_depo: tombol yang membuka modal slider infografis (lihat DetailDepoSlider.vue). */
     /* Baris tabel yang bisa diklik (DataTable prop barisBisaDiklik). */
     .data-table tbody tr.baris-klik { @apply cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500; }
+    .data-table tbody tr.baris-klik:hover { @apply bg-gray-50; }
+    .data-table tbody tr.baris-aktif, .data-table tbody tr.baris-aktif:hover { @apply bg-blue-50; }
     .tautan-depo { @apply cursor-pointer text-left font-semibold text-blue-600 hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500; }
     .tautan-bahaya { @apply cursor-pointer text-left font-semibold text-red-600 hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500; }
     /* Ikon di depan teks tautan (me-1), seukuran teks kecil. */
@@ -610,6 +612,9 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     .kpi-nilai-baik { @apply text-green-700; }
     .kpi-nilai-waspada { @apply text-orange-600; }
     .kpi-catatan { @apply ml-1 text-xs font-normal text-gray-500; }
+    /* Baris ketiga kartu KPI berisi progress bar target (Call, Effective Call, IPT); bar tipis di tengah baris setinggi 16px. */
+    .kpi-baris-bar { @apply mt-1 flex h-4 items-center; }
+    .kpi-baris-bar .kpi-bar { @apply mt-0 w-full; }
     /* Realisasi terhadap target (Call, Effective Call): persen di samping angka dan batang progress tipis. */
     .kpi-persen { @apply ml-1.5 text-xs font-semibold text-amber-600; }
     .kpi-persen.kpi-persen-capai { @apply text-green-700; }

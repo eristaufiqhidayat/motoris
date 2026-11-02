@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Support\Akses\Akses;
 use App\Support\Akses\HierarkiSales;
 use App\Support\Karyawan\BacaKtp;
+use App\Support\Karyawan\TanggalBebas;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Tabel\SortFilterKolom;
 use Carbon\CarbonImmutable;
@@ -732,34 +733,10 @@ class KaryawanController extends Controller
         return $waktu ? CarbonImmutable::parse($waktu, 'UTC')->setTimezone(Pengaturan::zona())->locale('id')->translatedFormat('j M Y H:i') : null;
     }
 
-    /** Tanggal mulai tersimpan bebas (aplikasi lama: "dd/mm/yyyy", "1 Maret 2026", ISO); form memakai Y-m-d. */
+    /** Form memakai Y-m-d; nilai tersimpan bebas dinormalkan TanggalBebas. */
     private function tanggalForm(mixed $nilai): string
     {
-        $nilai = trim((string) $nilai);
-
-        if ($nilai === '' || $nilai === '-') {
-            return '';
-        }
-
-        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'Y-m-d H:i:s'] as $format) {
-            try {
-                $t = CarbonImmutable::createFromFormat($format, $nilai);
-
-                if ($t && $t->format($format) === $nilai) {
-                    return $t->toDateString();
-                }
-            } catch (\Throwable) {
-            }
-        }
-
-        $bulan = ['januari' => 'January', 'februari' => 'February', 'maret' => 'March', 'april' => 'April', 'mei' => 'May', 'juni' => 'June',
-            'juli' => 'July', 'agustus' => 'August', 'september' => 'September', 'oktober' => 'October', 'november' => 'November', 'desember' => 'December'];
-
-        try {
-            return CarbonImmutable::parse(str_ireplace(array_keys($bulan), array_values($bulan), $nilai))->toDateString();
-        } catch (\Throwable) {
-            return '';
-        }
+        return TanggalBebas::keYmd($nilai) ?? '';
     }
 
     private function bisa(Request $request, string $slug): array

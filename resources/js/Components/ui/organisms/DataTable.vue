@@ -48,6 +48,8 @@ const props = defineProps({
     memuat: { type: Boolean, default: false },
     // Seluruh baris bisa diklik (atau Enter saat difokus) dan mengirim 'klik-baris' dengan datanya, mis. untuk membuka drawer detail.
     barisBisaDiklik: { type: Boolean, default: false },
+    // Fungsi (row) => boolean: baris yang sedang dipilih diberi sorotan (mis. tanggal yang detailnya sedang dibuka).
+    barisAktif: { type: Function, default: null },
 });
 
 // Kolom yang punya pilihan operator: kolom angka dan kolom tanggal.
@@ -368,7 +370,7 @@ onBeforeUnmount(() => {
                 <tr
                     v-for="(row, index) in rows"
                     :key="index"
-                    :class="{ 'baris-klik': barisBisaDiklik }"
+                    :class="{ 'baris-klik': barisBisaDiklik, 'baris-aktif': barisAktif?.(row) }"
                     :tabindex="barisBisaDiklik ? 0 : null"
                     @click="klikBaris(row, $event)"
                     @keydown.enter.self="barisBisaDiklik && emit('klik-baris', row)"
