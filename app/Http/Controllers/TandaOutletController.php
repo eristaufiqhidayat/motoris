@@ -8,17 +8,21 @@ use App\Support\Menu\JamLokal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
-// Tanda outlet: koordinator menandai outlet yang berpotensi curang (outlet fiktif, alamat tidak sesuai, dll.) dari
-// drawer Riwayat Lacak Motoris atau menu All Outlet. Berbeda dari tanda motoris, tanda ini melekat pada OUTLET
-// (bukan per kunjungan/motoris/tanggal): kecurigaan terhadap outlet berlaku siapa pun yang mengunjunginya, jadi
-// tidak dibatasi cakupan role seperti tanda motoris. Hak mengikuti menu outlet_all: Lihat = melihat tanda,
-// Tambah = memberi tanda dan mencabut tanda sendiri, Hapus = mencabut tanda siapa pun. Pencabutan soft.
+// Tanda outlet: koordinator menandai outlet yang dicurigai fiktif dari drawer Riwayat Lacak Motoris atau menu All
+// Outlet. Berbeda dari tanda motoris, tanda ini melekat pada OUTLET (bukan per kunjungan/motoris/tanggal):
+// kecurigaan terhadap outlet berlaku siapa pun yang mengunjunginya, jadi tidak dibatasi cakupan role seperti tanda
+// motoris. Hanya satu kategori (spec 059 — tidak ada form pilihan kategori di form, cukup dialog konfirmasi +
+// catatan opsional); indikasi pola kunjungan tidak wajar (spec 054) jadi saran tanda_motoris, bukan tanda outlet.
+// Hak mengikuti menu outlet_all: Lihat = melihat tanda, Tambah = memberi tanda dan mencabut tanda sendiri,
+// Hapus = mencabut tanda siapa pun. Pencabutan soft.
 class TandaOutletController extends Controller
 {
     private const MENU = 'outlet_all';
+
+    // Satu-satunya kategori tanda outlet (lihat config('marketama.tanda_outlet')).
+    private const KATEGORI = 'outlet_fiktif';
 
     /** Tanda aktif satu outlet. */
     public function index(Request $request): JsonResponse
@@ -51,23 +55,22 @@ class TandaOutletController extends Controller
     {
         $data = $request->validate([
             'outlet_id' => ['required', 'integer'],
-            'kategori' => ['required', Rule::in(array_keys(config('marketama.tanda_outlet')))],
             'catatan' => ['nullable', 'string', 'max:500'],
         ]);
 
         $outlet = $this->outlet((int) $data['outlet_id']);
         $user = $request->user();
 
-        // Outlet berada di polygon satu motoris (satu koordinator): tanda kembar dengan kategori sama tidak menambah informasi.
-        $sudah = DB::table('tanda_outlet')->where('outlet_id', $outlet->id)->where('kategori', $data['kategori'])->whereNull('dicabut_at')->first();
+        // Hanya satu kategori: outlet yang masih punya tanda aktif tidak boleh ditandai lagi.
+        $sudah = DB::table('tanda_outlet')->where('outlet_id', $outlet->id)->whereNull('dicabut_at')->first();
 
         if ($sudah) {
-            throw ValidationException::withMessages(['kategori' => "Kategori ini sudah ditandai oleh {$sudah->dibuat_nama} pada ".JamLokal::format($sudah->created_at, 'Y-m-d H:i').'.']);
+            throw ValidationException::withMessages(['outlet_id' => "Outlet ini sudah ditandai oleh {$sudah->dibuat_nama} pada ".JamLokal::format($sudah->created_at, 'Y-m-d H:i').'.']);
         }
 
         $id = DB::table('tanda_outlet')->insertGetId([
             'outlet_id' => $outlet->id,
-            'kategori' => $data['kategori'],
+            'kategori' => self::KATEGORI,
             'catatan' => $data['catatan'] ?? null,
             'dibuat_oleh' => $user->id,
             'dibuat_nama' => $user->username ?? $user->name,
@@ -75,7 +78,7 @@ class TandaOutletController extends Controller
             'updated_at' => now(),
         ]);
 
-        Akses::catat($user, 'tanda_outlet', $id, 'tambah', "Tandai outlet {$outlet->nama}: ".$this->label($data['kategori']));
+        Akses::catat($user, 'tanda_outlet', $id, 'tambah', "Tandai outlet {$outlet->nama}: ".$this->label(self::KATEGORI));
 
         return response()->json($this->bentuk(DB::table('tanda_outlet')->find($id), $user), 201);
     }

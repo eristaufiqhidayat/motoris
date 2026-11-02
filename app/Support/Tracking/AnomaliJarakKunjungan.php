@@ -69,12 +69,14 @@ class AnomaliJarakKunjungan
         return [
             'jumlah' => $jumlah,
             'kunjungan_id' => array_map(fn ($k) => $k->id, $runtun),
-            // Outlet unik (tanpa null, kunjungan outlet baru belum punya outlet_id) untuk saran Tandai outlet.
+            // Outlet unik (tanpa null, kunjungan outlet baru belum punya outlet_id) untuk lencana "Jarak dekat" di daftar kunjungan.
             'outlet_id' => array_values(array_unique(array_filter(array_map(fn ($k) => $k->outlet_id, $runtun)))),
             'dari_jam' => $dariJam,
             'sampai_jam' => $sampaiJam,
+            // Saran untuk Tandai motoris (spec 059): ini pola perilaku checkin motoris pada hari itu, bukan sifat
+            // permanen outletnya, jadi tidak lagi dipakai mengisi Tandai outlet.
             'saran' => [
-                'kategori' => 'pola_kunjungan_tidak_wajar',
+                'kategori' => 'kunjungan_tidak_wajar',
                 'catatan' => "{$jumlah} kunjungan outlet berturutan berjarak kurang dari {$ambang['jarak_dekat_meter']} m satu sama lain, dari jam {$dariJam} sampai {$sampaiJam}.",
             ],
         ];

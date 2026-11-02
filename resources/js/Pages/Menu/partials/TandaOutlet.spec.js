@@ -4,10 +4,10 @@ import TandaOutlet from './TandaOutlet.vue';
 
 const URL = '/outlet_all/tanda';
 const props = { url: URL, outletId: 10 };
-const kategori = { outlet_fiktif: 'Outlet fiktif', alamat_tidak_sesuai: 'Alamat/lokasi tidak sesuai' };
+const kategori = { outlet_fiktif: 'Outlet fiktif' };
 const tanda = [
     { id: 5, kategori: 'outlet_fiktif', kategori_label: 'Outlet fiktif', catatan: 'Alamat tidak ditemukan', oleh: 'koor', waktu: '2026-10-25 09:00', bisa_cabut: true },
-    { id: 6, kategori: 'alamat_tidak_sesuai', kategori_label: 'Alamat/lokasi tidak sesuai', catatan: null, oleh: 'admin', waktu: '2026-10-25 10:00', bisa_cabut: false },
+    { id: 6, kategori: 'outlet_fiktif', kategori_label: 'Outlet fiktif', catatan: null, oleh: 'admin', waktu: '2026-10-25 10:00', bisa_cabut: false },
 ];
 
 let daftar;
@@ -59,7 +59,7 @@ describe('TandaOutlet', () => {
         expect(item[0].text()).toContain('Outlet fiktif');
         expect(item[0].text()).toContain('koor · 2026-10-25 09:00');
         expect(item[0].text()).toContain('Alamat tidak ditemukan');
-        expect(item[1].text()).toContain('Alamat/lokasi tidak sesuai');
+        expect(item[1].text()).toContain('Outlet fiktif');
     });
 
     it('menampilkan kerangka (skeleton) dua baris selama data outlet diambil lalu menyembunyikannya', async () => {
@@ -95,10 +95,17 @@ describe('TandaOutlet', () => {
         expect(wrapper.emitted('berubah')).toBeUndefined();
     });
 
+    it('tidak punya pilihan kategori di form — hanya catatan', async () => {
+        const wrapper = await siapkan();
+        await wrapper.find('button.btn-outline-danger').trigger('click');
+
+        expect(wrapper.find('select').exists()).toBe(false);
+        expect(wrapper.find('textarea').exists()).toBe(true);
+    });
+
     it('mengirim jumlah tanda lewat event berubah setelah menandai', async () => {
         const wrapper = await siapkan();
         await wrapper.find('button.btn-outline-danger').trigger('click');
-        await wrapper.find('select').setValue('alamat_tidak_sesuai');
         await wrapper.find('form').trigger('submit');
         await flushPromises();
 
@@ -133,10 +140,9 @@ describe('TandaOutlet', () => {
         expect(item[1].text()).not.toContain('Cabut');
     });
 
-    it('mengirim tanda dengan header CSRF, lalu menutup form dan memuat ulang daftar', async () => {
+    it('mengirim tanda dengan header CSRF (tanpa kategori), lalu menutup form dan memuat ulang daftar', async () => {
         const wrapper = await siapkan();
         await wrapper.find('button.btn-outline-danger').trigger('click');
-        await wrapper.find('select').setValue('alamat_tidak_sesuai');
         await wrapper.find('textarea').setValue('Alamat tidak cocok dengan peta');
         await wrapper.find('form').trigger('submit');
         await flushPromises();
@@ -144,29 +150,31 @@ describe('TandaOutlet', () => {
         const [url, opsi] = panggilan('POST')[0];
         expect(url).toBe(URL);
         expect(opsi.headers['X-CSRF-TOKEN']).toBe('token-rahasia');
-        expect(JSON.parse(opsi.body)).toEqual({ outlet_id: 10, kategori: 'alamat_tidak_sesuai', catatan: 'Alamat tidak cocok dengan peta' });
+        expect(JSON.parse(opsi.body)).toEqual({ outlet_id: 10, catatan: 'Alamat tidak cocok dengan peta' });
         expect(panggilan('GET')).toHaveLength(2);
         expect(wrapper.find('form').exists()).toBe(false);
     });
 
-    it('menampilkan galat validasi di form dan membiarkan form terbuka', async () => {
-        balasan.POST = { ok: false, status: 422, json: () => Promise.resolve({ errors: { kategori: ['Kategori wajib diisi.'] } }) };
+    it('menampilkan galat tanda kembar sebagai pesan umum dan membiarkan form terbuka', async () => {
+        balasan.POST = { ok: false, status: 422, json: () => Promise.resolve({ errors: { outlet_id: ['Outlet ini sudah ditandai oleh koor pada 2026-10-25 09:00.'] } }) };
         const wrapper = await siapkan();
         await wrapper.find('button.btn-outline-danger').trigger('click');
         await wrapper.find('form').trigger('submit');
         await flushPromises();
 
-        expect(wrapper.find('form').text()).toContain('Kategori wajib diisi.');
+        expect(wrapper.text()).toContain('Outlet ini sudah ditandai oleh koor pada 2026-10-25 09:00.');
+        expect(wrapper.find('form').exists()).toBe(true);
         expect(panggilan('GET')).toHaveLength(1);
     });
 
-    it('mengisi kategori dan catatan dari saran saat form dibuka, lalu mengirimnya', async () => {
-        const wrapper = await siapkan({ saran: { kategori: 'alamat_tidak_sesuai', catatan: 'Indikasi jarak dekat antar kunjungan.' } });
+    it('menampilkan galat validasi catatan di form', async () => {
+        balasan.POST = { ok: false, status: 422, json: () => Promise.resolve({ errors: { catatan: ['Catatan maksimal 500 karakter.'] } }) };
+        const wrapper = await siapkan();
         await wrapper.find('button.btn-outline-danger').trigger('click');
+        await wrapper.find('form').trigger('submit');
+        await flushPromises();
 
-        expect(wrapper.find('select').element.value).toBe('alamat_tidak_sesuai');
-        expect(wrapper.find('textarea').element.value).toBe('Indikasi jarak dekat antar kunjungan.');
-        expect(wrapper.find('form').text()).toContain('Terisi dari indikasi jarak antar kunjungan');
+        expect(wrapper.find('form').text()).toContain('Catatan maksimal 500 karakter.');
     });
 
     it('mencabut tanda setelah konfirmasi lalu memuat ulang', async () => {

@@ -1,24 +1,23 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import Badge from '@/Components/ui/atoms/Badge.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
 import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
-import Select from '@/Components/ui/atoms/Select.vue';
 import Skeleton from '@/Components/ui/atoms/Skeleton.vue';
 import Textarea from '@/Components/ui/atoms/Textarea.vue';
 import { tanggalWaktuPendek } from '@/Support/format.js';
 
-// Tanda outlet (TandaOutletController): koordinator menandai outlet yang berpotensi curang (outlet fiktif, alamat
-// tidak sesuai, dll.). Berbeda dari tanda motoris, tanda ini melekat ke OUTLET (bukan per kunjungan/tanggal), jadi
-// komponen ini tidak punya dimensi tanggal atau daftar "tanda di tanggal lain" — isinya seluruh drawer/modal yang
-// membukanya (dipasang di RuteHarianPeta.vue per baris kunjungan, dan di Menu/Show.vue untuk menu All Outlet).
+// Tanda outlet (TandaOutletController): koordinator menandai outlet yang dicurigai fiktif. Berbeda dari tanda
+// motoris, tanda ini melekat ke OUTLET (bukan per kunjungan/tanggal), jadi komponen ini tidak punya dimensi
+// tanggal atau daftar "tanda di tanggal lain" — isinya seluruh drawer/modal yang membukanya (dipasang di
+// RuteHarianPeta.vue per baris kunjungan, dan di Menu/Show.vue untuk menu All Outlet). Hanya satu kategori
+// (spec 059), jadi form tidak punya pilihan kategori — hanya catatan opsional, modal yang membukanya sudah
+// berfungsi sebagai dialog konfirmasi.
 const props = defineProps({
     url: { type: String, required: true },
     outletId: { type: Number, required: true },
-    // Isian otomatis form dari indikasi jarak antar kunjungan (spec 054, { kategori, catatan }); null = form kosong.
-    saran: { type: Object, default: null },
 });
 
 // 'berubah': dikirim hanya setelah tandai/cabut berhasil (bukan saat muat awal), supaya komponen induk tahu
@@ -28,15 +27,9 @@ const emit = defineEmits(['berubah']);
 const tanda = ref([]);
 // Pendaftar outlet { nama, dibuat_oleh, dibuat_pada } dari master outlet; null sebelum dimuat.
 const outlet = ref(null);
-const kategori = ref({});
-// Pilihan kategori; yang sudah punya tanda aktif diberi keterangan (server menolak tanda kembar).
-const pilihanKategori = computed(() => Object.fromEntries(
-    Object.entries(kategori.value).map(([kunci, label]) => [kunci, tanda.value.some((t) => t.kategori === kunci) ? `${label} (sudah ditandai)` : label]),
-));
 const bisaTambah = ref(false);
 const memuat = ref(true);
 const formBuka = ref(false);
-const kategoriDipilih = ref('');
 const catatan = ref('');
 const menyimpan = ref(false);
 // Galat validasi per kolom ({ kategori: ['...'] }) dan pesan umum untuk galat lain.
@@ -66,7 +59,6 @@ async function muat() {
         if (outletId !== props.outletId) return;
         tanda.value = data.tanda;
         outlet.value = data.outlet ?? null;
-        kategori.value = data.kategori;
         bisaTambah.value = data.bisa_tambah;
     } catch {
         pesan.value = 'Gagal memuat tanda outlet.';
@@ -76,14 +68,12 @@ async function muat() {
 }
 
 function bukaForm() {
-    kategoriDipilih.value = props.saran?.kategori ?? '';
-    catatan.value = props.saran?.catatan ?? '';
+    catatan.value = '';
     formBuka.value = true;
 }
 
 function batal() {
     formBuka.value = false;
-    kategoriDipilih.value = '';
     catatan.value = '';
     galat.value = {};
 }
@@ -97,11 +87,14 @@ async function simpan() {
         const respon = await fetch(props.url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf() },
-            body: JSON.stringify({ outlet_id: props.outletId, kategori: kategoriDipilih.value, catatan: catatan.value }),
+            body: JSON.stringify({ outlet_id: props.outletId, catatan: catatan.value }),
         });
 
         if (respon.status === 422) {
-            galat.value = (await respon.json()).errors ?? {};
+            const errors = (await respon.json()).errors ?? {};
+            galat.value = errors;
+            // Satu-satunya galat selain catatan adalah "outlet ini sudah ditandai" (tidak punya field di form ini).
+            pesan.value = errors.outlet_id?.[0] ?? null;
 
             return;
         }
@@ -163,19 +156,14 @@ watch(() => props.outletId, () => {
         <p v-if="pesan" class="mb-0 text-xs text-red-600">{{ pesan }}</p>
 
         <form v-if="formBuka" class="tanda-motoris-form" @submit.prevent="simpan">
-            <p v-if="saran" class="mb-0 text-xs text-gray-500">Terisi dari indikasi jarak antar kunjungan; ubah bila perlu.</p>
-            <div>
-                <Label>Kategori</Label>
-                <Select v-model="kategoriDipilih" :options="pilihanKategori" placeholder="Pilih kategori" aria-label="Kategori tanda" />
-                <FieldError v-if="galat.kategori">{{ galat.kategori[0] }}</FieldError>
-            </div>
+            <p class="mb-0 text-xs text-gray-500">Tandai outlet ini sebagai outlet fiktif?</p>
             <div>
                 <Label>Catatan (opsional)</Label>
                 <Textarea v-model="catatan" maxlength="500" rows="3" aria-label="Catatan tanda" />
                 <FieldError v-if="galat.catatan">{{ galat.catatan[0] }}</FieldError>
             </div>
             <div class="flex gap-2">
-                <Button type="submit" variant="primary" :loading="menyimpan">Simpan tanda</Button>
+                <Button type="submit" variant="primary" :loading="menyimpan">Tandai outlet</Button>
                 <Button variant="light" @click="batal">Batal</Button>
             </div>
         </form>

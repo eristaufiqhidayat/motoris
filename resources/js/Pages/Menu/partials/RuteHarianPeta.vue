@@ -94,6 +94,10 @@ const peringatan = computed(() => {
     };
 });
 
+// Isian otomatis form Tandai motoris (spec 059): indikasi GPS diprioritaskan (sinyal perangkat lebih langsung)
+// daripada indikasi jarak dekat antar kunjungan, yang kini jadi saran "kunjungan_tidak_wajar" bukan tanda outlet.
+const saranMotoris = computed(() => peringatan.value?.saran ?? indikasiJarak.value[0]?.saran ?? null);
+
 // KPI hari itu (kunjungan, beli, tidak beli, penjualan, jam kerja) dari kunjungan yang ditampilkan.
 const ringkasanHari = computed(() => ringkasanKunjungan(kunjungan.value ?? []));
 
@@ -184,10 +188,8 @@ function sesuaikanBatas(L, map, data) {
     if (titik.length) map.fitBounds(L.latLngBounds(titik), { padding: [30, 30] });
 }
 
-// Outlet dalam salah satu runtun jarak dekat (spec 054) membuka drawer Tanda Outlet dengan saran kategori & catatan terisi.
 function bukaTandaOutlet(k) {
-    const runtun = indikasiJarak.value.find((r) => r.outlet_id.includes(k.outlet_id));
-    outletTerpilih.value = { id: k.outlet_id, nama: k.outlet, saran: runtun?.saran ?? null };
+    outletTerpilih.value = { id: k.outlet_id, nama: k.outlet };
 }
 
 // Klik temuan: peta memperbesar titik-titiknya dan daftar menyorot kunjungan terkait (filter dikembalikan ke Semua).
@@ -237,7 +239,7 @@ watch(tanggalDipilih, muat);
             <!-- Ambang deteksi jarak dekat (localStorage) hanya relevan untuk Sales, satu-satunya yang punya kunjungan outlet. -->
             <PengaturanDeteksiMotoris v-if="idParam === 'sales_id'" @berubah="muat" />
         </div>
-        <TandaMotoris v-if="tandaUrl" class="ml-auto" :url="tandaUrl" :sales-id="id" :tanggal="tanggalDipilih" :saran="peringatan?.saran ?? null" @pilih-tanggal="tanggalDipilih = $event" />
+        <TandaMotoris v-if="tandaUrl" class="ml-auto" :url="tandaUrl" :sales-id="id" :tanggal="tanggalDipilih" :saran="saranMotoris" @pilih-tanggal="tanggalDipilih = $event" />
     </div>
     <RingkasanHariMotoris v-if="kunjungan?.length" :ringkasan="ringkasanHari" :kpi="kpi" class="mb-2 lg:shrink-0" />
     <div class="rute-harian relative lg:min-h-0 lg:flex-1" :class="{ 'rute-harian-daftar': kunjungan !== null }">
@@ -306,7 +308,7 @@ watch(tanggalDipilih, muat);
     </div>
     <!-- Dialog tengah (bukan drawer): tugas singkat yang bertumpuk di atas modal Riwayat yang hampir sepenuh layar. -->
     <Modal :show="outletTerpilih !== null" :title="outletTerpilih ? `Tanda Outlet · ${outletTerpilih.nama}` : ''" @close="outletTerpilih = null">
-        <TandaOutlet v-if="outletTerpilih" :url="TANDA_OUTLET_URL" :outlet-id="outletTerpilih.id" :saran="outletTerpilih.saran" @berubah="muat" />
+        <TandaOutlet v-if="outletTerpilih" :url="TANDA_OUTLET_URL" :outlet-id="outletTerpilih.id" @berubah="muat" />
     </Modal>
     </div>
 </template>

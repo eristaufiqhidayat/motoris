@@ -7,7 +7,7 @@ const kunjungan = [
     { ...dasar, id: 2, outlet: 'Toko B', jam: '10:15', keluar: null, beli: false, lat: null, lng: null },
     { ...dasar, id: 3, outlet: 'Toko C', jam: '14:00', keluar: '15:10', beli: true, penjualan: { total: 4500 }, outlet_ditandai: true },
 ];
-const runtun = { jumlah: 2, kunjungan_id: [1, 3], outlet_id: [70, 71], saran: { kategori: 'pola_kunjungan_tidak_wajar', catatan: '2 kunjungan outlet berturutan berjarak kurang dari 5 m.' } };
+const runtun = { jumlah: 2, kunjungan_id: [1, 3], outlet_id: [70, 71], saran: { kategori: 'kunjungan_tidak_wajar', catatan: '2 kunjungan outlet berturutan berjarak kurang dari 5 m.' } };
 
 describe('geserTanggal', () => {
     it('menggeser lintas bulan dan tahun tanpa terpengaruh zona waktu', () => {

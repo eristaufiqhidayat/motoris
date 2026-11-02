@@ -122,12 +122,11 @@ return [
     ],
 
     // Kategori tanda outlet (kode => label), melekat ke outlet (mk_outlet) dari drawer Riwayat Lacak Motoris atau menu
-    // All Outlet (TandaOutletController).
+    // All Outlet (TandaOutletController). Hanya satu kategori (spec 059 — satu-satunya alasan masuk akal untuk
+    // menandai outlet secara manual); "pola kunjungan tidak wajar" dipindah jadi saran otomatis tanda_motoris
+    // (kunjungan_tidak_wajar) karena soal perilaku checkin motoris, bukan sifat permanen outlet.
     'tanda_outlet' => [
         'outlet_fiktif' => 'Outlet fiktif',
-        'alamat_tidak_sesuai' => 'Alamat/lokasi tidak sesuai',
-        'pola_kunjungan_tidak_wajar' => 'Pola kunjungan tidak wajar',
-        'potensi_kecurangan' => 'Potensi kecurangan lainnya',
     ],
 
     'menu' => [
