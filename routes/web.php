@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\BackupDataController;
 use App\Http\Controllers\Admin\KaryawanController;
 use App\Http\Controllers\Admin\KehadiranController;
 use App\Http\Controllers\Admin\KuotaMotorisController;
+use App\Http\Controllers\Admin\MasterDepoController;
 use App\Http\Controllers\Admin\MasterProdukController;
 use App\Http\Controllers\Admin\MotorisReportController;
 use App\Http\Controllers\Admin\RekapPencapaianSkuController;
@@ -283,6 +284,17 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
             }
         });
     }
+
+    // Tambah Warehouse / Depo (meniru /master_depo/add di Marketama): simpan ke mk_depo, terpisah dari
+    // daftar "master_depo" yang sudah ada (masih dari impor CSV lama) — lihat App\Support\Master\MasterDepo.
+    Route::prefix('master_depo')->name('master-depo.')->controller(MasterDepoController::class)->group(function () {
+        Route::get('/tambah', 'create')->middleware('hak:master_depo,tambah')->name('tambah');
+        Route::post('/tambah', 'store')->middleware('hak:master_depo,tambah')->name('store');
+        Route::get('/tambah/wilayah/kota', 'wilayahKota')->middleware('hak:master_depo,tambah')->name('wilayah-kota');
+        Route::get('/tambah/wilayah/kecamatan', 'wilayahKecamatan')->middleware('hak:master_depo,tambah')->name('wilayah-kecamatan');
+        Route::get('/tambah/wilayah/kelurahan', 'wilayahKelurahan')->middleware('hak:master_depo,tambah')->name('wilayah-kelurahan');
+        Route::get('/baru/{id}/foto', 'foto')->middleware('hak:master_depo,lihat')->whereNumber('id')->name('foto');
+    });
 
     // Redirect slug lama menu yang sudah digabung jadi satu halaman bertab; query string ikut diteruskan.
     // Hak dicek di sini juga (sama dengan menu tujuan) supaya pengecekan bolehWeb tidak terlewat di hop redirect ini.
