@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\AutoGridController;
 use App\Http\Controllers\BarangCanvassingController;
 use App\Http\Controllers\DesignAreaController;
+use App\Http\Controllers\DetailMotorisController;
 use App\Http\Controllers\GenerateKelurahanController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LapLoadingBarangController;
@@ -67,6 +68,10 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
         ->middleware('hak:tracking_sales')->name('peta-sebaran-sales.data');
     Route::get('/peta_sebaran_sales/area', [PetaSebaranSalesController::class, 'area'])
         ->middleware('hak:tracking_sales')->name('peta-sebaran-sales.area');
+
+    // Modal Detail Motoris (profil + historis transaksi per periode), dibuka dari nama motoris di Lacak Motoris.
+    Route::get('/tracking_sales/{id}/detail', [DetailMotorisController::class, 'show'])
+        ->whereNumber('id')->middleware('hak:tracking_sales')->name('detail-motoris.show');
 
     // Tanda motoris (potensi kecurangan dll.) dari drawer Riwayat Lacak Motoris; hak mengikuti menu tracking_sales.
     Route::get('/tracking_sales/tanda', [TandaMotorisController::class, 'index'])

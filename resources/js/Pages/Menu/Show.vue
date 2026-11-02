@@ -18,6 +18,7 @@ import DetailArea from './partials/DetailArea.vue';
 import DetailDepo from './partials/DetailDepo.vue';
 import DetailDepoEdit from './partials/DetailDepoEdit.vue';
 import DetailDepoPeta from './partials/DetailDepoPeta.vue';
+import DetailMotoris from './partials/DetailMotoris.vue';
 import PetaOutletBertanda from './partials/PetaOutletBertanda.vue';
 import RuteHarianPeta from './partials/RuteHarianPeta.vue';
 import DetailLapLoadingBarang from './partials/DetailLapLoadingBarang.vue';
@@ -91,6 +92,8 @@ const infoRiwayat = (table, row, tanggalPilih = null) => infoRiwayatBaris(table.
 
 // Baris Tracking Last Seen Sales yang tandanya dibuka di drawer dari kolom Ditandai: { id, nama, tanggal }; null = tertutup.
 const tandaTerpilih = ref(null);
+// Baris Tracking Last Seen Sales yang namanya diklik: modal Detail Motoris (profil + transaksi per periode); null = tertutup.
+const motorisTerpilih = ref(null);
 // Outlet bertanda yang petanya dibuka dari tab Tanda outlet di drawer tanda: { id, nama, latitude, longitude }; null = tertutup.
 const outletPeta = ref(null);
 
@@ -382,6 +385,9 @@ function filterTabel(table, { nilai, operator }) {
                         <template v-if="table.name in riwayatTabel" #cell-riwayat="{ row }">
                             <button v-if="infoRiwayat(table, row)" type="button" class="tautan-depo" @click="riwayatTerpilih = infoRiwayat(table, row)">Lihat riwayat</button>
                         </template>
+                        <template v-if="table.name === 'tracking_last_seen_sales'" #cell-nama="{ row }">
+                            <button type="button" class="tautan-depo" @click="motorisTerpilih = row">{{ row.nama }}</button>
+                        </template>
                         <template v-if="table.name === 'tracking_last_seen_sales'" #cell-ditandai="{ row }">
                             <button
                                 v-if="row.ditandai > 0"
@@ -543,6 +549,10 @@ function filterTabel(table, { nilai, operator }) {
                 :locations-url="`/${riwayatTerpilih.slug}/locations`"
                 :tanda-url="riwayatTerpilih.idParam === 'sales_id' ? '/tracking_sales/tanda' : null"
             />
+        </Modal>
+        <!-- Modal Detail Motoris, dibuka dari nama motoris di tabel Tracking Last Seen Sales: hampir sepenuh layar untuk analisa kinerja. -->
+        <Modal :show="motorisTerpilih !== null" :title="motorisTerpilih ? `Detail Motoris · ${motorisTerpilih.nama}` : ''" size="full" @close="motorisTerpilih = null">
+            <DetailMotoris v-if="motorisTerpilih" :key="motorisTerpilih.id" :sales-id="motorisTerpilih.id" />
         </Modal>
         <!-- Drawer peta lokasi depo, dibuka dari tombol Peta di tabel master_depo. -->
         <Modal :show="depoPeta !== null" :title="depoPeta ? `Peta ${depoPeta.nama}` : ''" placement="kanan" @close="depoPeta = null">
