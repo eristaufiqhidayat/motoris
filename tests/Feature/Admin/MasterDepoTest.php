@@ -5,11 +5,13 @@ namespace Tests\Feature\Admin;
 use App\Support\Master\MasterDepo;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
-// Form "Tambah Warehouse / Depo" (MasterDepoController), meniru /master_depo/add di Marketama: simpan ke
-// mk_depo (lihat App\Support\Master\MasterDepo), terpisah dari daftar "master_depo" (impor CSV lama).
+// Form "Tambah Warehouse / Depo" (MasterDepoController) dan daftar Master Warehouse/Depo yang sudah ada
+// (SumberMasterDepo): keduanya baca/tulis mk_depo (lihat App\Support\Master\MasterDepo). Tabel lama
+// "master_depo" sudah dihapus (lihat migrasi 2026_11_03_000001_hapus_tabel_master_depo).
 class MasterDepoTest extends AdminTestCase
 {
     protected function setUp(): void
@@ -134,41 +136,12 @@ class MasterDepoTest extends AdminTestCase
             ));
     }
 
-    public function test_satukan_dari_master_depo_mengisi_kolom_kosong_tanpa_menimpa(): void
+    public function test_satukan_dari_master_depo_aman_setelah_tabel_dihapus(): void
     {
-        DB::table('master_depo')->insert([
-            'kode' => 'SDA-LAMA', 'nama' => 'Sidoarjo', 'projek' => 'Enesis', 'kota_besar' => 'Jakarta',
-            'minimum_sku' => '5', 'multi_polygon_sales' => 'Ya', 'provinsi' => 'Jawa Timur', 'kota_kab' => 'Kab. Sidoarjo',
-            'kecamatan' => 'Sidoarjo', 'kelurahan_desa' => 'Sidokare', 'alamat' => 'Jl. Sidoarjo No. 1',
-            'longitude' => '112.717598', 'latitude' => '-7.446839',
-            'kuota_koordinator' => '3', 'kuota_sales_motoris' => '10', 'target_call' => '45', 'target_ec' => '35',
-            'durasi_tracking_gps' => '180', 'insentif_per_poin' => '250', 'outlet_1_sku' => '3', 'minimal_value_transaksi' => '35000',
-            'status' => 'Aktif',
-        ]);
-        // Balaraja (id 22) tidak punya pasangan nama di master_depo: tidak boleh ikut terisi.
-
-        $jumlah = MasterDepo::satukanDariMasterDepo();
-
-        $this->assertSame(1, $jumlah);
-
-        $sidoarjo = DB::table('mk_depo')->where('id', 46)->first();
-        $this->assertSame('Jawa Timur', $sidoarjo->provinsi);
-        $this->assertSame(45, (int) $sidoarjo->target_call);
-        $this->assertSame(35, (int) $sidoarjo->target_ec);
-        $this->assertSame(3, (int) $sidoarjo->kuota_koordinator);
-        $this->assertEqualsWithDelta(-7.446839, (float) $sidoarjo->latitude, 0.0001);
-        $this->assertEqualsWithDelta(112.717598, (float) $sidoarjo->longitude, 0.0001);
-        $this->assertTrue((bool) $sidoarjo->multi_polygon_sales);
-        $this->assertTrue((bool) $sidoarjo->aktif);
-        $this->assertSame((int) $projectId = DB::table('master_project')->where('nama_project', 'Enesis')->value('id'), (int) $sidoarjo->project_id);
-
-        $balaraja = DB::table('mk_depo')->where('id', 22)->first();
-        $this->assertNull($balaraja->target_call);
-
-        // Aman diulang: depo yang sudah terisi (dari sini atau dari form admin) tidak ditimpa lagi.
-        DB::table('master_depo')->where('kode', 'SDA-LAMA')->update(['target_call' => '999']);
-        $jumlahKedua = MasterDepo::satukanDariMasterDepo();
-        $this->assertSame(0, $jumlahKedua);
-        $this->assertSame(45, (int) DB::table('mk_depo')->where('id', 46)->value('target_call'));
+        // Tabel "master_depo" sudah dihapus lewat migrasi 2026_11_03_000001_hapus_tabel_master_depo
+        // (yang juga memanggil satukanDariMasterDepo() sendiri sebagai jaring pengaman sebelum drop).
+        // Method ini dipertahankan sebagai jejak sejarah; dipastikan tidak error lagi dipanggil ulang.
+        $this->assertFalse(Schema::hasTable('master_depo'));
+        $this->assertSame(0, MasterDepo::satukanDariMasterDepo());
     }
 }

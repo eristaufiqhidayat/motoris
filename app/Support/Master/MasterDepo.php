@@ -12,10 +12,11 @@ use Illuminate\Support\Facades\Schema;
  * dropdown wilayah berjenjang (Provinsi → Kota/Kab → Kecamatan → Kelurahan), Project, dan City Group.
  * Dipakai MasterDepoController dan halaman Vue MasterDepo/Tambah.
  *
- * Disimpan ke mk_depo (tabel master Marketama di Enesis) — menu daftar Master Warehouse / Depo yang sudah
- * ada juga membaca mk_depo lewat App\Support\Menu\SumberMasterDepo, bukan lagi "master_depo" (tabel hasil
- * impor CSV lama). satukanDariMasterDepo() mengisi kolom-kolom mk_depo untuk depo lama hasil
- * `marketama:tarik` dari data admin di "master_depo" — jalankan sekali lewat `php artisan enesis:satukan-master-depo`.
+ * Disimpan ke mk_depo (tabel master Marketama di Enesis) — menu daftar Master Warehouse / Depo juga
+ * membaca mk_depo lewat App\Support\Menu\SumberMasterDepo. satukanDariMasterDepo() dulu mengisi
+ * kolom-kolom mk_depo dari "master_depo" (tabel hasil impor CSV lama, sudah dihapus — lihat migrasi
+ * 2026_11_03_000001_hapus_tabel_master_depo) untuk depo lama hasil `marketama:tarik`; method ini jadi
+ * no-op begitu tabel itu tidak ada, dipertahankan hanya sebagai jejak sejarah/jaring pengaman migrasi.
  */
 class MasterDepo
 {

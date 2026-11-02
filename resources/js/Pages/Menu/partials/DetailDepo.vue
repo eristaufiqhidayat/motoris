@@ -5,7 +5,8 @@ import Icon from '@/Components/ui/atoms/Icon.vue';
 import DetailDepoPeta from './DetailDepoPeta.vue';
 
 // Infografis satu depo di dalam drawer (lihat Menu/Show.vue). Semua bagian tampil berurutan dan digulir;
-// data diambil dari baris tabel master_depo.
+// data diambil dari baris tabel menu "Master Warehouse / Depo" (dibaca dari mk_depo lewat
+// App\Support\Menu\SumberMasterDepo, bukan lagi tabel master_depo yang sudah dihapus).
 const props = defineProps({
     depo: { type: Object, required: true },
 });

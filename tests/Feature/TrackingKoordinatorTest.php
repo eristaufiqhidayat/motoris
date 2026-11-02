@@ -35,7 +35,10 @@ class TrackingKoordinatorTest extends TestCase
     public function test_locations_endpoint_returns_route_in_time_order(): void
     {
         DB::table('tracking_koordinator')->insert(['koordinator_id' => 7, 'nama' => 'Dian', 'depo' => 'JAKSEL']);
-        DB::table('master_depo')->insert(['nama' => 'JAKSEL', 'latitude' => -6.26, 'longitude' => 106.81]);
+        // Lokasi depo sekarang diambil lewat mk_karyawan.depo_id -> mk_depo (App\Support\Tracking\TitikGps::depoMaster()),
+        // bukan lagi dari tabel master_depo (sudah dihapus).
+        DB::table('mk_depo')->insert(['id' => 99, 'nama' => 'JAKSEL', 'latitude' => -6.26, 'longitude' => 106.81]);
+        DB::table('mk_karyawan')->insert(['id' => 7, 'kategori' => 'koordinator', 'nama' => 'Dian', 'depo_id' => 99]);
         DB::table('tracking_koordinator_lokasi')->insert([
             ['koordinator_id' => 7, 'tanggal' => '2026-10-21', 'waktu' => '2026-10-21 09:00:00', 'lat' => -6.2, 'lng' => 106.8],
             ['koordinator_id' => 7, 'tanggal' => '2026-10-21', 'waktu' => '2026-10-21 08:00:00', 'lat' => -6.1, 'lng' => 106.7],
