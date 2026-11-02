@@ -9,7 +9,6 @@ use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Tracking\TandaOutletMotoris;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -20,7 +19,8 @@ use Illuminate\Support\Facades\DB;
  */
 class DetailMotoris
 {
-    public const MAKS_TRANSAKSI = 500;
+    /** Batas pengaman transaksi satu motoris dalam satu hari (wajarnya puluhan). */
+    public const MAKS_TRANSAKSI = 200;
 
     public const MAKS_PRODUK = 10;
 
@@ -42,15 +42,11 @@ class DetailMotoris
 
     public function toArray(?User $user): array
     {
-        $penjualan = DB::table('trx_penjualan as p')->where('p.karyawan_id', $this->motoris->id)->whereBetween('p.tanggal', [$this->dari, $this->sampai]);
-
         return [
             'profil' => $this->profil($user),
             'periode' => ['dari' => $this->dari, 'sampai' => $this->sampai],
             'ringkasan' => $this->ringkasan(),
             'harian' => $this->harian(),
-            'transaksi' => $this->transaksi(clone $penjualan),
-            'transaksi_total' => (clone $penjualan)->count(),
             'produk' => $this->produk(),
             'target' => $this->targetHarian(),
             'tanda_motoris' => $this->tandaMotoris(),
@@ -202,10 +198,12 @@ class DetailMotoris
         ])->all();
     }
 
-    private function transaksi(Builder $penjualan): array
+    /** Transaksi penjualan motoris pada satu tanggal (termasuk yang batal), terbaru dulu; dimuat saat baris Harian diklik. */
+    public function transaksiTanggal(string $tanggal): array
     {
-        return $penjualan->leftJoin('mk_outlet as o', 'o.id', '=', 'p.outlet_id')
-            ->orderByDesc('p.tanggal')->orderByDesc('p.recorded_at')->orderByDesc('p.id')->limit(self::MAKS_TRANSAKSI)
+        return DB::table('trx_penjualan as p')->where('p.karyawan_id', $this->motoris->id)->where('p.tanggal', $tanggal)
+            ->leftJoin('mk_outlet as o', 'o.id', '=', 'p.outlet_id')
+            ->orderByDesc('p.recorded_at')->orderByDesc('p.id')->limit(self::MAKS_TRANSAKSI)
             ->get(['p.kode', 'p.tanggal', 'p.recorded_at', 'p.received_at', 'o.nama as outlet', 'p.jumlah_sku', 'p.total_qty', 'p.total', 'p.total_diskon', 'p.dibatalkan_at'])
             ->map(fn ($p) => [
                 'kode' => $p->kode,

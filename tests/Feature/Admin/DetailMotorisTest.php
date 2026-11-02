@@ -5,7 +5,7 @@ namespace Tests\Feature\Admin;
 use App\Support\Motoris\LaporanMotoris;
 use Illuminate\Support\Facades\DB;
 
-// Modal Detail Motoris di Lacak Motoris: profil, ringkasan & harian per periode, transaksi, produk terlaris, hak & cakupan.
+// Modal Detail Motoris di Lacak Motoris: profil, ringkasan & harian per periode, transaksi per tanggal, produk terlaris, hak & cakupan.
 class DetailMotorisTest extends AdminTestCase
 {
     protected function setUp(): void
@@ -58,6 +58,11 @@ class DetailMotorisTest extends AdminTestCase
         return "/tracking_sales/{$id}/detail".($query ? '?'.http_build_query($query) : '');
     }
 
+    private function urlTransaksi(int $id, string $tanggal): string
+    {
+        return "/tracking_sales/{$id}/detail/transaksi?tanggal={$tanggal}";
+    }
+
     public function test_profil_motoris(): void
     {
         $this->getJson($this->url())->assertOk()
@@ -107,7 +112,7 @@ class DetailMotorisTest extends AdminTestCase
         $this->getJson($this->url(1, ['dari' => '2026-10-01', 'sampai' => '2026-10-31']))->assertOk()
             ->assertJsonPath('ringkasan.hadir', 1)
             ->assertJsonPath('ringkasan.penjualan', 40000)
-            ->assertJsonPath('transaksi.0.kode', 'PJ-OLD');
+            ->assertJsonPath('harian.0.tanggal', '2026-10-20');
     }
 
     public function test_rekap_harian(): void
@@ -180,17 +185,40 @@ class DetailMotorisTest extends AdminTestCase
         $res->assertJsonPath('tanda_outlet.0.kategori_label', 'Outlet fiktif')->assertJsonPath('tanda_outlet.0.oleh', 'admin');
     }
 
-    public function test_daftar_transaksi_termasuk_yang_batal(): void
+    public function test_payload_utama_tidak_memuat_daftar_transaksi(): void
     {
-        $res = $this->getJson($this->url())->assertOk()->assertJsonPath('transaksi_total', 2);
+        $this->getJson($this->url())->assertOk()->assertJsonMissingPath('transaksi')->assertJsonMissingPath('transaksi_total');
+    }
 
-        $this->assertSame(['PJ-2', 'PJ-1'], array_column($res->json('transaksi'), 'kode'));
-        $res->assertJsonPath('transaksi.0.status', 'Batal')
-            ->assertJsonPath('transaksi.0.outlet', 'Warung Bu Sri')
-            ->assertJsonPath('transaksi.1.status', 'Sah')
-            ->assertJsonPath('transaksi.1.waktu', '2026-11-03 10:30')
-            ->assertJsonPath('transaksi.1.total', 150000)
-            ->assertJsonPath('transaksi.1.diskon', 1000);
+    public function test_transaksi_satu_tanggal_termasuk_yang_batal(): void
+    {
+        $res = $this->getJson($this->urlTransaksi(1, '2026-11-03'))->assertOk()->assertJsonPath('tanggal', '2026-11-03');
+
+        $this->assertSame(['PJ-1'], array_column($res->json('transaksi'), 'kode'));
+        $res->assertJsonPath('transaksi.0.status', 'Sah')
+            ->assertJsonPath('transaksi.0.outlet', 'Toko Makmur')
+            ->assertJsonPath('transaksi.0.waktu', '2026-11-03 10:30')
+            ->assertJsonPath('transaksi.0.total', 150000)
+            ->assertJsonPath('transaksi.0.diskon', 1000);
+
+        $this->getJson($this->urlTransaksi(1, '2026-11-04'))->assertOk()
+            ->assertJsonPath('transaksi.0.kode', 'PJ-2')->assertJsonPath('transaksi.0.status', 'Batal')
+            ->assertJsonPath('transaksi.0.outlet', 'Warung Bu Sri');
+        $this->getJson($this->urlTransaksi(1, '2026-11-10'))->assertOk()->assertJsonCount(0, 'transaksi');
+    }
+
+    public function test_transaksi_satu_tanggal_butuh_tanggal_valid_dan_cakupan_role(): void
+    {
+        $this->getJson('/tracking_sales/1/detail/transaksi')->assertUnprocessable()->assertJsonValidationErrors('tanggal');
+        $this->getJson($this->urlTransaksi(137, '2026-11-03'))->assertNotFound();
+
+        $koor = $this->akun('koor', 'koordinator', 137);
+        $this->actingAs($koor)->getJson($this->urlTransaksi(1, '2026-11-03'))->assertOk();
+        $this->actingAs($koor)->getJson($this->urlTransaksi(2, '2026-11-03'))->assertNotFound();
+
+        $role = $this->role('Tanpa Lacak', 'semua', ['karyawan_sales' => ['lihat']]);
+        $this->actingAs($this->akun('lain', 'koordinator', 137, ['role_id' => $role]))
+            ->getJson($this->urlTransaksi(1, '2026-11-03'))->assertForbidden();
     }
 
     public function test_produk_terlaris_dari_penjualan_tidak_batal(): void

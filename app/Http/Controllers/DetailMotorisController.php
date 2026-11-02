@@ -39,4 +39,15 @@ class DetailMotorisController extends Controller
 
         return response()->json($detail->toArray($request->user()));
     }
+
+    /** Transaksi motoris pada satu tanggal, untuk detail baris tabel Harian. */
+    public function transaksi(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate(['tanggal' => ['required', 'date_format:Y-m-d']]);
+
+        $detail = DetailMotoris::untuk($request->user(), $id, $data['tanggal'], $data['tanggal']);
+        abort_unless($detail, 404);
+
+        return response()->json(['tanggal' => $data['tanggal'], 'transaksi' => $detail->transaksiTanggal($data['tanggal'])]);
+    }
 }

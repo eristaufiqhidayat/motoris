@@ -8,6 +8,7 @@ import StatLabel from '@/Components/ui/atoms/StatLabel.vue';
 import Alert from '@/Components/ui/molecules/Alert.vue';
 import BarChart from '@/Components/ui/molecules/BarChart.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
+import Modal from '@/Components/ui/molecules/Modal.vue';
 import StatRow from '@/Components/ui/molecules/StatRow.vue';
 import Tabs from '@/Components/ui/molecules/Tabs.vue';
 import DataTable from '@/Components/ui/organisms/DataTable.vue';
@@ -37,7 +38,6 @@ const tab = ref('harian');
 const berubah = computed(() => data.value && (dari.value !== data.value.periode.dari || sampai.value !== data.value.periode.sampai));
 const TAB = computed(() => [
     { key: 'harian', label: 'Harian' },
-    { key: 'transaksi', label: 'Transaksi' },
     { key: 'produk', label: 'Produk Terlaris' },
     { key: 'tanda', label: `Ditandai (${(data.value?.tanda_motoris.filter((t) => !t.dicabut).length ?? 0) + (data.value?.tanda_outlet.length ?? 0)})` },
 ]);
@@ -46,11 +46,46 @@ const TAB = computed(() => [
 const persen = (nilai, target) => persenTarget(nilai, target);
 const warnaPersen = (p) => (p >= 100 ? 'success' : 'warning');
 
+// Transaksi satu tanggal, dimuat hanya saat baris tabel Harian diklik (tidak ikut payload utama) dan tampil di modal dialog.
+const tanggalTerpilih = ref(null);
+const memuatTransaksi = ref(false);
+const galatTransaksi = ref(null);
+const transaksiHari = ref([]);
+
+async function bukaTransaksi(row) {
+    tanggalTerpilih.value = row.tanggal;
+    memuatTransaksi.value = true;
+    galatTransaksi.value = null;
+    transaksiHari.value = [];
+
+    try {
+        const respon = await fetch(`/tracking_sales/${props.salesId}/detail/transaksi?tanggal=${row.tanggal}`, { headers: { Accept: 'application/json' } });
+
+        if (!respon.ok) {
+            throw new Error(String(respon.status));
+        }
+
+        const hasil = await respon.json();
+
+        // Abaikan balasan lambat bila koordinator sudah memilih tanggal lain.
+        if (tanggalTerpilih.value === hasil.tanggal) {
+            transaksiHari.value = hasil.transaksi;
+        }
+    } catch {
+        galatTransaksi.value = 'Transaksi belum bisa dimuat. Coba lagi.';
+    } finally {
+        if (tanggalTerpilih.value === row.tanggal) {
+            memuatTransaksi.value = false;
+        }
+    }
+}
+
 const grafik = computed(() => (data.value?.harian ?? []).map((h) => ({ label: `${h.tanggal.slice(8, 10)}/${h.tanggal.slice(5, 7)}`, value: h.penjualan })));
 
 async function ambil() {
     memuat.value = true;
     galat.value = null;
+    tanggalTerpilih.value = null;
 
     try {
         const query = new URLSearchParams(dari.value && sampai.value ? { dari: dari.value, sampai: sampai.value } : {});
@@ -150,7 +185,7 @@ onMounted(ambil);
                     <Card v-if="grafik.length" body-class="card-body overflow-x-auto">
                         <BarChart :items="grafik" :height="160" />
                     </Card>
-                    <DataTable :columns="KOLOM_HARIAN" :rows="data.harian" :total="data.harian.length" :memuat="memuat" empty-text="Belum ada aktivitas pada periode ini.">
+                    <DataTable :columns="KOLOM_HARIAN" :rows="data.harian" :total="data.harian.length" :memuat="memuat" baris-bisa-diklik :baris-aktif="(row) => row.tanggal === tanggalTerpilih" empty-text="Belum ada aktivitas pada periode ini." @klik-baris="bukaTransaksi">
                         <template #cell-tanggal="{ row }">{{ tanggalSingkat(row.tanggal) }}</template>
                         <template #cell-masuk="{ row }">
                             <Badge v-if="row.masuk" :variant="row.terlambat ? 'warning' : 'light'" :title="row.terlambat ? 'Terlambat' : null">{{ row.masuk }}</Badge>
@@ -170,34 +205,10 @@ onMounted(ambil);
                         </template>
                         <template #cell-penjualan="{ row }">{{ rupiah(row.penjualan) }}</template>
                     </DataTable>
-                    <p class="m-0 text-xs text-gray-500">Persentase dibanding target depo per hari: {{ data.target.call }} call dan {{ data.target.ec }} EC.</p>
-                </template>
-
-                <template v-else-if="tab === 'transaksi'">
-                    <Alert v-if="data.transaksi_total > data.transaksi.length" variant="info">
-                        Menampilkan {{ angka(data.transaksi.length) }} transaksi terbaru dari {{ angka(data.transaksi_total) }} transaksi.
-                    </Alert>
-                    <DataTable
-                        :columns="KOLOM_TRANSAKSI"
-                        :rows="data.transaksi"
-                        :total="data.transaksi_total"
-                        :memuat="memuat"
-                        :badge-columns="['status']"
-                        :badge-variants="{ status: { Sah: 'success', Batal: 'danger' } }"
-                        empty-text="Belum ada transaksi pada periode ini."
-                    >
-                        <template #cell-waktu="{ row }">
-                            <template v-if="tanggalWaktuPendek(row.waktu)">
-                                {{ tanggalWaktuPendek(row.waktu).tanggal }}
-                                <Badge variant="light">{{ tanggalWaktuPendek(row.waktu).jam }}</Badge>
-                            </template>
-                            <template v-else>{{ row.waktu }}</template>
-                        </template>
-                        <template #cell-outlet="{ row }">{{ row.outlet || '-' }}</template>
-                        <template #cell-qty="{ row }">{{ angka(row.qty) }}</template>
-                        <template #cell-diskon="{ row }">{{ rupiah(row.diskon) }}</template>
-                        <template #cell-total="{ row }">{{ rupiah(row.total) }}</template>
-                    </DataTable>
+                    <p class="m-0 text-xs text-gray-500">
+                        Persentase dibanding target depo per hari: {{ data.target.call }} call dan {{ data.target.ec }} EC.
+                        Klik satu tanggal untuk melihat transaksinya dalam dialog.
+                    </p>
                 </template>
 
                 <template v-else-if="tab === 'tanda'">
@@ -239,5 +250,35 @@ onMounted(ambil);
                 </DataTable>
             </div>
         </div>
+
+        <!-- Dialog transaksi satu tanggal, dibuka dari klik baris tabel Harian; di-teleport ke body agar menumpuk di atas modal Detail Motoris. -->
+        <Teleport to="body">
+            <Modal :show="tanggalTerpilih !== null" :title="`Transaksi ${tanggalSingkat(tanggalTerpilih ?? '')}`" size="xl" @close="tanggalTerpilih = null">
+                <div data-panel="transaksi-hari">
+                    <Alert v-if="galatTransaksi" variant="warning">{{ galatTransaksi }}</Alert>
+                    <DataTable
+                        v-else
+                        :columns="KOLOM_TRANSAKSI"
+                        :rows="transaksiHari"
+                        :total="transaksiHari.length"
+                        :memuat="memuatTransaksi"
+                        :badge-columns="['status']"
+                        :badge-variants="{ status: { Sah: 'success', Batal: 'danger' } }"
+                        empty-text="Tidak ada transaksi pada tanggal ini."
+                    >
+                        <template #cell-waktu="{ row }">
+                            <template v-if="tanggalWaktuPendek(row.waktu)">
+                                <Badge variant="light">{{ tanggalWaktuPendek(row.waktu).jam }}</Badge>
+                            </template>
+                            <template v-else>{{ row.waktu }}</template>
+                        </template>
+                        <template #cell-outlet="{ row }">{{ row.outlet || '-' }}</template>
+                        <template #cell-qty="{ row }">{{ angka(row.qty) }}</template>
+                        <template #cell-diskon="{ row }">{{ rupiah(row.diskon) }}</template>
+                        <template #cell-total="{ row }">{{ rupiah(row.total) }}</template>
+                    </DataTable>
+                </div>
+            </Modal>
+        </Teleport>
     </div>
 </template>

@@ -72,6 +72,8 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
     // Modal Detail Motoris (profil + historis transaksi per periode), dibuka dari nama motoris di Lacak Motoris.
     Route::get('/tracking_sales/{id}/detail', [DetailMotorisController::class, 'show'])
         ->whereNumber('id')->middleware('hak:tracking_sales')->name('detail-motoris.show');
+    Route::get('/tracking_sales/{id}/detail/transaksi', [DetailMotorisController::class, 'transaksi'])
+        ->whereNumber('id')->middleware('hak:tracking_sales')->name('detail-motoris.transaksi');
 
     // Tanda motoris (potensi kecurangan dll.) dari drawer Riwayat Lacak Motoris; hak mengikuti menu tracking_sales.
     Route::get('/tracking_sales/tanda', [TandaMotorisController::class, 'index'])

@@ -7,8 +7,6 @@ const detail = (lain = {}) => ({
     periode: { dari: '2026-11-01', sampai: '2026-11-15' },
     ringkasan: { hari_kerja: 12, target_call: 480, target_ec: 300, hadir: 2, terlambat: 1, kunjungan: 3, transaksi: 1, ec: 1, rasio_ec: 33.3, penjualan: 150000, qty: 5, rata_penjualan: 75000 },
     harian: [{ tanggal: '2026-11-03', masuk: '08:15', pulang: '17:05', terlambat: true, kunjungan: 2, ec: 1, transaksi: 1, penjualan: 150000 }],
-    transaksi: [{ kode: 'PJ-1', waktu: '2026-11-03 10:30', outlet: 'Toko Makmur', sku: 2, qty: 5, total: 150000, diskon: 1000, status: 'Sah' }],
-    transaksi_total: 1,
     produk: [{ nama: 'Kopi Sachet', qty: 3, nilai: 90000 }],
     target: { call: 40, ec: 25 },
     tanda_motoris: [{ id: 5, tanggal: '2026-11-03', kategori_label: 'Penjualan fiktif', catatan: 'Nota janggal', oleh: 'koor', waktu: '2026-11-04 09:00', dicabut: false }],
@@ -17,11 +15,13 @@ const detail = (lain = {}) => ({
 });
 
 let balasan;
+let transaksiBalasan;
 
 describe('DetailMotoris', () => {
     beforeEach(() => {
         balasan = { ok: true, status: 200, json: () => Promise.resolve(detail()) };
-        global.fetch = vi.fn(() => Promise.resolve(balasan));
+        transaksiBalasan = { ok: true, status: 200, json: () => Promise.resolve({ tanggal: '2026-11-03', transaksi: [{ kode: 'PJ-1', waktu: '2026-11-03 10:30', outlet: 'Toko Makmur', sku: 2, qty: 5, total: 150000, diskon: 1000, status: 'Sah' }] }) };
+        global.fetch = vi.fn((url) => Promise.resolve(String(url).includes('/detail/transaksi') ? transaksiBalasan : balasan));
     });
 
     afterEach(() => {
@@ -72,15 +72,50 @@ describe('DetailMotoris', () => {
         expect(wrapper.text()).toContain('Toko Makmur');
     });
 
-    it('tab Transaksi dan Produk Terlaris menampilkan datanya', async () => {
+    it('tidak ada tab Transaksi dan transaksi tidak diambil sebelum tanggal diklik', async () => {
         const wrapper = await siapkan();
-        const tab = (label) => wrapper.findAll('[role="tab"]').find((b) => b.text() === label);
 
-        await tab('Transaksi').trigger('click');
-        expect(wrapper.text()).toContain('PJ-1');
-        expect(wrapper.text()).toContain('Toko Makmur');
+        expect(wrapper.findAll('[role="tab"]').map((b) => b.text())).not.toContain('Transaksi');
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(dialog()).toBeNull();
+    });
 
-        await tab('Produk Terlaris').trigger('click');
+    // Dialog transaksi di-teleport ke body, jadi dicari lewat document.
+    const dialog = () => document.body.querySelector('[data-panel="transaksi-hari"]');
+
+    it('klik satu tanggal di tabel Harian membuka dialog berisi transaksi tanggal itu', async () => {
+        const wrapper = await siapkan();
+        expect(dialog()).toBeNull();
+
+        await wrapper.find('tbody tr').trigger('click');
+        await flushPromises();
+
+        expect(wrapper.find('tbody tr').classes()).toContain('baris-aktif');
+        expect(fetch).toHaveBeenLastCalledWith('/tracking_sales/1/detail/transaksi?tanggal=2026-11-03', expect.anything());
+        expect(document.body.querySelector('[role="dialog"][aria-label="Transaksi 3 Nov 2026"]')).not.toBeNull();
+        expect(dialog().textContent).toContain('PJ-1');
+        expect(dialog().textContent).toContain('Toko Makmur');
+
+        document.body.querySelector('[aria-label="Tutup"]').click();
+        await flushPromises();
+        expect(dialog()).toBeNull();
+        expect(wrapper.find('tbody tr').classes()).not.toContain('baris-aktif');
+    });
+
+    it('menampilkan pesan di dialog bila transaksi satu tanggal gagal dimuat', async () => {
+        const wrapper = await siapkan();
+        transaksiBalasan = { ok: false, status: 500, json: () => Promise.resolve({}) };
+
+        await wrapper.find('tbody tr').trigger('click');
+        await flushPromises();
+
+        expect(dialog().textContent).toContain('Transaksi belum bisa dimuat');
+    });
+
+    it('tab Produk Terlaris menampilkan produknya', async () => {
+        const wrapper = await siapkan();
+
+        await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Produk Terlaris').trigger('click');
         expect(wrapper.text()).toContain('Kopi Sachet');
     });
 
