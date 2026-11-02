@@ -331,7 +331,7 @@ class KaryawanController extends Controller
     private function kolom(string $kategori): array
     {
         return match ($kategori) {
-            'sales' => ['foto' => 'Foto', 'nama' => 'Nama Lengkap', 'koordinator' => 'Koordinator', 'depo' => 'Depo', 'area_aktif' => 'Area Aktif',
+            'sales' => ['nama' => 'Nama Lengkap', 'koordinator' => 'Koordinator', 'depo' => 'Depo', 'area_aktif' => 'Area Aktif',
                 'total_area' => 'Total Area', 'no_hp' => 'No HP', 'aktif' => 'Status', 'diubah' => 'Diubah'],
             'koordinator' => ['foto' => 'Foto', 'nama' => 'Nama Lengkap', 'depo' => 'Depo', 'wilayah_depo' => 'Wilayah Depo', 'jumlah_sales' => 'Jumlah Sales',
                 'no_hp' => 'No HP', 'aktif' => 'Status', 'diubah' => 'Diubah'],
