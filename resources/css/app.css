@@ -397,6 +397,8 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     /* Infografis detail depo (drawer): kartu angka, batang progress kuota, dan baris detail per bagian. */
     .detail-depo-judul { @apply flex items-center gap-2 text-sm font-semibold text-gray-700; }
     .detail-depo-ikon { @apply inline-block w-4 h-4 text-blue-600; }
+    /* Peta pilih lokasi di form Tambah Warehouse / Depo (isolate: lihat .detail-depo-peta). */
+    .tambah-depo-peta { @apply isolate h-96 w-full overflow-hidden rounded-lg border border-gray-200; }
     .detail-depo-peta-wadah { @apply relative w-full; }
     /* isolate: z-index panel/kontrol Leaflet (400-1000) tetap di dalam peta, tidak menutupi popup (mis. datepicker) di atasnya. */
     .detail-depo-peta { @apply isolate h-64 w-full overflow-hidden rounded-lg border border-gray-200; }

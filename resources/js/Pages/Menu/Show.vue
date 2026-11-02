@@ -299,6 +299,9 @@ function filterTabel(table, { nilai, operator }) {
             <template v-if="slug === 'barang_canvassing' && bisaTambah" #actions>
                 <Button @click="bukaTambahMuatan"><Icon name="plus" class="me-1" /> Tambah</Button>
             </template>
+            <template v-else-if="slug === 'master_depo' && bisaTambah" #actions>
+                <Button tag="a" href="/master_depo/tambah"><Icon name="plus" class="me-1" /> Tambah Warehouse / Depo</Button>
+            </template>
         </PageHeader>
 
         <TabsHalaman />
