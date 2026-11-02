@@ -349,7 +349,7 @@ function simpan() {
                     </Card>
 
                     <Card v-if="kategori === 'sales'">
-                        <template #header>Area sales</template>
+                        <template #header>Area motoris</template>
                         <div class="grid grid-cols-1 gap-3">
                             <div>
                                 <Label for="area_ids">Area <span class="text-red-600">*</span></Label>
@@ -362,7 +362,7 @@ function simpan() {
                                 <Label for="area_aktif_ids">Area aktif (rute di aplikasi HP)</Label>
                                 <Combobox id="area_aktif_ids" v-model="form.area_aktif_ids" multiple :options="opsiAreaAktif" :disabled="!form.area_ids.length"
                                     placeholder="Pilih dari area di atas..." />
-                                <small class="block text-gray-500 mt-1">Kosong = semua area sales ini menjadi rute.</small>
+                                <small class="block text-gray-500 mt-1">Kosong = semua area motoris ini menjadi rute.</small>
                                 <FieldError v-if="form.errors.area_aktif_ids">{{ form.errors.area_aktif_ids }}</FieldError>
                             </div>
                         </div>

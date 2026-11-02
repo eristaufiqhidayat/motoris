@@ -40,13 +40,16 @@ class KaryawanTest extends AdminTestCase
 
     public function test_daftar_per_kategori_dengan_status_dan_cari(): void
     {
+        // Bawaan (tanpa ?status): hanya karyawan aktif yang tampil.
         $this->get('/karyawan_sales')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('Karyawan/Index')->where('kategori', 'sales')
+            ->component('Karyawan/Index')->where('kategori', 'sales')->where('status', 'aktif')
             ->where('jumlah', ['semua' => 4, 'aktif' => 3, 'tidak_aktif' => 1])
+            ->where('baris.total', 3)
             ->where('baris.data.0.nama', 'Rudi Hartono')->where('baris.data.0.koordinator', 'Koor Satu')
             ->where('baris.data.0.area_aktif', 'Sidoarjo-01')->where('baris.data.0.total_area', 2));
 
         $this->get('/karyawan_sales?status=tidak_aktif')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1)->where('baris.data.0.nama', 'Joko Lama'));
+        $this->get('/karyawan_sales?status=semua')->assertInertia(fn (Assert $page) => $page->where('baris.total', 4));
         $this->get('/karyawan_sales?q=sinta')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1));
         $this->get('/karyawan_sales?depo=22')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1)->where('baris.data.0.nama', 'Sinta Wulandari'));
 
@@ -59,15 +62,15 @@ class KaryawanTest extends AdminTestCase
 
     public function test_sort_filter_per_kolom_daftar_karyawan(): void
     {
-        // Sort nama Z->A mengabaikan urutan bawaan (aktif dulu).
-        $this->get('/karyawan_sales?sort=nama&arah=desc')->assertInertia(fn (Assert $page) => $page
+        // Sort nama Z->A mengabaikan urutan bawaan (aktif dulu); status=semua supaya Joko Lama (tidak aktif) ikut tersortir.
+        $this->get('/karyawan_sales?status=semua&sort=nama&arah=desc')->assertInertia(fn (Assert $page) => $page
             ->where('sort', ['kolom' => 'nama', 'arah' => 'desc'])
             ->where('baris.data', fn ($b) => collect($b)->pluck('nama')->all() === ['Tegar Mahendra', 'Sinta Wulandari', 'Rudi Hartono', 'Joko Lama']));
 
         // Kolom di luar whitelist diabaikan.
         $this->get('/karyawan_sales?sort=foto&arah=desc')->assertInertia(fn (Assert $page) => $page->where('sort', null));
 
-        // Filter per kolom (LIKE) pada depo, AND dengan status bawaan "semua".
+        // Filter per kolom (LIKE) pada depo, AND dengan status bawaan "aktif".
         $this->get('/karyawan_sales?filter[depo]=balaraja')->assertInertia(fn (Assert $page) => $page
             ->where('filterValues', ['depo' => 'balaraja'])->where('baris.data.0.nama', 'Sinta Wulandari')->where('baris.total', 1));
     }
