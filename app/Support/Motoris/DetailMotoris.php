@@ -7,6 +7,7 @@ use App\Support\Akses\Akses;
 use App\Support\Karyawan\TanggalBebas;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
+use App\Support\Tracking\TandaOutletMotoris;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -34,7 +35,7 @@ class DetailMotoris
                 ->leftJoin('mk_karyawan as ko', 'ko.id', '=', 'k.koordinator_id')
                 ->where('k.kategori', 'sales')->where('k.id', $id),
             $user
-        )->first(['k.id', 'k.nama', 'k.no_hp', 'k.tanggal_mulai', 'k.aktif', 'k.foto', 'd.nama as depo', 'ko.nama as koordinator']);
+        )->first(['k.id', 'k.nama', 'k.no_hp', 'k.tanggal_mulai', 'k.aktif', 'k.foto', 'k.depo_id', 'd.nama as depo', 'ko.nama as koordinator']);
 
         return $motoris ? new self($motoris, $dari, $sampai) : null;
     }
@@ -51,7 +52,54 @@ class DetailMotoris
             'transaksi' => $this->transaksi(clone $penjualan),
             'transaksi_total' => (clone $penjualan)->count(),
             'produk' => $this->produk(),
+            'target' => $this->targetHarian(),
+            'tanda_motoris' => $this->tandaMotoris(),
+            'tanda_outlet' => $this->tandaOutlet(),
         ];
+    }
+
+    /** Target Call dan EC per hari kerja dari pengaturan depo motoris (sama dengan KPI di aplikasi HP dan Motoris Report). */
+    private function targetHarian(): array
+    {
+        $target = Pengaturan::depo($this->motoris->depo_id ? (int) $this->motoris->depo_id : null)['target'] ?? config('mobile.target_default');
+
+        return ['call' => (int) $target['call'], 'ec' => (int) $target['ec']];
+    }
+
+    /** Tanda motoris pada tanggal dalam periode (yang sudah dicabut tetap tampil sebagai riwayat), terbaru dulu. */
+    private function tandaMotoris(): array
+    {
+        return DB::table('tanda_motoris')->where('karyawan_id', $this->motoris->id)->whereBetween('tanggal', [$this->dari, $this->sampai])
+            ->orderByDesc('tanggal')->orderByDesc('id')->get()
+            ->map(fn ($t) => [
+                'id' => (int) $t->id,
+                'tanggal' => substr((string) $t->tanggal, 0, 10),
+                'kategori_label' => config("marketama.tanda_motoris.{$t->kategori}", $t->kategori),
+                'catatan' => $t->catatan,
+                'oleh' => $t->dibuat_nama,
+                'waktu' => JamLokal::format($t->created_at),
+                'dicabut' => $t->dicabut_at !== null,
+            ])->all();
+    }
+
+    /**
+     * Tanda outlet aktif pada outlet yang didaftarkan motoris ini (outlet dari HP atau pendaftar Marketama), dalam jendela
+     * hari terakhir yang sama dengan lencana Ditandai di Lacak Motoris — tidak mengikuti periode.
+     */
+    private function tandaOutlet(): array
+    {
+        return TandaOutletMotoris::aktif(false, $this->motoris->id, $this->motoris->nama)
+            ->orderByDesc('tout.created_at')->orderByDesc('tout.id')->limit(50)
+            ->get(['tout.id', 'tout.outlet_id', 'o.nama as outlet', 'tout.kategori', 'tout.catatan', 'tout.dibuat_nama', 'tout.created_at'])
+            ->map(fn ($t) => [
+                'id' => (int) $t->id,
+                'outlet_id' => (int) $t->outlet_id,
+                'outlet' => $t->outlet,
+                'kategori_label' => config("marketama.tanda_outlet.{$t->kategori}", $t->kategori),
+                'catatan' => $t->catatan,
+                'oleh' => $t->dibuat_nama,
+                'waktu' => JamLokal::format($t->created_at),
+            ])->all();
     }
 
     private function profil(?User $user): array
@@ -106,9 +154,13 @@ class DetailMotoris
         $ec = (int) $jual->ec;
         $nilai = (int) $jual->nilai;
         $hariIni = Pengaturan::sekarang()->toDateString();
+        $hariKerja = LaporanMotoris::hariKerja($this->dari, min($this->sampai, $hariIni));
+        $target = $this->targetHarian();
 
         return [
-            'hari_kerja' => LaporanMotoris::hariKerja($this->dari, min($this->sampai, $hariIni)),
+            'hari_kerja' => $hariKerja,
+            'target_call' => $target['call'] * $hariKerja,
+            'target_ec' => $target['ec'] * $hariKerja,
             'hadir' => $hadir,
             'terlambat' => (int) $absen->terlambat,
             'kunjungan' => $kunjungan,
@@ -129,7 +181,7 @@ class DetailMotoris
         $tgl = fn ($t) => substr((string) $t, 0, 10);
 
         $absen = DB::table('trx_absensi')->where('karyawan_id', $id)->whereBetween('tanggal', $rentang)
-            ->get(['tanggal', 'masuk_at', 'terlambat'])->keyBy(fn ($r) => $tgl($r->tanggal));
+            ->get(['tanggal', 'masuk_at', 'pulang_at', 'terlambat'])->keyBy(fn ($r) => $tgl($r->tanggal));
         $kunjungan = DB::table('trx_kunjungan')->where('karyawan_id', $id)->whereBetween('tanggal', $rentang)
             ->groupBy('tanggal')->selectRaw('tanggal, COUNT(*) AS n')->get()->keyBy(fn ($r) => $tgl($r->tanggal));
         $jual = DB::table('trx_penjualan')->where('karyawan_id', $id)->whereBetween('tanggal', $rentang)->whereNull('dibatalkan_at')
@@ -141,6 +193,7 @@ class DetailMotoris
         return $tanggal->map(fn ($t) => [
             'tanggal' => $t,
             'masuk' => JamLokal::format($absen[$t]->masuk_at ?? null, 'H:i'),
+            'pulang' => JamLokal::format($absen[$t]->pulang_at ?? null, 'H:i'),
             'terlambat' => (bool) ($absen[$t]->terlambat ?? false),
             'kunjungan' => (int) ($kunjungan[$t]->n ?? 0),
             'ec' => (int) ($jual[$t]->ec ?? 0),

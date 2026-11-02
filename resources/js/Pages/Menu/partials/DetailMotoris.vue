@@ -12,6 +12,7 @@ import StatRow from '@/Components/ui/molecules/StatRow.vue';
 import Tabs from '@/Components/ui/molecules/Tabs.vue';
 import DataTable from '@/Components/ui/organisms/DataTable.vue';
 import { angka, rupiah, tanggalSingkat, tanggalWaktuPendek } from '@/Support/format.js';
+import { persenTarget } from '@/Support/pusatKendali.js';
 
 // Isi modal Detail Motoris di Lacak Motoris (spec 060): profil dan historis transaksi pada periode yang dipilih,
 // untuk analisa kinerja oleh koordinator. Data dari GET /tracking_sales/{id}/detail (DetailMotorisController);
@@ -20,14 +21,11 @@ const props = defineProps({
     salesId: { type: Number, required: true },
 });
 
-const TAB = [
-    { key: 'harian', label: 'Harian' },
-    { key: 'transaksi', label: 'Transaksi' },
-    { key: 'produk', label: 'Produk Terlaris' },
-];
-const KOLOM_HARIAN = { tanggal: 'Tanggal', masuk: 'Jam Masuk', kunjungan: 'Kunjungan', ec: 'EC', transaksi: 'Transaksi', penjualan: 'Penjualan' };
+const KOLOM_HARIAN = { tanggal: 'Tanggal', masuk: 'Jam Masuk', pulang: 'Jam Pulang', kunjungan: 'Kunjungan', ec: 'EC', transaksi: 'Transaksi', penjualan: 'Penjualan' };
 const KOLOM_TRANSAKSI = { kode: 'Kode', waktu: 'Waktu', outlet: 'Outlet', sku: 'SKU', qty: 'Qty', diskon: 'Diskon', total: 'Total', status: 'Status' };
 const KOLOM_PRODUK = { nama: 'Produk', qty: 'Qty', nilai: 'Nilai' };
+const KOLOM_TANDA_MOTORIS = { tanggal: 'Tanggal', kategori_label: 'Kategori', catatan: 'Catatan', oleh: 'Ditandai Oleh', waktu: 'Ditandai Pada', dicabut: 'Status' };
+const KOLOM_TANDA_OUTLET = { outlet: 'Outlet', kategori_label: 'Kategori', catatan: 'Catatan', oleh: 'Ditandai Oleh', waktu: 'Ditandai Pada' };
 
 const memuat = ref(true);
 const galat = ref(null);
@@ -37,6 +35,17 @@ const sampai = ref('');
 const tab = ref('harian');
 
 const berubah = computed(() => data.value && (dari.value !== data.value.periode.dari || sampai.value !== data.value.periode.sampai));
+const TAB = computed(() => [
+    { key: 'harian', label: 'Harian' },
+    { key: 'transaksi', label: 'Transaksi' },
+    { key: 'produk', label: 'Produk Terlaris' },
+    { key: 'tanda', label: `Ditandai (${(data.value?.tanda_motoris.filter((t) => !t.dicabut).length ?? 0) + (data.value?.tanda_outlet.length ?? 0)})` },
+]);
+
+// Persen realisasi terhadap target (null bila target tidak ada) dan warnanya: tercapai = hijau, belum = kuning.
+const persen = (nilai, target) => persenTarget(nilai, target);
+const warnaPersen = (p) => (p >= 100 ? 'success' : 'warning');
+
 const grafik = computed(() => (data.value?.harian ?? []).map((h) => ({ label: `${h.tanggal.slice(8, 10)}/${h.tanggal.slice(5, 7)}`, value: h.penjualan })));
 
 async function ambil() {
@@ -112,11 +121,18 @@ onMounted(ambil);
                     </div>
                     <div class="kpi-item" data-kpi="kunjungan">
                         <dt class="kpi-label">Call (Kunjungan)</dt>
-                        <dd class="kpi-nilai">{{ angka(data.ringkasan.kunjungan) }}</dd>
+                        <dd class="kpi-nilai">
+                            {{ angka(data.ringkasan.kunjungan) }}<span class="kpi-catatan">/ {{ angka(data.ringkasan.target_call) }}</span>
+                            <span v-if="persen(data.ringkasan.kunjungan, data.ringkasan.target_call) !== null" class="kpi-persen" :class="{ 'kpi-persen-capai': persen(data.ringkasan.kunjungan, data.ringkasan.target_call) >= 100 }">{{ persen(data.ringkasan.kunjungan, data.ringkasan.target_call) }}%</span>
+                        </dd>
                     </div>
                     <div class="kpi-item" data-kpi="ec">
                         <dt class="kpi-label">Effective Call</dt>
-                        <dd class="kpi-nilai">{{ angka(data.ringkasan.ec) }}<span class="kpi-catatan">{{ angka(data.ringkasan.rasio_ec) }}%</span></dd>
+                        <dd class="kpi-nilai">
+                            {{ angka(data.ringkasan.ec) }}<span class="kpi-catatan">/ {{ angka(data.ringkasan.target_ec) }}</span>
+                            <span v-if="persen(data.ringkasan.ec, data.ringkasan.target_ec) !== null" class="kpi-persen" :class="{ 'kpi-persen-capai': persen(data.ringkasan.ec, data.ringkasan.target_ec) >= 100 }">{{ persen(data.ringkasan.ec, data.ringkasan.target_ec) }}%</span>
+                            <span class="kpi-catatan" title="Effective call dibanding kunjungan">{{ angka(data.ringkasan.rasio_ec) }}% dari call</span>
+                        </dd>
                     </div>
                     <div class="kpi-item" data-kpi="penjualan">
                         <dt class="kpi-label">Penjualan</dt>
@@ -140,8 +156,21 @@ onMounted(ambil);
                             <Badge v-if="row.masuk" :variant="row.terlambat ? 'warning' : 'light'" :title="row.terlambat ? 'Terlambat' : null">{{ row.masuk }}</Badge>
                             <template v-else>-</template>
                         </template>
+                        <template #cell-pulang="{ row }">
+                            <Badge v-if="row.pulang" variant="light">{{ row.pulang }}</Badge>
+                            <template v-else>-</template>
+                        </template>
+                        <template #cell-kunjungan="{ row }">
+                            {{ angka(row.kunjungan) }}
+                            <Badge v-if="persen(row.kunjungan, data.target.call) !== null" :variant="warnaPersen(persen(row.kunjungan, data.target.call))" :title="`Target ${data.target.call} call per hari`">{{ persen(row.kunjungan, data.target.call) }}%</Badge>
+                        </template>
+                        <template #cell-ec="{ row }">
+                            {{ angka(row.ec) }}
+                            <Badge v-if="persen(row.ec, data.target.ec) !== null" :variant="warnaPersen(persen(row.ec, data.target.ec))" :title="`Target ${data.target.ec} EC per hari`">{{ persen(row.ec, data.target.ec) }}%</Badge>
+                        </template>
                         <template #cell-penjualan="{ row }">{{ rupiah(row.penjualan) }}</template>
                     </DataTable>
+                    <p class="m-0 text-xs text-gray-500">Persentase dibanding target depo per hari: {{ data.target.call }} call dan {{ data.target.ec }} EC.</p>
                 </template>
 
                 <template v-else-if="tab === 'transaksi'">
@@ -169,6 +198,32 @@ onMounted(ambil);
                         <template #cell-diskon="{ row }">{{ rupiah(row.diskon) }}</template>
                         <template #cell-total="{ row }">{{ rupiah(row.total) }}</template>
                     </DataTable>
+                </template>
+
+                <template v-else-if="tab === 'tanda'">
+                    <DataTable
+                        title="Tanda motoris pada periode ini"
+                        :columns="KOLOM_TANDA_MOTORIS"
+                        :rows="data.tanda_motoris"
+                        :total="data.tanda_motoris.length"
+                        :memuat="memuat"
+                        empty-text="Tidak ada tanda motoris pada periode ini."
+                    >
+                        <template #cell-tanggal="{ row }">{{ tanggalSingkat(row.tanggal) }}</template>
+                        <template #cell-catatan="{ row }">{{ row.catatan || '-' }}</template>
+                        <template #cell-dicabut="{ row }"><Badge :variant="row.dicabut ? 'secondary' : 'danger'">{{ row.dicabut ? 'Dicabut' : 'Aktif' }}</Badge></template>
+                    </DataTable>
+                    <DataTable
+                        title="Tanda outlet yang didaftarkan motoris ini"
+                        :columns="KOLOM_TANDA_OUTLET"
+                        :rows="data.tanda_outlet"
+                        :total="data.tanda_outlet.length"
+                        :memuat="memuat"
+                        empty-text="Tidak ada outlet yang didaftarkan motoris ini sedang ditandai."
+                    >
+                        <template #cell-catatan="{ row }">{{ row.catatan || '-' }}</template>
+                    </DataTable>
+                    <p class="m-0 text-xs text-gray-500">Tanda outlet: hanya yang aktif dalam jendela waktu yang sama dengan lencana Ditandai di Lacak Motoris, tidak mengikuti periode.</p>
                 </template>
 
                 <DataTable

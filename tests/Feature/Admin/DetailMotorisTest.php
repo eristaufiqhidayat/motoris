@@ -24,10 +24,10 @@ class DetailMotorisTest extends AdminTestCase
         // 3 Nov: hadir terlambat, 2 kunjungan, 1 penjualan EC. 4 Nov: hadir, 1 kunjungan, 1 penjualan batal.
         // 20 Okt: di luar periode bawaan.
         DB::table('trx_absensi')->insert([
-            ['karyawan_id' => 1, 'tanggal' => '2026-11-03', 'masuk_at' => '2026-11-03 01:15:00', 'terlambat' => true],
-            ['karyawan_id' => 1, 'tanggal' => '2026-11-04', 'masuk_at' => '2026-11-04 00:55:00', 'terlambat' => false],
-            ['karyawan_id' => 1, 'tanggal' => '2026-10-20', 'masuk_at' => '2026-10-20 00:50:00', 'terlambat' => false],
-            ['karyawan_id' => 3, 'tanggal' => '2026-11-03', 'masuk_at' => '2026-11-03 00:50:00', 'terlambat' => false],
+            ['karyawan_id' => 1, 'tanggal' => '2026-11-03', 'masuk_at' => '2026-11-03 01:15:00', 'pulang_at' => '2026-11-03 10:05:00', 'terlambat' => true],
+            ['karyawan_id' => 1, 'tanggal' => '2026-11-04', 'masuk_at' => '2026-11-04 00:55:00', 'pulang_at' => null, 'terlambat' => false],
+            ['karyawan_id' => 1, 'tanggal' => '2026-10-20', 'masuk_at' => '2026-10-20 00:50:00', 'pulang_at' => null, 'terlambat' => false],
+            ['karyawan_id' => 3, 'tanggal' => '2026-11-03', 'masuk_at' => '2026-11-03 00:50:00', 'pulang_at' => null, 'terlambat' => false],
         ]);
         $kunjungan = fn (string $tgl, int $outlet) => DB::table('trx_kunjungan')->insertGetId([
             'karyawan_id' => 1, 'outlet_id' => $outlet, 'tanggal' => $tgl, 'checkin_at' => "{$tgl} 02:00:00",
@@ -116,9 +116,68 @@ class DetailMotorisTest extends AdminTestCase
 
         $this->assertSame(['2026-11-03', '2026-11-04'], array_column($harian, 'tanggal'));
         $this->assertSame('08:15', $harian[0]['masuk']);
+        $this->assertSame('17:05', $harian[0]['pulang']);
+        $this->assertNull($harian[1]['pulang']);
         $this->assertTrue($harian[0]['terlambat']);
         $this->assertSame([2, 1, 1, 150000], [$harian[0]['kunjungan'], $harian[0]['ec'], $harian[0]['transaksi'], $harian[0]['penjualan']]);
         $this->assertSame([1, 0, 0, 0], [$harian[1]['kunjungan'], $harian[1]['ec'], $harian[1]['transaksi'], $harian[1]['penjualan']]);
+    }
+
+    public function test_target_call_dan_ec_dari_pengaturan_depo_dikali_hari_kerja(): void
+    {
+        $hk = LaporanMotoris::hariKerja('2026-11-01', '2026-11-15');
+        $res = $this->getJson($this->url())->assertOk();
+
+        // Depo 46 tanpa pengaturan target: memakai bawaan config('mobile.target_default').
+        $res->assertJsonPath('target.call', 40)->assertJsonPath('target.ec', 25)
+            ->assertJsonPath('ringkasan.target_call', 40 * $hk)->assertJsonPath('ringkasan.target_ec', 25 * $hk);
+
+        DB::table('mk_depo')->where('id', 46)->update(['data' => json_encode(['target_call' => 30, 'target_ec' => 12])]);
+
+        $this->getJson($this->url())->assertOk()->assertJsonPath('target.call', 30)->assertJsonPath('target.ec', 12)
+            ->assertJsonPath('ringkasan.target_call', 30 * $hk);
+    }
+
+    public function test_tanda_motoris_dalam_periode_termasuk_yang_dicabut(): void
+    {
+        $baris = fn (string $tgl, string $kategori, ?string $cabut = null) => [
+            'karyawan_id' => 1, 'tanggal' => $tgl, 'kategori' => $kategori, 'catatan' => 'Nota janggal', 'dibuat_oleh' => $this->admin->id,
+            'dibuat_nama' => 'admin', 'created_at' => "{$tgl} 05:00:00", 'dicabut_at' => $cabut,
+        ];
+        DB::table('tanda_motoris')->insert([
+            $baris('2026-11-03', 'penjualan_fiktif'), $baris('2026-11-04', 'lokasi_palsu', '2026-11-05 01:00:00'),
+            $baris('2026-10-20', 'penjualan_fiktif'), ['karyawan_id' => 3] + $baris('2026-11-03', 'penjualan_fiktif'),
+        ]);
+
+        $res = $this->getJson($this->url())->assertOk()->assertJsonCount(2, 'tanda_motoris');
+
+        $res->assertJsonPath('tanda_motoris.0.tanggal', '2026-11-04')
+            ->assertJsonPath('tanda_motoris.0.kategori_label', 'Lokasi / GPS palsu')
+            ->assertJsonPath('tanda_motoris.0.dicabut', true)
+            ->assertJsonPath('tanda_motoris.1.kategori_label', 'Penjualan fiktif')
+            ->assertJsonPath('tanda_motoris.1.dicabut', false)
+            ->assertJsonPath('tanda_motoris.1.oleh', 'admin');
+    }
+
+    public function test_tanda_outlet_pada_outlet_yang_didaftarkan_motoris_ini(): void
+    {
+        // Outlet 70 didaftarkan Rudi lewat HP; 71 oleh pendaftar Marketama bernama sama; 72 oleh orang lain.
+        DB::table('mk_outlet')->where('id', 71)->update(['dibuat_oleh' => 'Rudi Hartono']);
+        DB::table('mk_outlet')->insert(['id' => 72, 'nama' => 'Toko Lain', 'dibuat_oleh' => 'Sinta Wulandari']);
+        DB::table('trx_outlet_baru')->insert(['karyawan_id' => 1, 'nama' => 'Toko Makmur', 'lat' => -7.4, 'lng' => 112.7, 'status' => 'disetujui', 'outlet_id' => 70]);
+
+        $tanda = fn (int $outlet) => [
+            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'catatan' => 'Tidak ada toko', 'dibuat_oleh' => $this->admin->id,
+            'dibuat_nama' => 'admin', 'created_at' => now()->utc(),
+        ];
+        foreach ([$tanda(70), $tanda(71), $tanda(72), ['dicabut_at' => now()->utc()] + $tanda(70)] as $baris) {
+            DB::table('tanda_outlet')->insert($baris);
+        }
+
+        $res = $this->getJson($this->url())->assertOk()->assertJsonCount(2, 'tanda_outlet');
+
+        $this->assertEqualsCanonicalizing(['Toko Makmur', 'Warung Bu Sri'], array_column($res->json('tanda_outlet'), 'outlet'));
+        $res->assertJsonPath('tanda_outlet.0.kategori_label', 'Outlet fiktif')->assertJsonPath('tanda_outlet.0.oleh', 'admin');
     }
 
     public function test_daftar_transaksi_termasuk_yang_batal(): void

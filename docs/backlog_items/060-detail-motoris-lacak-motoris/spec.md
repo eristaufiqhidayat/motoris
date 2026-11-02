@@ -23,12 +23,16 @@ Detail Motoris** berisi profil motoris dan historis transaksinya pada periode ya
 4. Sebagai koordinator, saya melihat ringkasan kinerja periode: hari hadir dibanding hari kerja standar, jumlah
    terlambat, kunjungan (call), effective call dan rasionya, jumlah transaksi, total penjualan, total qty, dan
    rata-rata penjualan per hari hadir.
-5. Sebagai koordinator, saya melihat grafik dan tabel per hari (jam masuk, kunjungan, EC, transaksi, penjualan) untuk
-   menemukan hari-hari yang tidak wajar.
+5. Sebagai koordinator, saya melihat grafik dan tabel per hari (jam masuk, jam pulang, kunjungan, EC, transaksi,
+   penjualan) untuk menemukan hari-hari yang tidak wajar.
 6. Sebagai koordinator, saya melihat daftar transaksi penjualan motoris pada periode itu (kode, waktu, outlet, SKU,
    qty, total, status batal).
 7. Sebagai koordinator, saya melihat produk terlaris motoris pada periode itu (qty dan nilai).
-8. Sebagai koordinator, saya hanya bisa membuka detail motoris dalam cakupan role saya (motoris bawahan saya).
+8. Sebagai koordinator, saya melihat realisasi kunjungan (Call) dan EC dalam persen terhadap target depo motoris, di
+   ringkasan periode dan di setiap baris harian.
+9. Sebagai koordinator, saya melihat tanda motoris pada periode itu dan tanda outlet pada outlet yang didaftarkan
+   motoris ini, untuk menilai kewajaran kinerjanya.
+10. Sebagai koordinator, saya hanya bisa membuka detail motoris dalam cakupan role saya (motoris bawahan saya).
 
 ## Keputusan implementasi
 
@@ -45,6 +49,13 @@ Detail Motoris** berisi profil motoris dan historis transaksinya pada periode ya
   dibatalkan**; hari kerja standar = `LaporanMotoris::hariKerja(dari, sampai)` (sampai dibatasi hari ini).
 - **Transaksi**: maks. 500 terbaru (urut waktu turun) beserta jumlah total; transaksi batal tetap tampil dengan status
   "Batal" tapi tidak ikut ringkasan. Waktu `recorded_at` (UTC) ditampilkan jam lokal lewat `JamLokal`.
+- **Target**: Call/EC per hari dari pengaturan depo motoris (`Pengaturan::depo`, bawaan `mobile.target_default`) — sama
+  dengan KPI di aplikasi HP. Target periode = target harian × hari kerja standar (seperti Motoris Report); persen
+  dihitung di frontend (`persenTarget`). Baris harian dibandingkan dengan target harian.
+- **Jam pulang** dari `trx_absensi.pulang_at` (jam lokal); kosong bila belum absen pulang.
+- **Tab Ditandai**: tanda motoris (`tanda_motoris`) pada tanggal dalam periode, yang dicabut tetap tampil berstatus
+  Dicabut; tanda outlet aktif pada outlet yang didaftarkan motoris ini (`TandaOutletMotoris::aktif`, jendela hari
+  yang sama dengan lencana Ditandai, maks. 50, tidak mengikuti periode).
 - **Produk terlaris**: 10 produk dengan qty terbanyak dari item penjualan yang tidak batal.
 - **Tanggal masuk** dari `mk_karyawan.tanggal_mulai` (teks bebas dari aplikasi lama: `dd/mm/yyyy`, ISO, "1 Maret
   2026") — dinormalkan ke Y-m-d; masa kerja dihitung dari situ (mis. "2 tahun 3 bulan"). Tidak bisa dibaca → "-".
