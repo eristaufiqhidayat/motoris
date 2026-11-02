@@ -900,7 +900,7 @@ return [
                     'tab_key' => 'sales_tidak_penjualan',
                     'tab_label' => 'Sales Tidak Penjualan',
                     'tables' => [
-                        ['table' => 'sales_tidak_penjualan', 'date_filter_column' => null, 'kpi' => null],
+                        ['table' => 'sales_tidak_penjualan', 'date_filter_column' => 'tanggal_data', 'kpi' => null],
                     ],
                 ],
                 [
