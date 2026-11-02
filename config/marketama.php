@@ -27,6 +27,7 @@ use App\Support\Menu\Motoris\SumberTandaMotoris;
 use App\Support\Menu\SumberCheckinPagi;
 use App\Support\Menu\SumberJoinVisit;
 use App\Support\Menu\SumberMasterArea;
+use App\Support\Menu\SumberMasterDepo;
 use App\Support\Menu\SumberOutletBaru;
 use App\Support\Menu\SumberOutletMaster;
 use App\Support\Menu\SumberTandaOutlet;
@@ -2275,6 +2276,10 @@ return [
         ],
         'master_depo' => [
             'title' => 'Master Warehouse / Depo',
+            // Dibaca dari mk_depo (lihat App\Support\Menu\SumberMasterDepo), bukan lagi tabel "master_depo"
+            // (salinan datar hasil impor CSV lama) -- menyatukan daftar dengan data yang dipakai HP & form
+            // Tambah Depo (App\Http\Controllers\Admin\MasterDepoController).
+            'sumber' => SumberMasterDepo::class,
             'columns' => [
                 'nama' => 'Nama',
                 'kode' => 'Kode',

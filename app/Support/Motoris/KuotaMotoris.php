@@ -5,11 +5,11 @@ namespace App\Support\Motoris;
 use App\Support\Marketama\HalamanParser;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 // Depo beserta kota (City Group) dan kuota sales motoris yang berlaku pada satu bulan.
 // Kuota: isian admin di master_kuota_motoris (baris terbaru yang berlaku_mulai <= bulan);
-// bila belum pernah diisi, kuota dari Master Depo Marketama (mk_depo.data, cadangan master_depo).
+// bila belum pernah diisi, kuota dari Master Depo Marketama (kolom mk_depo.kuota_sales_motoris,
+// cadangan JSON mk_depo.data untuk depo yang belum disatukan).
 class KuotaMotoris
 {
     /**
@@ -58,18 +58,14 @@ class KuotaMotoris
     /** @return Collection<int, object> depo urut kota lalu nama */
     private static function depo(?array $hanyaDepo): Collection
     {
-        $lama = Schema::hasTable('master_depo')
-            ? DB::table('master_depo')->get(['nama', 'kota_besar', 'kuota_sales_motoris'])->keyBy(fn ($b) => HalamanParser::kunciNama($b->nama))
-            : collect();
-
-        return DB::table('mk_depo')
-            ->when($hanyaDepo !== null, fn ($q) => $q->whereIn('id', $hanyaDepo ?: [0]))
-            ->get(['id', 'nama', 'aktif', 'data'])
-            ->map(function ($d) use ($lama) {
+        return DB::table('mk_depo as d')
+            ->leftJoin('city_group as cg', 'cg.id', '=', 'd.city_group_id')
+            ->when($hanyaDepo !== null, fn ($q) => $q->whereIn('d.id', $hanyaDepo ?: [0]))
+            ->get(['d.id', 'd.nama', 'd.aktif', 'd.data', 'd.kuota_sales_motoris', 'cg.nama_city_group'])
+            ->map(function ($d) {
                 $data = json_decode((string) $d->data, true) ?: [];
-                $cadangan = $lama[HalamanParser::kunciNama($d->nama)] ?? null;
-                $kota = self::teks($data['kota_besar'] ?? null) ?? self::teks($cadangan?->kota_besar);
-                $kuota = self::teks($data['kuota_sales_motoris'] ?? null) ?? self::teks($cadangan?->kuota_sales_motoris);
+                $kota = self::teks($d->nama_city_group) ?? self::teks($data['kota_besar'] ?? null);
+                $kuota = $d->kuota_sales_motoris !== null ? (string) $d->kuota_sales_motoris : self::teks($data['kuota_sales_motoris'] ?? null);
 
                 return (object) [
                     'id' => (int) $d->id,

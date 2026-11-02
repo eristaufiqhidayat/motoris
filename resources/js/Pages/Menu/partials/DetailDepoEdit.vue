@@ -4,8 +4,10 @@ import Button from '@/Components/ui/atoms/Button.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 
-// Form edit data depo (dibuka dari tombol Edit di drawer detail depo). Penyimpanan belum tersambung:
-// data master_depo masih berasal dari impor Marketama, jadi tombol Simpan dinonaktifkan.
+// Form edit data depo (dibuka dari tombol Edit di drawer detail depo). Data depo sekarang dari mk_depo
+// (bisa ditulis, lihat App\Http\Controllers\Admin\MasterDepoController), tapi endpoint update belum
+// dibuat -- baru endpoint tambah (form Tambah Warehouse/Depo) yang ada, jadi tombol Simpan di sini
+// masih dinonaktifkan sampai endpoint update-nya dibuat.
 const props = defineProps({
     depo: { type: Object, required: true },
 });
@@ -43,7 +45,7 @@ const form = reactive(Object.fromEntries(FIELD.map((field) => [field.kunci, prop
         </div>
 
         <div class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 pt-4">
-            <p class="me-auto text-xs text-gray-500">Penyimpanan belum tersedia: data depo masih berasal dari impor Marketama.</p>
+            <p class="me-auto text-xs text-gray-500">Penyimpanan belum tersedia: endpoint ubah depo belum dibuat.</p>
             <Button variant="outline-secondary" @click="emit('batal')">Batal</Button>
             <Button type="submit" disabled>Simpan</Button>
         </div>
