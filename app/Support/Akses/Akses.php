@@ -23,7 +23,11 @@ class Akses
     ];
 
     /** Menu kelola akun & role: hanya untuk role yang diberi hak eksplisit. */
-    public const MENU_ADMIN = ['super_admin', 'user_koordinator', 'user_sales', 'user_lainnya', 'role', 'login_session', 'backup_data'];
+    public const MENU_ADMIN = [
+        'super_admin', 'user_koordinator', 'user_sales', 'user_lainnya', 'role', 'login_session', 'backup_data',
+        'karyawan_supervisor', 'karyawan_koordinator', 'karyawan_sales', 'karyawan_lainnya',
+        'kategori_surat_peringatan', 'surat_peringatan', 'lap_karyawan', 'lap_user',
+    ];
 
     /** Hapus cache role permintaan ini (setelah role diubah). */
     public static function lupakan(): void
