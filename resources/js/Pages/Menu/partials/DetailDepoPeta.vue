@@ -5,7 +5,7 @@ import Icon from '@/Components/ui/atoms/Icon.vue';
 import { useLeafletMap } from '@/Composables/useLeafletMap.js';
 import { escapeHtml, ikonDepo, ikonLingkaran, ikonMotoris, ikonOutlet, tautanGoogleMap } from '@/Support/peta.js';
 
-// Peta satu titik di drawer: lokasi depo (kolom latitude/longitude master_depo) atau posisi terakhir motoris
+// Peta satu titik di drawer: lokasi depo (kolom latitude/longitude mk_depo) atau posisi terakhir motoris
 // (ikon 'motoris', baris Tracking Last Seen). Objek `depo` cukup memuat nama, latitude, dan longitude.
 const props = defineProps({
     depo: { type: Object, required: true },

@@ -20,7 +20,6 @@ class ReferenceDataSeeder extends Seeder
         'kategori_produk',
         'merk_produk',
         'satuan_produk',
-        'master_depo',
         'wilayah_depo',
         'master_project',
         'holiday_dates',

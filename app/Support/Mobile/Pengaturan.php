@@ -39,13 +39,11 @@ class Pengaturan
             return null;
         }
 
-        $data = json_decode((string) $depo->data, true) ?: [];
-
-        // Cadangan: tabel master_depo lama (hasil scraping) dengan nama yang sama.
-        if (Schema::hasTable('master_depo') && (! isset($data['latitude']) || ! isset($data['minimal_value_transaksi']))) {
-            $lama = DB::table('master_depo')->whereRaw('LOWER(TRIM(nama)) = ?', [HalamanParser::kunciNama($depo->nama)])->first();
-            $data += $lama ? (array) $lama : [];
-        }
+        // Kolom asli mk_depo (diisi lewat form Tambah/Edit Depo Enesis, atau App\Support\Master\MasterDepo::
+        // satukanDariMasterDepo() sebelum tabel "master_depo" dihapus) diutamakan; JSON "data" hasil tarikan
+        // dipakai hanya untuk kolom yang masih kosong (array_filter buang null supaya kolom kosong tetap
+        // jatuh ke cadangan JSON).
+        $data = array_filter((array) $depo, fn ($v) => $v !== null) + (json_decode((string) $depo->data, true) ?: []);
 
         $nilai = fn (string $k) => isset($data[$k]) && $data[$k] !== '' ? $data[$k] : null;
         $lat = $nilai('latitude');

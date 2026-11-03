@@ -2,13 +2,16 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Support\Master\MasterDepo;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
-// Form "Tambah Warehouse / Depo" (MasterDepoController), meniru /master_depo/add di Marketama: simpan ke
-// mk_depo (lihat App\Support\Master\MasterDepo), terpisah dari daftar "master_depo" (impor CSV lama).
+// Form "Tambah Warehouse / Depo" (MasterDepoController) dan daftar Master Warehouse/Depo yang sudah ada
+// (SumberMasterDepo): keduanya baca/tulis mk_depo (lihat App\Support\Master\MasterDepo). Tabel lama
+// "master_depo" sudah dihapus (lihat migrasi 2026_11_03_000001_hapus_tabel_master_depo).
 class MasterDepoTest extends AdminTestCase
 {
     protected function setUp(): void
@@ -97,5 +100,48 @@ class MasterDepoTest extends AdminTestCase
 
         $this->get('/master_depo/tambah')->assertForbidden();
         $this->post('/master_depo/tambah', $this->dataDasar())->assertForbidden();
+    }
+
+    public function test_daftar_master_depo_dibaca_dari_mk_depo(): void
+    {
+        // Sidoarjo (id 46) sudah diisi AdminTestCase: 1 koordinator (137) + 3 sales (1, 3, 4; termasuk yang
+        // tidak aktif) + 1 karyawan kategori "lainnya" (500, tidak ikut dihitung) di depo itu.
+        DB::table('mk_depo')->where('id', 46)->update([
+            'kode' => 'SDA', 'provinsi' => 'Jawa Timur', 'kota_kabupaten' => 'Kab. Sidoarjo',
+            'target_call' => 45, 'target_ec' => 35, 'aktif' => true, 'multi_polygon_sales' => false,
+        ]);
+
+        $this->get('/master_depo')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Menu/Show')
+            ->loadDeferredProps(fn (Assert $page) => $page
+                ->where('tables.0.rows.data.0.nama', 'Sidoarjo')
+                ->where('tables.0.rows.data.0.kode', 'SDA')
+                ->where('tables.0.rows.data.0.target_call', 45)
+                ->where('tables.0.rows.data.0.status', 'Aktif')
+                ->where('tables.0.rows.data.0.multi_polygon_sales', 'Tidak')
+                ->where('tables.0.rows.data.0.total_koordinator', 1)
+                ->where('tables.0.rows.data.0.jumlah_sales_aktif', 3)
+            ));
+    }
+
+    public function test_depo_baru_dari_form_tambah_muncul_di_daftar_master_depo(): void
+    {
+        Storage::fake('local');
+
+        $this->post('/master_depo/tambah', $this->dataDasar())->assertRedirect(route('master-depo.tambah'));
+
+        $this->get('/master_depo')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps(fn (Assert $page) => $page
+                ->where('tables.0.rows.data', fn ($baris) => collect($baris)->firstWhere('kode', 'DEPO-BARU')['nama'] === 'Depo Bekasi Baru')
+            ));
+    }
+
+    public function test_satukan_dari_master_depo_aman_setelah_tabel_dihapus(): void
+    {
+        // Tabel "master_depo" sudah dihapus lewat migrasi 2026_11_03_000001_hapus_tabel_master_depo
+        // (yang juga memanggil satukanDariMasterDepo() sendiri sebagai jaring pengaman sebelum drop).
+        // Method ini dipertahankan sebagai jejak sejarah; dipastikan tidak error lagi dipanggil ulang.
+        $this->assertFalse(Schema::hasTable('master_depo'));
+        $this->assertSame(0, MasterDepo::satukanDariMasterDepo());
     }
 }

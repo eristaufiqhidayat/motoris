@@ -52,10 +52,7 @@ class TrackingKoordinatorController extends Controller
         $koordinator = DB::table('tracking_koordinator')->where('koordinator_id', $id)->first()
             ?? $this->daftarKoordinator()->firstWhere('id', $id);
 
-        $depo = $koordinator?->depo
-            ? DB::table('master_depo')->where('nama', $koordinator->depo)->first(['nama', 'latitude', 'longitude'])
-            : null;
-        $depo ??= TitikGps::depoMaster($id);
+        $depo = TitikGps::depoMaster($id);
 
         $lama = DB::table('tracking_koordinator_lokasi')
             ->where('koordinator_id', $id)

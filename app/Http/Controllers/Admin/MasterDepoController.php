@@ -18,10 +18,9 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 // Form "Tambah Warehouse / Depo" (meniru /master_depo/add di Marketama), menyimpan ke mk_depo (tabel master
-// Marketama di Enesis) — bukan ke "master_depo" (tabel hasil impor CSV lama yang dipakai menu daftar
-// Master Warehouse / Depo yang sudah ada; lihat catatan di App\Support\Master\MasterDepo). Daftar depo yang
-// sudah ada tidak diubah oleh fitur ini; depo baru tersimpan di mk_depo dan tampil di kartu "Depo terbaru"
-// di halaman form ini sampai daftar utama membaca mk_depo juga (lihat claude/analisa-menu-bintang-motoris.md).
+// Marketama di Enesis, dibaca juga oleh menu daftar lewat App\Support\Menu\SumberMasterDepo dan aplikasi HP
+// lewat App\Support\Mobile\Pengaturan::depo()) — lihat App\Support\Master\MasterDepo. Depo baru lewat form
+// ini langsung tampil di daftar utama, dan juga di kartu "Depo terbaru" di halaman ini sendiri.
 class MasterDepoController extends Controller
 {
     private const DISK = 'local';
