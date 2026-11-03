@@ -300,7 +300,7 @@ function filterTabel(table, { nilai, operator }) {
                 <Button @click="bukaTambahMuatan"><Icon name="plus" class="me-1" /> Tambah</Button>
             </template>
             <template v-else-if="slug === 'master_depo' && bisaTambah" #actions>
-                <Button tag="a" href="/master_depo/tambah"><Icon name="plus" class="me-1" /> Tambah Warehouse / Depo</Button>
+                <Button :tag="Link" href="/master_depo/tambah"><Icon name="plus" class="me-1" /> Tambah Warehouse / Depo</Button>
             </template>
         </PageHeader>
 
