@@ -12,6 +12,7 @@ import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
 import StatCard from '@/Components/ui/molecules/StatCard.vue';
 import DashboardSkeletonKoordinator from './partials/DashboardSkeletonKoordinator.vue';
 import DrawerRingkasan from './partials/DrawerRingkasan.vue';
+import TemuanSistemTim from './partials/TemuanSistemTim.vue';
 import FunnelOutletChart from './partials/FunnelOutletChart.vue';
 import TrenHarianChart from './partials/TrenHarianChart.vue';
 import DetailDepoTim from '@/Pages/Motoris/partials/DetailDepoTim.vue';
@@ -41,6 +42,9 @@ const props = defineProps({
     tren: { type: Array, default: null },
     tandaMotoris: { type: Object, default: null },
     tandaOutlet: { type: Object, default: null },
+    // Kartu Temuan Sistem (antrean Perlu dicek hasil Sinkronisasi Data) — lihat HomeController::temuan / sinkronTemuan.
+    temuan: { type: Object, required: true },
+    temuanFilter: { type: Object, required: true },
 });
 
 const appName = usePage().props.appName;
@@ -147,9 +151,10 @@ function tampilkanTren() {
                     <ul class="list-disc ps-4 space-y-1">
                         <li>Semua angka hanya mencakup tim (sales) di bawah Anda — cakupan "Per downline" role Koordinator.</li>
                         <li><b>Absen Datang</b> dan <b>Checkin Outlet</b> untuk hari ini. Checkin outlet paling lambat jam 11.00 waktu setempat; lewat jam itu motoris tidak bisa checkin lagi, jadi yang masih "belum" tidak akan checkin hari ini.</li>
-                        <li><b>Motoris Ditandai</b> dan <b>Outlet Ditandai:</b> tanda yang masih aktif (belum dicabut), lepas dari tanggal tanda dibuat — sama dengan menu Rekap Motoris Ditandai/Rekap Outlet Ditandai.</li>
+                        <li><b>Motoris Ditandai</b> dan <b>Outlet Ditandai:</b> tanda dari sistem yang masih <b>Perlu dicek</b>, lepas dari tanggal tanda dibuat — sama dengan menu Rekap Motoris Ditandai/Rekap Outlet Ditandai.</li>
                         <li>Klik kartu Absen Datang, Checkin Outlet, Motoris Ditandai, atau Outlet Ditandai untuk melihat rinciannya di panel samping.</li>
                         <li><b>Tim Saya</b> dan <b>Tren Harian</b> bisa difilter ke rentang tanggal lain (bawaan 7 hari terakhir, maks. 62 hari) lewat kolom tanggal di kartunya; detail per sales sama dengan "Lihat Detail" di Summary All Depo.</li>
+                        <li><b>Temuan Sistem:</b> pengganti penandaan manual. Tombol <b>Sinkronisasi Data</b> menambahkan tanda <b>Perlu dicek</b> untuk tim Anda: <i>Diduga lokasi / GPS palsu</i> bila aplikasi HP menandai mock location (per motoris per tanggal pada rentang terpilih, maks. 7 hari), dan <i>Diduga outlet fiktif</i> per titik — beberapa outlet dari pendaftar yang sama di koordinat yang sama persis, yang bertransaksi (ikut menaikkan EC); titik berskor tertinggi dulu, maks. 10 titik terbuka. Cek di lapangan atau lewat Street View, lalu tekan <b>Periksa</b> dan pilih Terbukti atau Wajar dengan catatan. Tanda yang sudah diperiksa tidak dibuat ulang.</li>
                         <li><b>Funnel Outlet</b> untuk hari ini saja, tidak bisa difilter.</li>
                         <li><b>Funnel Outlet:</b> NOO (outlet baru hari ini) → AC (dikunjungi, belum pernah EC) → EC (effective call) → RO (EC di ≥2 tanggal berbeda). NOO hanya menghitung outlet yang didaftarkan lewat aplikasi HP motoris (belum termasuk riwayat outlet dari Marketama).</li>
                     </ul>
@@ -224,6 +229,8 @@ function tampilkanTren() {
                 </div>
             </section>
         </div>
+
+        <TemuanSistemTim :temuan="temuan" :filter="temuanFilter" />
 
         <Deferred :data="['detail', 'funnel', 'tren', 'tandaMotoris', 'tandaOutlet']">
             <template #fallback>

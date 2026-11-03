@@ -432,6 +432,8 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     .tanda-item-aksi { @apply ml-auto flex items-center gap-2; }
     .tanda-item-catatan { @apply mb-0 mt-1 text-xs text-gray-700; }
     .tanda-kosong { @apply mb-0 text-xs text-gray-500; }
+    /* Daftar bernomor outlet satu titik temuan sistem (koordinat identik) di modal Peta; bisa puluhan, jadi bergulir. */
+    .tanda-titik-daftar { @apply m-0 max-h-60 list-decimal space-y-0.5 overflow-y-auto rounded-md border border-amber-200 bg-amber-50/40 py-1.5 pe-2 ps-7 text-xs; }
     /* Daftar tanda melayang di atas konten saat counter "Tanda motoris" diklik, supaya tidak mendorong tata letak. */
     .tanda-motoris-panel { @apply absolute right-0 top-full z-20 mt-1 max-h-72 w-80 max-w-[90vw] overflow-y-auto rounded-md border border-gray-200 bg-white p-2 shadow-lg; }
     /* Satu baris "tanda di tanggal lain": klik memindahkan tanggal drawer. */
@@ -650,7 +652,6 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     /* Kunjungan yang disorot dari klik temuan, dan legenda peta rute harian. */
     /* Peringatan pada kartu kunjungan: chip outline berikon, warna sama dengan tingkat di panel Temuan (hasil beli/tidak beli ditunjukkan warna nomor). */
     /* Tombol bendera di samping kartu: abu-abu berbingkai = belum ditandai; bendera merah terisi di atas latar putih = outlet sudah ditandai. */
-    .btn.tombol-tanda-belum { @apply border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600; }
     .btn.tombol-tanda-aktif { @apply border-red-600 bg-red-600 text-white hover:bg-red-700; }
     .tombol-tanda-ditandai svg, .tombol-tanda-aktif svg { @apply fill-current; }
     .tanda-kunjungan { @apply inline-flex items-center gap-0.5 rounded border bg-white px-1.5 py-0.5 text-[11px] font-semibold leading-tight; }

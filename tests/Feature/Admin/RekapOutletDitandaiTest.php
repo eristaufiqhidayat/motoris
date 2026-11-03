@@ -17,8 +17,8 @@ class RekapOutletDitandaiTest extends AdminTestCase
             ['id' => 9002, 'nama' => 'Toko Lama', 'dibuat_oleh' => 'Orang Lain'],
         ]);
         $tanda = fn (int $outlet, string $catatan, ?string $dicabut = null) => DB::table('tanda_outlet')->insert([
-            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'catatan' => $catatan, 'dibuat_oleh' => 1,
-            'dibuat_nama' => 'koor', 'dicabut_at' => $dicabut, 'created_at' => '2026-10-30 03:00:00', 'updated_at' => '2026-10-30 03:00:00',
+            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'catatan' => $catatan, 'status' => $dicabut ? 'wajar' : 'perlu_dicek', 'dibuat_oleh' => null,
+            'dibuat_nama' => 'Sistem', 'dicabut_at' => $dicabut, 'created_at' => '2026-10-30 03:00:00', 'updated_at' => '2026-10-30 03:00:00',
         ]);
         $tanda(9001, 'Tidak ada bangunan');
         $tanda(9002, 'Sudah dicabut', '2026-10-31 04:00:00');
@@ -37,15 +37,16 @@ class RekapOutletDitandaiTest extends AdminTestCase
         return $baris;
     }
 
-    public function test_rekap_hanya_memuat_tanda_aktif(): void
+    public function test_rekap_hanya_memuat_tanda_aktif_dengan_status_dan_catatan(): void
     {
         $baris = $this->baris('/outlet_ditandai');
 
         $this->assertCount(1, $baris);
         $this->assertSame('Toko Fiktif', $baris[0]['outlet']);
-        $this->assertSame('Outlet fiktif', $baris[0]['kategori']);
+        $this->assertSame('Diduga outlet fiktif', $baris[0]['kategori']);
         $this->assertSame('Rudi Hartono', $baris[0]['motoris_noo']);
-        $this->assertArrayNotHasKey('status', $baris[0]);
+        $this->assertSame('Perlu dicek', $baris[0]['status']);
+        $this->assertSame('Tidak ada bangunan', $baris[0]['catatan']);
         $this->assertSame('30 Okt 2026 10:00', $baris[0]['ditandai_pada']);
     }
 

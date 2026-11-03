@@ -13,6 +13,8 @@ import DetailDepoPeta from './DetailDepoPeta.vue';
 // Peta satu outlet bertanda beserta outlet bertanda lain di sekitarnya (TandaMotorisController::outletTerdekat):
 // konteks bagi koordinator, mis. beberapa outlet fiktif berdekatan. Titik utama oranye, outlet sekitarnya merah.
 // Radius = ambang "jarak dekat" yang sama dengan modal Riwayat (localStorage browser ini); bisa diubah dari sini.
+// Outlet yang bagian titik temuan sistem (spec 062) ikut menampilkan seluruh outlet lain di titik itu (`titik`):
+// koordinatnya identik, jadi di peta digambar sebagai satu penanda berangka.
 const props = defineProps({
     // Url endpoint terdekat dan outlet acuan: { id, nama, latitude, longitude }.
     url: { type: String, required: true },
@@ -20,6 +22,8 @@ const props = defineProps({
 });
 
 const sekitar = ref([]);
+// Outlet lain di titik yang sama dengan outlet ini: [{ outlet_id, outlet }].
+const titik = ref([]);
 const radius = ref(bacaDeteksi().jarak_dekat_meter);
 const form = ref(radius.value);
 const memuat = ref(true);
@@ -41,6 +45,7 @@ async function muat() {
         if (!respon.ok) throw new Error(`HTTP ${respon.status}`);
         const data = await respon.json();
         sekitar.value = data.sekitar ?? [];
+        titik.value = data.titik ?? [];
     } catch {
         pesan.value = 'Gagal memuat outlet bertanda di sekitar.';
     } finally {
@@ -65,7 +70,7 @@ onMounted(muat);
 <template>
     <div class="space-y-3">
         <Skeleton v-if="memuat" class="h-64 w-full" />
-        <DetailDepoPeta v-else :key="radius" :depo="outlet" ikon="outlet" :sekitar="sekitar" google-map />
+        <DetailDepoPeta v-else :key="radius" :depo="outlet" ikon="outlet" :sekitar="sekitar" :jumlah="titik.length + 1" google-map />
 
         <form class="tanda-motoris-form" aria-label="Radius outlet bertanda di sekitar" @submit.prevent="terapkan">
             <Label for="radius_sekitar">Radius pencarian (meter)</Label>
@@ -79,6 +84,18 @@ onMounted(muat);
         </form>
 
         <p v-if="pesan" class="mb-0 text-xs text-red-600">{{ pesan }}</p>
+
+        <section v-if="!memuat && !pesan && titik.length" aria-label="Outlet di titik ini">
+            <div class="tanda-item-kepala">
+                <h6 class="mb-0 font-semibold">Outlet di titik ini</h6>
+                <Badge variant="primary">{{ titik.length + 1 }}</Badge>
+                <span class="tanda-item-meta">koordinat identik</span>
+            </div>
+            <ol class="tanda-titik-daftar mt-2">
+                <li><span class="font-semibold">{{ outlet.nama }}</span></li>
+                <li v-for="o in titik" :key="o.outlet_id">{{ o.outlet }}</li>
+            </ol>
+        </section>
 
         <section v-if="!memuat && !pesan" aria-label="Outlet bertanda di sekitar">
             <div class="tanda-item-kepala">

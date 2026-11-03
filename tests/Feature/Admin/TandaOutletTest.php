@@ -6,8 +6,8 @@ use App\Models\User;
 use App\Support\Akses\Akses;
 use Illuminate\Support\Facades\DB;
 
-// Tanda outlet (potensi outlet fiktif), melekat ke outlet (bukan per kunjungan/motoris): hak, validasi, cabut, audit.
-// Hanya satu kategori (outlet_fiktif, spec 059) — tidak ada input kategori di request.
+// Tanda outlet (diduga outlet fiktif, spec 062): dibuat sistem per titik lokasi (kelompok); koordinator hanya melihat dan
+// memeriksa (Terbukti / Wajar + catatan), dan hasilnya berlaku untuk seluruh kelompok. Hak, validasi, audit.
 class TandaOutletTest extends AdminTestCase
 {
     private const URL = '/outlet_all/tanda';
@@ -18,6 +18,7 @@ class TandaOutletTest extends AdminTestCase
 
         DB::table('mk_outlet')->insert([
             ['id' => 10, 'kode' => 'OUT-10', 'nama' => 'Warung Aming', 'dibuat_oleh' => 'Budi Santoso', 'dibuat_pada' => '2026-10-22 11:23:00'],
+            ['id' => 11, 'kode' => 'OUT-11', 'nama' => 'Warung Aming 2', 'dibuat_oleh' => 'Budi Santoso', 'dibuat_pada' => '2026-10-22 11:25:00'],
             ['id' => 20, 'kode' => 'OUT-20', 'nama' => 'Toko Dua', 'dibuat_oleh' => null, 'dibuat_pada' => null],
         ]);
     }
@@ -35,172 +36,114 @@ class TandaOutletTest extends AdminTestCase
         return $this->akun($username, 'koordinator', 137, ['role_id' => $role]);
     }
 
-    private function tandai(User $user, int $outlet = 10, array $lain = [])
+    /** Tanda sistem Perlu dicek untuk satu outlet (kelompok opsional). */
+    private function tanda(int $outlet = 10, array $lain = []): int
     {
-        return $this->actingAs($user)->postJson(self::URL, $lain + [
-            'outlet_id' => $outlet, 'catatan' => 'Alamat tidak ditemukan',
+        return DB::table('tanda_outlet')->insertGetId($lain + [
+            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'catatan' => '2 outlet didaftarkan Budi Santoso di koordinat yang sama persis.',
+            'status' => 'perlu_dicek', 'dibuat_oleh' => null, 'dibuat_nama' => 'Sistem', 'created_at' => now(), 'updated_at' => now(),
         ]);
     }
 
-    public function test_role_bawaan_koordinator_boleh_menandai_tapi_tidak_mencabut_tanda_orang_lain(): void
+    private function periksa(User $user, int $tanda, array $lain = [])
+    {
+        return $this->actingAs($user)->patchJson(self::URL."/{$tanda}/periksa", $lain + ['status' => 'terbukti', 'catatan' => 'Toko tidak ada di lokasi.']);
+    }
+
+    public function test_tidak_ada_lagi_endpoint_tanda_manual(): void
     {
         $koor = $this->koordinator();
+        $tanda = $this->tanda();
 
-        $this->assertTrue(Akses::bisa($koor, 'outlet_all', 'tambah'));
-        $this->assertFalse(Akses::bisa($koor, 'outlet_all', 'hapus'));
+        // Rute tambah/cabut sudah dihapus: tidak ada yang menjawab 2xx (405 bila path-nya masih dikenal, 404 selebihnya).
+        foreach ([
+            $this->actingAs($koor)->postJson(self::URL, ['outlet_id' => 10]),
+            $this->actingAs($koor)->deleteJson(self::URL."/{$tanda}"),
+        ] as $res) {
+            $this->assertContains($res->status(), [404, 405]);
+        }
     }
 
-    public function test_menandai_menyimpan_tanda_dengan_pemberi_dan_riwayat_admin(): void
+    public function test_role_bawaan_koordinator_boleh_memeriksa_tanda(): void
     {
-        $koor = $this->koordinator();
-
-        $this->tandai($koor)->assertCreated()
-            ->assertJsonPath('kategori', 'outlet_fiktif')
-            ->assertJsonPath('kategori_label', 'Outlet fiktif')
-            ->assertJsonPath('catatan', 'Alamat tidak ditemukan')
-            ->assertJsonPath('oleh', 'koor')
-            ->assertJsonPath('bisa_cabut', true);
-
-        $baris = DB::table('tanda_outlet')->first();
-        $this->assertSame(10, (int) $baris->outlet_id);
-        $this->assertSame($koor->id, (int) $baris->dibuat_oleh);
-        $this->assertSame('koor', $baris->dibuat_nama);
-        $this->assertNull($baris->dicabut_at);
-
-        $catatan = DB::table('riwayat_admin')->where('objek', 'tanda_outlet')->first();
-        $this->assertSame('tambah', $catatan->aksi);
-        $this->assertSame((int) $baris->id, (int) $catatan->objek_id);
-        $this->assertStringContainsString('Warung Aming', $catatan->keterangan);
-        $this->assertStringContainsString('Outlet fiktif', $catatan->keterangan);
+        $this->assertTrue(Akses::bisa($this->koordinator(), 'outlet_all', 'tambah'));
     }
 
-    public function test_tanda_kembar_pada_outlet_yang_sama_ditolak_dengan_nama_penanda(): void
+    public function test_daftar_memuat_tanda_aktif_pada_outlet_yang_diminta_dengan_jumlah_sekelompok(): void
     {
-        $koor = $this->koordinator();
-        $this->tandai($koor)->assertCreated();
+        $this->tanda(10, ['kelompok' => 'abc', 'skor' => 12]);
+        $this->tanda(11, ['kelompok' => 'abc', 'skor' => 12]);
+        $this->tanda(10, ['status' => 'wajar', 'dicabut_at' => now()]); // sudah diperiksa Wajar: tidak tampil
+        $this->tanda(20);
 
-        $this->tandai($koor)->assertUnprocessable()->assertJsonValidationErrors('outlet_id');
-        $res = $this->tandai($koor);
-        $this->assertStringContainsString('sudah ditandai oleh koor', $res->json('errors.outlet_id.0'));
-        $this->assertSame(1, DB::table('tanda_outlet')->where('outlet_id', 10)->count());
+        $res = $this->actingAs($this->koordinator())->getJson(self::URL.'?outlet_id=10')->assertOk();
 
-        // Outlet lain tetap boleh ditandai.
-        $this->tandai($koor, 20)->assertCreated();
+        $res->assertJsonCount(1, 'tanda')->assertJsonPath('tanda.0.oleh', 'Sistem')->assertJsonPath('tanda.0.status_label', 'Perlu dicek')
+            ->assertJsonPath('tanda.0.sekelompok', 1)->assertJsonPath('tanda.0.bisa_periksa', true)
+            ->assertJsonPath('outlet.dibuat_oleh', 'Budi Santoso');
     }
 
-    public function test_outlet_yang_tandanya_sudah_dicabut_boleh_ditandai_lagi(): void
+    public function test_akun_hanya_lihat_bisa_melihat_tapi_tidak_memeriksa(): void
     {
-        $koor = $this->koordinator();
-        $id = $this->tandai($koor)->json('id');
-        $this->actingAs($koor)->deleteJson(self::URL.'/'.$id)->assertOk();
+        $lihat = $this->akunDenganHak('pemantau', ['lihat']);
+        $tanda = $this->tanda();
 
-        $this->tandai($koor)->assertCreated();
-    }
-
-    public function test_catatan_boleh_kosong(): void
-    {
-        $this->tandai($this->koordinator(), 10, ['catatan' => null])->assertCreated()->assertJsonPath('catatan', null);
-    }
-
-    public function test_daftar_hanya_memuat_tanda_aktif_pada_outlet_yang_diminta(): void
-    {
-        $koor = $this->koordinator();
-        $dicabut = $this->tandai($koor)->json('id');
-        $this->actingAs($koor)->deleteJson(self::URL.'/'.$dicabut)->assertOk();
-        $aktif = $this->tandai($koor)->json('id');
-        $this->tandai($koor, 20);
-
-        $res = $this->actingAs($koor)->getJson(self::URL.'?outlet_id=10')->assertOk();
-
-        $this->assertSame([$aktif], array_column($res->json('tanda'), 'id'));
-        $res->assertJsonPath('bisa_tambah', true)
-            ->assertJsonPath('kategori.outlet_fiktif', 'Outlet fiktif');
-    }
-
-    public function test_daftar_memuat_pendaftar_outlet_dan_waktunya(): void
-    {
-        $koor = $this->koordinator();
-        $res = $this->actingAs($koor)->getJson(self::URL.'?outlet_id=10')->assertOk();
-
-        $res->assertJsonPath('outlet.nama', 'Warung Aming')
-            ->assertJsonPath('outlet.dibuat_oleh', 'Budi Santoso')
-            ->assertJsonPath('outlet.dibuat_pada', '2026-10-22 11:23:00');
-
-        $this->actingAs($koor)->getJson(self::URL.'?outlet_id=20')->assertOk()
-            ->assertJsonPath('outlet.dibuat_oleh', null)
-            ->assertJsonPath('outlet.dibuat_pada', null);
-    }
-
-    public function test_akun_hanya_lihat_bisa_melihat_tapi_tidak_menandai(): void
-    {
-        $this->tandai($this->koordinator());
-        $pemantau = $this->akunDenganHak('pemantau', ['lihat']);
-
-        $this->actingAs($pemantau)->getJson(self::URL.'?outlet_id=10')
-            ->assertOk()->assertJsonPath('bisa_tambah', false)->assertJsonCount(1, 'tanda')->assertJsonPath('tanda.0.bisa_cabut', false);
-        $this->tandai($pemantau)->assertForbidden();
-        $this->assertSame(1, DB::table('tanda_outlet')->count());
+        $this->actingAs($lihat)->getJson(self::URL.'?outlet_id=10')->assertOk()->assertJsonPath('tanda.0.bisa_periksa', false);
+        $this->periksa($lihat, $tanda)->assertForbidden();
+        $this->assertSame('perlu_dicek', DB::table('tanda_outlet')->find($tanda)->status);
     }
 
     public function test_akun_tanpa_hak_menu_ditolak(): void
     {
         $role = $this->role('Tanpa Outlet', 'semua', ['home' => ['lihat']]);
-        $akun = $this->akun('tanpa', 'koordinator', 137, ['role_id' => $role]);
+        $user = $this->akun('tanpa', 'koordinator', 137, ['role_id' => $role]);
 
-        $this->actingAs($akun)->getJson(self::URL.'?outlet_id=10')->assertForbidden();
-        $this->tandai($akun)->assertForbidden();
+        $this->actingAs($user)->getJson(self::URL.'?outlet_id=10')->assertForbidden();
+        $this->periksa($user, $this->tanda())->assertForbidden();
     }
 
     public function test_outlet_yang_tidak_ada_di_master_ditolak(): void
     {
-        $this->tandai($this->admin, 99999)->assertNotFound();
-        $this->actingAs($this->admin)->getJson(self::URL.'?outlet_id=99999')->assertNotFound();
+        $this->actingAs($this->koordinator())->getJson(self::URL.'?outlet_id=99999')->assertNotFound();
     }
 
-    public function test_validasi_input(): void
+    public function test_periksa_menerapkan_hasil_ke_seluruh_kelompok_dan_mencatat_riwayat_admin(): void
+    {
+        $a = $this->tanda(10, ['kelompok' => 'abc']);
+        $b = $this->tanda(11, ['kelompok' => 'abc']);
+        $lain = $this->tanda(20, ['kelompok' => 'xyz']);
+
+        $this->periksa($this->koordinator(), $a, ['status' => 'wajar', 'catatan' => 'Kios berderet, asli.'])->assertOk()->assertJsonPath('diperiksa', 2);
+
+        foreach ([$a, $b] as $id) {
+            $baris = DB::table('tanda_outlet')->find($id);
+            $this->assertSame(['wajar', 'Kios berderet, asli.', 'koor'], [$baris->status, $baris->hasil_catatan, $baris->dicek_nama]);
+            $this->assertNotNull($baris->dicabut_at);
+        }
+        $this->assertSame('perlu_dicek', DB::table('tanda_outlet')->find($lain)->status);
+        $this->assertSame(2, DB::table('riwayat_admin')->where('objek', 'tanda_outlet')->where('aksi', 'ubah')->count());
+    }
+
+    public function test_periksa_terbukti_tidak_mencabut_tanda(): void
+    {
+        $a = $this->tanda(10);
+
+        $this->periksa($this->koordinator(), $a)->assertOk()->assertJsonPath('status', 'terbukti');
+
+        $this->assertNull(DB::table('tanda_outlet')->find($a)->dicabut_at);
+    }
+
+    public function test_validasi_dan_tanda_yang_sudah_diperiksa_ditolak(): void
     {
         $koor = $this->koordinator();
+        $tanda = $this->tanda();
 
-        $this->tandai($koor, 10, ['outlet_id' => null])->assertUnprocessable()->assertJsonValidationErrors('outlet_id');
-        $this->tandai($koor, 10, ['catatan' => str_repeat('a', 501)])->assertUnprocessable()->assertJsonValidationErrors('catatan');
-        $this->tandai($koor, 10, ['catatan' => str_repeat('a', 500)])->assertCreated();
-        $this->actingAs($koor)->getJson(self::URL)->assertUnprocessable()->assertJsonValidationErrors('outlet_id');
-    }
+        $this->periksa($koor, $tanda, ['status' => 'curang'])->assertUnprocessable()->assertJsonValidationErrors('status');
+        $this->periksa($koor, $tanda, ['catatan' => ''])->assertUnprocessable()->assertJsonValidationErrors('catatan');
 
-    public function test_pemberi_mencabut_tandanya_secara_soft_dan_tercatat(): void
-    {
-        $koor = $this->koordinator();
-        $id = $this->tandai($koor)->json('id');
-
-        $this->actingAs($koor)->deleteJson(self::URL.'/'.$id)->assertOk()->assertJsonPath('ok', true);
-
-        $baris = DB::table('tanda_outlet')->find($id);
-        $this->assertNotNull($baris, 'Baris tetap ada sebagai jejak.');
-        $this->assertNotNull($baris->dicabut_at);
-        $this->assertSame($koor->id, (int) $baris->dicabut_oleh);
-        $this->assertSame(['tambah', 'hapus'], DB::table('riwayat_admin')->where('objek', 'tanda_outlet')->orderBy('id')->pluck('aksi')->all());
-        $this->actingAs($koor)->getJson(self::URL.'?outlet_id=10')->assertJsonCount(0, 'tanda');
-    }
-
-    public function test_tanda_orang_lain_hanya_bisa_dicabut_dengan_hak_hapus(): void
-    {
-        $id = $this->tandai($this->koordinator())->json('id');
-        $rekan = $this->akunDenganHak('rekan', ['lihat', 'tambah']);
-        $penghapus = $this->akunDenganHak('penghapus', ['lihat', 'tambah', 'hapus']);
-
-        $this->actingAs($rekan)->deleteJson(self::URL.'/'.$id)->assertForbidden();
-        $this->assertNull(DB::table('tanda_outlet')->find($id)->dicabut_at);
-
-        $this->actingAs($penghapus)->deleteJson(self::URL.'/'.$id)->assertOk();
-        $this->assertSame($penghapus->id, (int) DB::table('tanda_outlet')->find($id)->dicabut_oleh);
-    }
-
-    public function test_cabut_tanda_yang_sudah_dicabut_ditolak(): void
-    {
-        $koor = $this->koordinator();
-        $id = $this->tandai($koor)->json('id');
-        $this->actingAs($koor)->deleteJson(self::URL.'/'.$id)->assertOk();
-        $this->actingAs($koor)->deleteJson(self::URL.'/'.$id)->assertNotFound();
+        $this->periksa($koor, $tanda)->assertOk();
+        $this->periksa($koor, $tanda)->assertNotFound();
+        $this->periksa($koor, 99999)->assertNotFound();
     }
 
     public function test_hanya_pengguna_yang_login_yang_bisa_mengakses(): void

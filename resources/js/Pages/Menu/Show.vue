@@ -163,7 +163,9 @@ const warnaBadge = {
     checkin_pagi: { checkin_pertama_hari_ini: { 'Belum checkin': 'danger', '*': 'warning' } },
     loading_barang: { status_retur: { 'Belum Retur': 'danger', 'Sudah Retur': 'success' } },
     barang_canvassing: { status: { Disiapkan: 'info', Diterima: 'secondary', Dikembalikan: 'warning', Selesai: 'success' } },
-    tanda_motoris_rekap: { status: { Aktif: 'danger', Dicabut: 'secondary' } },
+    // Status tanda sistem (config marketama.status_tanda, spec 062).
+    tanda_motoris_rekap: { status: { 'Perlu dicek': 'warning', Terbukti: 'danger', Wajar: 'secondary' } },
+    tanda_outlet_rekap: { status: { 'Perlu dicek': 'warning', Terbukti: 'danger', Wajar: 'secondary' } },
 };
 
 // Tab "Outlet Baru dari HP" (aksi verifikasi_outlet_baru): warna status dan tombol Setujui / Tolak.
@@ -357,7 +359,7 @@ function filterTabel(table, { nilai, operator }) {
                         :total="table.rows.total"
                         :links="table.rows.links"
                         :pagination-only="PROPS_TABEL"
-                        :badge-columns="table.name === 'checkin_pagi' ? ['checkin_pertama_hari_ini'] : (table.name === 'loading_barang' ? ['status_retur'] : (['barang_canvassing', 'tanda_motoris_rekap'].includes(table.name) ? ['status'] : (table.aksi === 'verifikasi_outlet_baru' ? ['status'] : [])))"
+                        :badge-columns="table.name === 'checkin_pagi' ? ['checkin_pertama_hari_ini'] : (table.name === 'loading_barang' ? ['status_retur'] : (['barang_canvassing', 'tanda_motoris_rekap', 'tanda_outlet_rekap'].includes(table.name) ? ['status'] : (table.aksi === 'verifikasi_outlet_baru' ? ['status'] : [])))"
                         :badge-variants="table.aksi === 'verifikasi_outlet_baru' ? warnaStatusOutletBaru : (warnaBadge[table.name] ?? {})"
                         :sortable="table.sortable_columns"
                         :sort="table.sort"
@@ -403,9 +405,9 @@ function filterTabel(table, { nilai, operator }) {
                             </button>
                         </template>
                         <template v-if="table.name === 'mk_outlet'" #cell-ditandai="{ row }">
-                            <button type="button" :class="row.ditandai > 0 ? 'tautan-bahaya' : 'tautan-depo'" @click="outletTerpilih = row">
-                                {{ row.ditandai > 0 ? `${row.ditandai} tanda` : 'Tandai' }}
-                            </button>
+                            <!-- Tanda outlet dibuat sistem (spec 062): tanpa tanda tidak ada yang bisa dibuka, jadi cukup tanda hubung. -->
+                            <button v-if="row.ditandai > 0" type="button" class="tautan-bahaya" @click="outletTerpilih = row">{{ row.ditandai }} tanda</button>
+                            <span v-else class="text-gray-400">-</span>
                         </template>
                         <template v-if="table.name === 'tanda_outlet_rekap'" #cell-outlet="{ row }">
                             <button type="button" class="tautan-depo" @click="outletTerpilih = { id: row.outlet_id, nama: row.outlet }">{{ row.outlet }}</button>

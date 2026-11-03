@@ -89,14 +89,8 @@ const peringatan = computed(() => {
         judul,
         isi: bagian.join(' '),
         catatan: terdeteksi ? null : 'Ini indikasi dari pola data, bukan bukti pemalsuan GPS.',
-        // Isian otomatis form Tandai motoris.
-        saran: { kategori: 'lokasi_palsu', catatan: `${judul}. ${bagian.join(' ')}` },
     };
 });
-
-// Isian otomatis form Tandai motoris (spec 059): indikasi GPS diprioritaskan (sinyal perangkat lebih langsung)
-// daripada indikasi jarak dekat antar kunjungan, yang kini jadi saran "kunjungan_tidak_wajar" bukan tanda outlet.
-const saranMotoris = computed(() => peringatan.value?.saran ?? indikasiJarak.value[0]?.saran ?? null);
 
 // KPI hari itu (kunjungan, beli, tidak beli, penjualan, jam kerja) dari kunjungan yang ditampilkan.
 const ringkasanHari = computed(() => ringkasanKunjungan(kunjungan.value ?? []));
@@ -239,7 +233,7 @@ watch(tanggalDipilih, muat);
             <!-- Ambang deteksi jarak dekat (localStorage) hanya relevan untuk Sales, satu-satunya yang punya kunjungan outlet. -->
             <PengaturanDeteksiMotoris v-if="idParam === 'sales_id'" @berubah="muat" />
         </div>
-        <TandaMotoris v-if="tandaUrl" class="ml-auto" :url="tandaUrl" :sales-id="id" :tanggal="tanggalDipilih" :saran="saranMotoris" @pilih-tanggal="tanggalDipilih = $event" />
+        <TandaMotoris v-if="tandaUrl" class="ml-auto" :url="tandaUrl" :sales-id="id" :tanggal="tanggalDipilih" @pilih-tanggal="tanggalDipilih = $event" />
     </div>
     <RingkasanHariMotoris v-if="kunjungan?.length" :ringkasan="ringkasanHari" :kpi="kpi" class="mb-2 lg:shrink-0" />
     <div class="rute-harian relative lg:min-h-0 lg:flex-1" :class="{ 'rute-harian-daftar': kunjungan !== null }">
@@ -280,13 +274,13 @@ watch(tanggalDipilih, muat);
                                 </span>
                             </span>
                         </button>
+                        <!-- Tanda outlet dibuat sistem (spec 062): tombol hanya untuk outlet yang ditandai, membuka daftar & Periksa. -->
                         <Button
-                            v-if="k.outlet_id"
-                            :variant="k.outlet_ditandai ? 'outline-danger' : 'outline-secondary'"
-                            class="tombol-tanda-outlet shrink-0"
-                            :class="k.outlet_ditandai ? 'tombol-tanda-ditandai' : 'tombol-tanda-belum'"
-                            :title="k.outlet_ditandai ? 'Outlet sudah ditandai - lihat tanda' : 'Tandai outlet'"
-                            :aria-label="k.outlet_ditandai ? 'Lihat tanda outlet' : 'Tandai outlet'"
+                            v-if="k.outlet_id && k.outlet_ditandai"
+                            variant="outline-danger"
+                            class="tombol-tanda-outlet tombol-tanda-ditandai shrink-0"
+                            title="Outlet ditandai sistem - lihat tanda"
+                            aria-label="Lihat tanda outlet"
                             @click="bukaTandaOutlet(k)"
                         ><Icon name="flag" /></Button>
                     </div>

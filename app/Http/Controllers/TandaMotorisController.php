@@ -7,17 +7,17 @@ use App\Support\Akses\Akses;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Lokasi;
 use App\Support\Mobile\Pengaturan;
+use App\Support\Tracking\HasilPeriksa;
 use App\Support\Tracking\TandaOutletMotoris;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
-// Tanda motoris: koordinator menandai motoris yang berpotensi curang (penjualan fiktif, lokasi palsu, dll.) dari drawer
-// Riwayat Lacak Motoris. Tanda melekat pada motoris + tanggal yang dilihat. Hak mengikuti menu tracking_sales:
-// Lihat = melihat tanda, Tambah = memberi tanda dan mencabut tanda sendiri, Hapus = mencabut tanda siapa pun.
-// Hanya motoris dalam cakupan role akun; pencabutan soft supaya jejak tetap ada.
+// Tanda motoris di drawer Riwayat Lacak Motoris. Sejak spec 062 tanda hanya dibuat sistem (Sinkronisasi Data di Beranda
+// Koordinator, App\Support\Tracking\SinkronTemuan) dengan status Perlu dicek; koordinator tidak lagi menandai manual,
+// tetapi memeriksa tanda itu (periksa: Terbukti / Wajar + catatan). Hak mengikuti menu tracking_sales: Lihat = melihat
+// tanda, Tambah = memeriksa tanda. Hanya motoris dalam cakupan role akun.
 class TandaMotorisController extends Controller
 {
     private const MENU = 'tracking_sales';
@@ -72,8 +72,6 @@ class TandaMotorisController extends Controller
             'tanda' => $tanda->values(),
             'lainnya' => $lainnya->values(),
             'outlet' => $outlet->values(),
-            'bisa_tambah' => Akses::bisa($request->user(), self::MENU, 'tambah'),
-            'kategori' => config('marketama.tanda_motoris'),
         ]);
     }
 
@@ -84,6 +82,10 @@ class TandaMotorisController extends Controller
      * Outlet lain yang punya tanda outlet aktif di sekitar satu outlet (terdekat dulu), untuk konteks di peta.
      * Radius = ambang "jarak dekat" yang diatur pengguna di browser-nya (localStorage), dikirim sebagai radius_m;
      * tanpa itu memakai bawaan config('marketama.deteksi_jarak_kunjungan.jarak_dekat_meter').
+     *
+     * Bila outlet itu bagian titik temuan sistem (tanda_outlet.kelompok, spec 062), outlet lain di titik itu dikirim
+     * lengkap sebagai `titik` (tanpa batas MAKS_SEKITAR) dan tidak diulang di `sekitar`: koordinatnya identik, jadi di
+     * peta semuanya satu penanda berangka.
      */
     public function outletTerdekat(Request $request): JsonResponse
     {
@@ -97,8 +99,17 @@ class TandaMotorisController extends Controller
 
         abort_unless($acuan, 404);
 
+        $kelompok = DB::table('tanda_outlet')->where('outlet_id', $acuan->id)->whereNotNull('kelompok')->orderByDesc('id')->value('kelompok');
+        $titik = $kelompok === null ? collect() : DB::table('tanda_outlet as tout')
+            ->join('mk_outlet as o', 'o.id', '=', 'tout.outlet_id')
+            ->where('tout.kelompok', $kelompok)->where('o.id', '<>', $acuan->id)
+            ->distinct()->orderBy('o.nama')
+            ->get(['o.id as outlet_id', 'o.nama as outlet'])
+            ->map(fn ($o) => ['outlet_id' => (int) $o->outlet_id, 'outlet' => $o->outlet])
+            ->values();
+
         if (! Lokasi::sah($acuan->latitude, $acuan->longitude)) {
-            return response()->json(['sekitar' => [], 'radius_m' => $radius]);
+            return response()->json(['sekitar' => [], 'titik' => $titik, 'radius_m' => $radius]);
         }
 
         $lat = (float) $acuan->latitude;
@@ -107,7 +118,7 @@ class TandaMotorisController extends Controller
 
         $sekitar = DB::table('tanda_outlet as tout')
             ->join('mk_outlet as o', 'o.id', '=', 'tout.outlet_id')
-            ->whereNull('tout.dicabut_at')->where('o.id', '<>', $acuan->id)
+            ->whereNull('tout.dicabut_at')->whereNotIn('o.id', [$acuan->id, ...$titik->pluck('outlet_id')])
             ->whereBetween('o.latitude', [$latMin, $latMax])->whereBetween('o.longitude', [$lngMin, $lngMax])
             ->orderBy('tout.id')
             ->get(['o.id as outlet_id', 'o.nama as outlet', 'o.latitude', 'o.longitude', 'tout.kategori', 'tout.catatan', 'tout.created_at'])
@@ -129,88 +140,40 @@ class TandaMotorisController extends Controller
             ->filter(fn ($o) => $o['jarak_m'] <= $radius)
             ->sortBy('jarak_m')->take(self::MAKS_SEKITAR)->values();
 
-        return response()->json(['sekitar' => $sekitar, 'radius_m' => $radius]);
+        return response()->json(['sekitar' => $sekitar, 'titik' => $titik, 'radius_m' => $radius]);
     }
 
-    public function store(Request $request): JsonResponse
+    /**
+     * Hasil cek koordinator atas satu tanda Perlu dicek: Terbukti (tetap berlencana Ditandai) atau Wajar (dicabut_at
+     * diisi, jadi tidak lagi dihitung sebagai tanda aktif dan tidak dibuat ulang oleh sinkronisasi). Catatan wajib.
+     */
+    public function periksa(Request $request, int $tanda): JsonResponse
     {
         $data = $request->validate([
-            'sales_id' => ['required', 'integer'],
-            'tanggal' => ['required', 'date', 'before_or_equal:'.Pengaturan::sekarang()->toDateString()],
-            'kategori' => ['required', Rule::in(array_keys(config('marketama.tanda_motoris')))],
-            'catatan' => ['nullable', 'string', 'max:500'],
+            'status' => ['required', Rule::in(['terbukti', 'wajar'])],
+            'catatan' => ['required', 'string', 'max:500'],
         ]);
 
-        $motoris = $this->motoris($request, (int) $data['sales_id']);
         $user = $request->user();
-        $tanggal = substr($data['tanggal'], 0, 10);
-
-        // Satu motoris hanya punya satu koordinator, jadi tanda kembar (kategori sama, tanggal sama) bukan penegasan orang kedua.
-        $sudah = DB::table('tanda_motoris')->where('karyawan_id', $motoris->id)->where('tanggal', $tanggal)
-            ->where('kategori', $data['kategori'])->whereNull('dicabut_at')->first();
-
-        if ($sudah) {
-            throw ValidationException::withMessages(['kategori' => "Kategori ini sudah ditandai oleh {$sudah->dibuat_nama} pada ".JamLokal::format($sudah->created_at, 'Y-m-d H:i').'.']);
-        }
-
-        $id = DB::table('tanda_motoris')->insertGetId([
-            'karyawan_id' => $motoris->id,
-            'tanggal' => $tanggal,
-            'kategori' => $data['kategori'],
-            'catatan' => $data['catatan'] ?? null,
-            'dibuat_oleh' => $user->id,
-            'dibuat_nama' => $user->username ?? $user->name,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        Akses::catat($user, 'tanda_motoris', $id, 'tambah', "Tandai {$motoris->nama} ({$tanggal}): ".$this->label($data['kategori']));
-
-        return response()->json($this->bentuk(DB::table('tanda_motoris')->find($id), $user), 201);
-    }
-
-    /** Ubah catatan satu tanda (kategori dan tanggal tetap): hanya pemberinya atau akun dengan hak Hapus. */
-    public function update(Request $request, int $tanda): JsonResponse
-    {
-        $data = $request->validate(['catatan' => ['nullable', 'string', 'max:500']]);
-
-        $user = $request->user();
-        $baris = DB::table('tanda_motoris')->where('id', $tanda)->whereNull('dicabut_at')->first();
+        $baris = DB::table('tanda_motoris')->where('id', $tanda)->where('status', 'perlu_dicek')->first();
 
         abort_unless($baris, 404);
 
         $motoris = $this->motoris($request, (int) $baris->karyawan_id);
 
-        abort_unless($this->bolehUbah($baris, $user), 403, 'Anda tidak boleh mengubah tanda ini.');
+        abort_unless(Akses::bisa($user, self::MENU, 'tambah'), 403, 'Anda tidak boleh memeriksa tanda ini.');
 
-        DB::table('tanda_motoris')->where('id', $tanda)->update(['catatan' => $data['catatan'] ?? null, 'updated_at' => now()]);
-
-        Akses::catat($user, 'tanda_motoris', $tanda, 'ubah', "Ubah catatan tanda {$motoris->nama} (".substr((string) $baris->tanggal, 0, 10).'): '.$this->label($baris->kategori));
-
-        return response()->json($this->bentuk(DB::table('tanda_motoris')->find($tanda), $user));
-    }
-
-    /** Cabut (soft) satu tanda: hanya pemberinya atau akun dengan hak Hapus. */
-    public function cabut(Request $request, int $tanda): JsonResponse
-    {
-        $user = $request->user();
-        $baris = DB::table('tanda_motoris')->where('id', $tanda)->whereNull('dicabut_at')->first();
-
-        abort_unless($baris, 404);
-
-        $motoris = $this->motoris($request, (int) $baris->karyawan_id);
-
-        abort_unless($this->bolehUbah($baris, $user), 403, 'Anda tidak boleh mencabut tanda ini.');
-
-        // Dua pencabut bersamaan: hanya yang pertama berhasil.
-        $berubah = DB::table('tanda_motoris')->where('id', $tanda)->whereNull('dicabut_at')
-            ->update(['dicabut_at' => now(), 'dicabut_oleh' => $user->id, 'updated_at' => now()]);
+        // Dua pemeriksa bersamaan: hanya yang pertama berhasil.
+        $berubah = DB::table('tanda_motoris')->where('id', $tanda)->where('status', 'perlu_dicek')
+            ->update(HasilPeriksa::kolom($data['status'], $data['catatan'], $user));
 
         abort_unless($berubah, 404);
 
-        Akses::catat($user, 'tanda_motoris', $tanda, 'hapus', "Cabut tanda {$motoris->nama} (".substr((string) $baris->tanggal, 0, 10).'): '.$this->label($baris->kategori));
+        Akses::catat($user, 'tanda_motoris', $tanda, 'ubah', "Periksa tanda {$motoris->nama} (".substr((string) $baris->tanggal, 0, 10).'): '
+            .config("marketama.status_tanda.{$data['status']}"));
+        HomeController::lupakanTanda($request);
 
-        return response()->json(['ok' => true]);
+        return response()->json($this->bentuk(DB::table('tanda_motoris')->find($tanda), $user));
     }
 
     /** Motoris (kategori sales) dalam cakupan role akun; selain itu 404. */
@@ -229,15 +192,6 @@ class TandaMotorisController extends Controller
         return config("marketama.tanda_motoris.{$kategori}", $kategori);
     }
 
-    /** Boleh mengubah catatan atau mencabut tanda ini: pemberinya (dengan hak Tambah) atau akun dengan hak Hapus. */
-    private function bolehUbah(object $tanda, ?User $user): bool
-    {
-        return $tanda->dicabut_at === null && (
-            Akses::bisa($user, self::MENU, 'hapus')
-            || ((int) $tanda->dibuat_oleh === $user?->id && Akses::bisa($user, self::MENU, 'tambah'))
-        );
-    }
-
     /** @return array<string, mixed> */
     private function bentuk(object $tanda, ?User $user): array
     {
@@ -248,7 +202,6 @@ class TandaMotorisController extends Controller
             'catatan' => $tanda->catatan,
             'oleh' => $tanda->dibuat_nama,
             'waktu' => JamLokal::format($tanda->created_at, 'Y-m-d H:i'),
-            'bisa_cabut' => $this->bolehUbah($tanda, $user),
-        ];
+        ] + HasilPeriksa::bentuk($tanda, Akses::bisa($user, self::MENU, 'tambah'));
     }
 }

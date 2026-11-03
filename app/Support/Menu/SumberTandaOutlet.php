@@ -7,8 +7,8 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Rekap Outlet Ditandai: semua tanda outlet (tanda_outlet, diberikan dari drawer Riwayat Lacak Motoris atau menu All Outlet),
- * hanya yang masih aktif (yang dicabut tidak ditampilkan). Tanda melekat ke outlet, bukan ke motoris, jadi tidak ada pembatasan cakupan
+ * Rekap Outlet Ditandai: tanda outlet (tanda_outlet, dibuat sistem lewat Sinkronisasi Data di Beranda Koordinator, spec 062)
+ * yang masih aktif — Perlu dicek atau Terbukti; yang diperiksa Wajar (dicabut_at terisi) tidak ditampilkan. Tanda melekat ke outlet, bukan ke motoris, jadi tidak ada pembatasan cakupan
  * karyawan (sama seperti master outlet).
  */
 class SumberTandaOutlet implements SumberTabel
@@ -42,7 +42,7 @@ class SumberTandaOutlet implements SumberTabel
             ->select([
                 't.id', 't.outlet_id', 'o.nama as outlet',
                 DB::raw('COALESCE(a.nama, o.area) AS area'),
-                't.kategori', 't.dibuat_nama as ditandai_oleh', 't.created_at', 't.dicabut_at',
+                't.kategori', 't.status', 't.catatan', 't.dibuat_nama as ditandai_oleh', 't.created_at', 't.dicabut_at',
             ])
             ->selectSub($pendaftar, 'motoris_noo')
             ->addSelect(DB::raw('COALESCE(d.nama, ('.$depoPendaftar->toSql().')) AS depo'))
@@ -55,6 +55,7 @@ class SumberTandaOutlet implements SumberTabel
     {
         $baris->motoris_noo = $baris->motoris_noo ?: DB::table('mk_outlet')->where('id', $baris->outlet_id)->value('dibuat_oleh');
         $baris->kategori = config("marketama.tanda_outlet.{$baris->kategori}", $baris->kategori);
+        $baris->status = config("marketama.status_tanda.{$baris->status}", $baris->status);
         $baris->ditandai_pada = JamLokal::format($baris->created_at, 'j M Y H:i', 'id');
         unset($baris->created_at, $baris->dicabut_at);
 

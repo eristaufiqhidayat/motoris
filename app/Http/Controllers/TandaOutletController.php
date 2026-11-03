@@ -5,26 +5,22 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Support\Akses\Akses;
 use App\Support\Menu\JamLokal;
+use App\Support\Tracking\HasilPeriksa;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 
-// Tanda outlet: koordinator menandai outlet yang dicurigai fiktif dari drawer Riwayat Lacak Motoris atau menu All
-// Outlet. Berbeda dari tanda motoris, tanda ini melekat pada OUTLET (bukan per kunjungan/motoris/tanggal):
-// kecurigaan terhadap outlet berlaku siapa pun yang mengunjunginya, jadi tidak dibatasi cakupan role seperti tanda
-// motoris. Hanya satu kategori (spec 059 — tidak ada form pilihan kategori di form, cukup dialog konfirmasi +
-// catatan opsional); indikasi pola kunjungan tidak wajar (spec 054) jadi saran tanda_motoris, bukan tanda outlet.
-// Hak mengikuti menu outlet_all: Lihat = melihat tanda, Tambah = memberi tanda dan mencabut tanda sendiri,
-// Hapus = mencabut tanda siapa pun. Pencabutan soft.
+// Tanda outlet (diduga outlet fiktif) dari drawer Riwayat Lacak Motoris atau menu All Outlet. Melekat pada OUTLET (bukan
+// per kunjungan/motoris/tanggal), jadi tidak dibatasi cakupan role seperti tanda motoris. Sejak spec 062 tanda hanya
+// dibuat sistem (Sinkronisasi Data di Beranda Koordinator) per TITIK: outlet-outlet berkoordinat identik dari pendaftar
+// yang sama berbagi `kelompok`, dan memeriksa satu tanda menutup semua tanda Perlu dicek di kelompok itu (satu kunjungan
+// lapangan / Street View menilai seluruh titik). Hak mengikuti menu outlet_all: Lihat = melihat, Tambah = memeriksa.
 class TandaOutletController extends Controller
 {
     private const MENU = 'outlet_all';
 
-    // Satu-satunya kategori tanda outlet (lihat config('marketama.tanda_outlet')).
-    private const KATEGORI = 'outlet_fiktif';
-
-    /** Tanda aktif satu outlet. */
+    /** Tanda aktif (Perlu dicek / Terbukti) satu outlet. */
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -39,69 +35,49 @@ class TandaOutletController extends Controller
             ->map(fn ($t) => $this->bentuk($t, $request->user()));
 
         return response()->json([
-            // Siapa yang mendaftarkan outlet dan kapan (data asal Marketama), sebagai konteks sebelum menandai.
+            // Siapa yang mendaftarkan outlet dan kapan (data asal Marketama), sebagai konteks pemeriksaan.
             'outlet' => [
                 'nama' => $outlet->nama,
                 'dibuat_oleh' => $outlet->dibuat_oleh,
                 'dibuat_pada' => $outlet->dibuat_pada,
             ],
             'tanda' => $tanda->values(),
-            'bisa_tambah' => Akses::bisa($request->user(), self::MENU, 'tambah'),
-            'kategori' => config('marketama.tanda_outlet'),
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    /**
+     * Hasil cek koordinator atas tanda Perlu dicek: Terbukti atau Wajar (+ catatan wajib), diterapkan ke semua tanda
+     * Perlu dicek di kelompok (titik) yang sama. Tanda tanpa kelompok hanya dirinya sendiri.
+     */
+    public function periksa(Request $request, int $tanda): JsonResponse
     {
         $data = $request->validate([
-            'outlet_id' => ['required', 'integer'],
-            'catatan' => ['nullable', 'string', 'max:500'],
+            'status' => ['required', Rule::in(['terbukti', 'wajar'])],
+            'catatan' => ['required', 'string', 'max:500'],
         ]);
 
-        $outlet = $this->outlet((int) $data['outlet_id']);
         $user = $request->user();
-
-        // Hanya satu kategori: outlet yang masih punya tanda aktif tidak boleh ditandai lagi.
-        $sudah = DB::table('tanda_outlet')->where('outlet_id', $outlet->id)->whereNull('dicabut_at')->first();
-
-        if ($sudah) {
-            throw ValidationException::withMessages(['outlet_id' => "Outlet ini sudah ditandai oleh {$sudah->dibuat_nama} pada ".JamLokal::format($sudah->created_at, 'Y-m-d H:i').'.']);
-        }
-
-        $id = DB::table('tanda_outlet')->insertGetId([
-            'outlet_id' => $outlet->id,
-            'kategori' => self::KATEGORI,
-            'catatan' => $data['catatan'] ?? null,
-            'dibuat_oleh' => $user->id,
-            'dibuat_nama' => $user->username ?? $user->name,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        Akses::catat($user, 'tanda_outlet', $id, 'tambah', "Tandai outlet {$outlet->nama}: ".$this->label(self::KATEGORI));
-
-        return response()->json($this->bentuk(DB::table('tanda_outlet')->find($id), $user), 201);
-    }
-
-    /** Cabut (soft) satu tanda: hanya pemberinya atau akun dengan hak Hapus. */
-    public function cabut(Request $request, int $tanda): JsonResponse
-    {
-        $user = $request->user();
-        $baris = DB::table('tanda_outlet')->where('id', $tanda)->whereNull('dicabut_at')->first();
+        $baris = DB::table('tanda_outlet')->where('id', $tanda)->where('status', 'perlu_dicek')->first();
 
         abort_unless($baris, 404);
-        abort_unless($this->bolehCabut($baris, $user), 403, 'Anda tidak boleh mencabut tanda ini.');
+        abort_unless(Akses::bisa($user, self::MENU, 'tambah'), 403, 'Anda tidak boleh memeriksa tanda ini.');
 
-        // Dua pencabut bersamaan: hanya yang pertama berhasil.
-        $berubah = DB::table('tanda_outlet')->where('id', $tanda)->whereNull('dicabut_at')
-            ->update(['dicabut_at' => now(), 'dicabut_oleh' => $user->id, 'updated_at' => now()]);
+        $sekelompok = DB::table('tanda_outlet')->where('status', 'perlu_dicek')
+            ->when($baris->kelompok, fn ($q) => $q->where('kelompok', $baris->kelompok), fn ($q) => $q->where('id', $tanda));
+        $ids = (clone $sekelompok)->pluck('id');
+        $berubah = $sekelompok->update(HasilPeriksa::kolom($data['status'], $data['catatan'], $user));
 
+        // Dua pemeriksa bersamaan: hanya yang pertama berhasil.
         abort_unless($berubah, 404);
 
-        $outlet = DB::table('mk_outlet')->where('id', $baris->outlet_id)->first(['nama']);
-        Akses::catat($user, 'tanda_outlet', $tanda, 'hapus', 'Cabut tanda outlet '.($outlet?->nama ?? $baris->outlet_id).': '.$this->label($baris->kategori));
+        $label = config("marketama.status_tanda.{$data['status']}");
+        $nama = DB::table('tanda_outlet as t')->join('mk_outlet as o', 'o.id', '=', 't.outlet_id')->whereIn('t.id', $ids)->pluck('o.nama', 't.id');
+        foreach ($ids as $id) {
+            Akses::catat($user, 'tanda_outlet', (int) $id, 'ubah', 'Periksa tanda outlet '.($nama[$id] ?? $id).": {$label}");
+        }
+        HomeController::lupakanTanda($request);
 
-        return response()->json(['ok' => true]);
+        return response()->json(['diperiksa' => $berubah] + $this->bentuk(DB::table('tanda_outlet')->find($tanda), $user));
     }
 
     /** Outlet master (mk_outlet); selain itu 404. */
@@ -114,30 +90,18 @@ class TandaOutletController extends Controller
         return $outlet;
     }
 
-    private function label(string $kategori): string
-    {
-        return config("marketama.tanda_outlet.{$kategori}", $kategori);
-    }
-
-    private function bolehCabut(object $tanda, ?User $user): bool
-    {
-        return $tanda->dicabut_at === null && (
-            Akses::bisa($user, self::MENU, 'hapus')
-            || ((int) $tanda->dibuat_oleh === $user?->id && Akses::bisa($user, self::MENU, 'tambah'))
-        );
-    }
-
     /** @return array<string, mixed> */
     private function bentuk(object $tanda, ?User $user): array
     {
         return [
             'id' => (int) $tanda->id,
             'kategori' => $tanda->kategori,
-            'kategori_label' => $this->label($tanda->kategori),
+            'kategori_label' => config("marketama.tanda_outlet.{$tanda->kategori}", $tanda->kategori),
             'catatan' => $tanda->catatan,
             'oleh' => $tanda->dibuat_nama,
             'waktu' => JamLokal::format($tanda->created_at, 'Y-m-d H:i'),
-            'bisa_cabut' => $this->bolehCabut($tanda, $user),
-        ];
+            // Jumlah outlet lain di titik yang sama (tanda sekelompok), supaya jelas pemeriksaan berlaku untuk semuanya.
+            'sekelompok' => $tanda->kelompok ? DB::table('tanda_outlet')->where('kelompok', $tanda->kelompok)->where('id', '<>', $tanda->id)->count() : 0,
+        ] + HasilPeriksa::bentuk($tanda, Akses::bisa($user, self::MENU, 'tambah'));
     }
 }

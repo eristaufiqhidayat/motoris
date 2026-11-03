@@ -182,16 +182,17 @@ class HomeTest extends AdminTestCase
 
     public function test_motoris_ditandai_dibatasi_cakupan_tim_dan_tidak_terikat_tanggal(): void
     {
-        // Tanda motoris, seperti tanda outlet, tidak difilter tanggal sama sekali — tanda lama yang masih aktif
-        // (belum dicabut) tetap dihitung, bukan cuma tanda hari ini.
-        $tanda = fn (int $karyawan, string $tgl, ?string $dicabut = null) => DB::table('tanda_motoris')->insert([
-            'karyawan_id' => $karyawan, 'tanggal' => $tgl, 'kategori' => 'indikasi_lokasi_palsu',
-            'dibuat_oleh' => 137, 'dibuat_nama' => 'Koor Satu', 'dicabut_at' => $dicabut,
+        // Tanda motoris, seperti tanda outlet, tidak difilter tanggal sama sekali — tanda lama yang masih Perlu dicek
+        // tetap dihitung, bukan cuma tanda hari ini. Yang sudah diperiksa (Terbukti / Wajar) tidak dihitung.
+        $tanda = fn (int $karyawan, string $tgl, string $status = 'perlu_dicek') => DB::table('tanda_motoris')->insert([
+            'karyawan_id' => $karyawan, 'tanggal' => $tgl, 'kategori' => 'lokasi_palsu', 'status' => $status,
+            'dibuat_oleh' => null, 'dibuat_nama' => 'Sistem', 'dicabut_at' => $status === 'wajar' ? now() : null,
             'created_at' => now(), 'updated_at' => now(),
         ]);
-        $tanda(1, '2026-10-02'); // Rudi, aktif, bukan hari ini — tetap dihitung
-        $tanda(1, '2026-10-03'); // Rudi, aktif, hari ini — tanda kedua, motoris yang sama
-        $tanda(3, '2026-10-01', '2026-10-01 08:00:00'); // Tegar, sudah dicabut — tidak dihitung
+        $tanda(1, '2026-10-02'); // Rudi, Perlu dicek, bukan hari ini — tetap dihitung
+        $tanda(1, '2026-10-03'); // Rudi, Perlu dicek, hari ini — tanda kedua, motoris yang sama
+        $tanda(3, '2026-10-01', 'wajar'); // Tegar, sudah diperiksa Wajar — tidak dihitung
+        $tanda(3, '2026-10-02', 'terbukti'); // Tegar, sudah diperiksa Terbukti — tidak lagi perlu dicek
         $tanda(2, '2026-10-02'); // Sinta, di luar tim koordinator 137 — tidak dihitung
 
         $koordinator = $this->akun('koor4', 'koordinator', 137);
@@ -222,14 +223,15 @@ class HomeTest extends AdminTestCase
             ['karyawan_id' => 1, 'outlet_id' => 70, 'nama' => 'Toko Makmur', 'lat' => -7.4, 'lng' => 112.7, 'status' => 'disetujui'],
             ['karyawan_id' => 2, 'outlet_id' => 72, 'nama' => 'Toko Luar', 'lat' => -7.4, 'lng' => 112.7, 'status' => 'disetujui'],
         ]);
-        $tanda = fn (int $outlet, ?string $dicabut = null) => DB::table('tanda_outlet')->insert([
-            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'dibuat_oleh' => 137, 'dibuat_nama' => 'Koor Satu',
-            'dicabut_at' => $dicabut, 'created_at' => now(), 'updated_at' => now(),
+        $tanda = fn (int $outlet, string $status = 'perlu_dicek') => DB::table('tanda_outlet')->insert([
+            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'status' => $status, 'dibuat_oleh' => null, 'dibuat_nama' => 'Sistem',
+            'dicabut_at' => $status === 'wajar' ? now() : null, 'created_at' => now(), 'updated_at' => now(),
         ]);
-        $tanda(70); // aktif
-        $tanda(70); // aktif — tanda kedua, outlet yang sama
-        $tanda(71, '2026-10-01 08:00:00'); // sudah dicabut, tidak dihitung walau anggota tim
-        $tanda(72); // didaftarkan di luar tim koordinator 137, tidak dihitung walau aktif
+        $tanda(70); // Perlu dicek
+        $tanda(70); // Perlu dicek — tanda kedua, outlet yang sama
+        $tanda(71, 'wajar'); // sudah diperiksa Wajar, tidak dihitung walau anggota tim
+        $tanda(70, 'terbukti'); // sudah diperiksa Terbukti, tidak lagi perlu dicek
+        $tanda(72); // didaftarkan di luar tim koordinator 137, tidak dihitung walau Perlu dicek
 
         $koordinator = $this->akun('koor5', 'koordinator', 137);
         $this->actingAs($koordinator);
@@ -391,7 +393,7 @@ class HomeTest extends AdminTestCase
     {
         DB::table('tanda_motoris')->insert([
             'karyawan_id' => 1, 'tanggal' => '2026-10-02', 'kategori' => 'lokasi_palsu',
-            'dibuat_oleh' => 137, 'dibuat_nama' => 'Koor Satu', 'created_at' => now(), 'updated_at' => now(),
+            'dibuat_oleh' => null, 'dibuat_nama' => 'Sistem', 'created_at' => now(), 'updated_at' => now(),
         ]);
         DB::table('tanda_motoris')->insert([
             'karyawan_id' => 2, 'tanggal' => '2026-10-02', 'kategori' => 'lokasi_palsu', 'dibuat_oleh' => 1,
@@ -401,7 +403,7 @@ class HomeTest extends AdminTestCase
         $this->actingAs($this->akun('koor15', 'koordinator', 137));
 
         $this->getJson('/home/motoris-ditandai')->assertOk()->assertExactJson(['baris' => [
-            ['motoris' => 'Rudi Hartono', 'kategori' => 'Lokasi / GPS palsu', 'tanggal' => '2026-10-02', 'ditandai_oleh' => 'Koor Satu'],
+            ['motoris' => 'Rudi Hartono', 'kategori' => 'Diduga lokasi / GPS palsu', 'tanggal' => '2026-10-02', 'ditandai_oleh' => 'Sistem'],
         ]]);
     }
 
@@ -410,14 +412,14 @@ class HomeTest extends AdminTestCase
         DB::table('mk_outlet')->insert(['id' => 70, 'nama' => 'Toko Makmur', 'dibuat_oleh' => null]);
         DB::table('trx_outlet_baru')->insert(['karyawan_id' => 1, 'outlet_id' => 70, 'nama' => 'Toko Makmur', 'lat' => -7.4, 'lng' => 112.7, 'status' => 'disetujui']);
         DB::table('tanda_outlet')->insert([
-            'outlet_id' => 70, 'kategori' => 'outlet_fiktif', 'dibuat_oleh' => 137, 'dibuat_nama' => 'Koor Satu',
+            'outlet_id' => 70, 'kategori' => 'outlet_fiktif', 'dibuat_oleh' => null, 'dibuat_nama' => 'Sistem',
             'created_at' => '2026-10-02 06:00:00', 'updated_at' => now(),
         ]);
 
         $this->actingAs($this->akun('koor16', 'koordinator', 137));
 
         $this->getJson('/home/outlet-ditandai')->assertOk()->assertExactJson(['baris' => [
-            ['outlet' => 'Toko Makmur', 'kategori' => 'Outlet fiktif', 'waktu' => '2 Okt 2026 13:00', 'ditandai_oleh' => 'Koor Satu'],
+            ['outlet' => 'Toko Makmur', 'kategori' => 'Diduga outlet fiktif', 'waktu' => '2 Okt 2026 13:00', 'ditandai_oleh' => 'Sistem'],
         ]]);
     }
 

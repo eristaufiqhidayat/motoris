@@ -38,6 +38,23 @@ describe('PetaOutletBertanda', () => {
         expect(wrapper.text()).toContain('radius 11 m');
     });
 
+    it('menampilkan seluruh outlet di titik yang sama, termasuk outlet acuan', async () => {
+        const titik = [{ outlet_id: 73, outlet: 'Toko B' }, { outlet_id: 74, outlet: 'Toko C' }];
+        pasang({ ok: true, json: () => Promise.resolve({ sekitar: [], titik, radius_m: 11 }) });
+        const wrapper = await siapkan();
+
+        const daftar = wrapper.find('section[aria-label="Outlet di titik ini"]');
+        expect(daftar.text()).toContain('3');
+        expect(daftar.findAll('li').map((li) => li.text())).toEqual(['Toko A', 'Toko B', 'Toko C']);
+    });
+
+    it('tidak menampilkan bagian titik bila outlet bukan bagian titik', async () => {
+        pasang({ ok: true, json: () => Promise.resolve({ sekitar, radius_m: 2000 }) });
+        const wrapper = await siapkan();
+
+        expect(wrapper.find('section[aria-label="Outlet di titik ini"]').exists()).toBe(false);
+    });
+
     it('memberi keterangan bila tidak ada outlet bertanda lain di sekitar', async () => {
         pasang({ ok: true, json: () => Promise.resolve({ sekitar: [], radius_m: 2000 }) });
         const wrapper = await siapkan();

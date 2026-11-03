@@ -7,8 +7,10 @@ use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Motoris\Dashboard;
 use App\Support\Motoris\SummaryDepo;
+use App\Support\Tracking\SinkronTemuan;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -31,6 +33,9 @@ class HomeController extends Controller
     private const CACHE_TTL = 300; // detik, sama dengan Dashboard::CACHE_TTL.
 
     private const RENTANG_MAKS_HARI = 62;
+
+    // Sinkronisasi Data menjalankan deteksi per motoris per tanggal dalam satu permintaan, jadi rentangnya dibatasi pendek.
+    private const RENTANG_TEMUAN_MAKS_HARI = 7;
 
     public function index(Request $request): Response
     {
@@ -71,6 +76,7 @@ class HomeController extends Controller
         $dashboard = new Dashboard($hariIni, $hariIni, $request->user());
         [$trenDari, $trenSampai] = self::rentangFilter($request, 'tren_dari', 'tren_sampai');
         [$timDari, $timSampai] = self::rentangFilter($request, 'tim_dari', 'tim_sampai');
+        [$temuanDari, $temuanSampai] = self::rentangFilter($request, 'temuan_dari', 'temuan_sampai', self::RENTANG_TEMUAN_MAKS_HARI);
         $depoId = DB::table('mk_karyawan')->where('id', $request->user()?->karyawan_id ?? 0)->value('depo_id');
         $identitas = $depoId ? $summary->depo((int) $depoId) : null;
         $summaryTim = new SummaryDepo($timDari, $timSampai, $request->user());
@@ -96,17 +102,126 @@ class HomeController extends Controller
             'tren' => Inertia::defer(fn () => (new Dashboard($trenDari, $trenSampai, $request->user()))->trenHarian(), 'ringkasan'),
             'tandaMotoris' => Inertia::defer(fn () => self::tandaMotoris($request), 'ringkasan'),
             'tandaOutlet' => Inertia::defer(fn () => self::tandaOutlet($request), 'ringkasan'),
+            // Temuan Sistem: antrean tanda Perlu dicek dari tombol Sinkronisasi Data (ringan), lihat sinkronTemuan/temuan.
+            // temuanFilter = rentang yang disinkronkan (tanda motoris per tanggal), bukan penyaring antrean.
+            'temuanFilter' => ['dari' => $temuanDari, 'sampai' => $temuanSampai, 'maks_hari' => self::RENTANG_TEMUAN_MAKS_HARI],
+            'temuan' => self::temuan($request, $temuanDari, $temuanSampai),
         ]);
     }
 
     /**
+     * Tombol "Sinkronisasi Data" di kartu Temuan Sistem Beranda Koordinator (spec 062): tambahkan tanda Perlu dicek yang
+     * belum ada untuk tim — diduga lokasi palsu per motoris-hari pada rentang itu, dan titik outlet diduga fiktif sampai
+     * antrean tim penuh (lihat SinkronTemuan) — lalu kembali ke beranda dengan rentang yang sama. Hanya untuk cakupan
+     * downline: cakupan "semua" akan memeriksa seluruh motoris nasional dalam satu permintaan.
+     */
+    public function sinkronTemuan(Request $request): RedirectResponse
+    {
+        abort_unless(Akses::cakupan($request->user()) === 'downline', 403);
+
+        $hariIni = Pengaturan::sekarang()->toDateString();
+        $data = $request->validate([
+            'dari' => ['required', 'date_format:Y-m-d', 'before_or_equal:sampai'],
+            'sampai' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.$hariIni],
+        ]);
+
+        if (Carbon::parse($data['dari'])->diffInDays(Carbon::parse($data['sampai'])) >= self::RENTANG_TEMUAN_MAKS_HARI) {
+            return back()->withErrors(['dari' => 'Rentang sinkronisasi maksimal '.self::RENTANG_TEMUAN_MAKS_HARI.' hari.']);
+        }
+
+        $hasil = SinkronTemuan::jalankan(self::motorisCakupan($request), $data['dari'], $data['sampai'], $request->user());
+
+        // Tanda baru langsung terlihat di kartu Motoris/Outlet Ditandai (di-cache CACHE_TTL, lihat tandaMotoris/tandaOutlet).
+        self::lupakanTanda($request);
+
+        $pesan = "Sinkronisasi selesai: {$hasil['diperiksa']} hari motoris diperiksa"
+            .($hasil['dilewati'] ? ", {$hasil['dilewati']} dilewati karena sudah diperiksa" : '')
+            .". Perlu dicek baru: {$hasil['tanda_motoris']} motoris, {$hasil['titik']} titik outlet ({$hasil['tanda_outlet']} outlet).";
+
+        return redirect()->route('home', ['temuan_dari' => $data['dari'], 'temuan_sampai' => $data['sampai']])->with('sukses', $pesan);
+    }
+
+    /** Buang cache kartu Motoris/Outlet Ditandai akun ini (setelah sinkronisasi atau pemeriksaan tanda). */
+    public static function lupakanTanda(Request $request): void
+    {
+        Cache::forget('beranda:tanda:user_'.$request->user()?->id);
+        Cache::forget('beranda:tanda_outlet:user_'.$request->user()?->id);
+    }
+
+    /** Id sales motoris aktif dalam cakupan akun (Akses::batasiKaryawan, jadi koordinator bertingkat tetap tim sendiri). */
+    private static function motorisCakupan(Request $request): array
+    {
+        return Akses::batasiKaryawan(DB::table('mk_karyawan as k'), $request->user())
+            ->where('k.kategori', 'sales')->where('k.aktif', true)->pluck('k.id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * Antrean Perlu dicek tim: tanda motoris (terbaru dulu) dan titik outlet (satu baris per kelompok, skor tertinggi
+     * dulu), beserta cakupan pemeriksaan motoris-hari pada rentang sinkronisasi.
+     *
+     * @return array{motoris: Collection<int, array<string, mixed>>, titik: Collection<int, array<string, mixed>>, pemeriksaan: array{diperiksa: int, total: int, terakhir: ?string}}
+     */
+    private static function temuan(Request $request, string $dari, string $sampai): array
+    {
+        $motoris = Akses::batasiKaryawan(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'), $request->user())
+            ->where('tm.status', 'perlu_dicek')
+            ->orderByDesc('tm.tanggal')->orderBy('k.nama')
+            ->get(['tm.id', 'tm.karyawan_id', 'k.nama as motoris', 'tm.tanggal', 'tm.kategori', 'tm.catatan'])
+            ->map(fn ($t) => [
+                'id' => (int) $t->id,
+                'karyawan_id' => (int) $t->karyawan_id,
+                'motoris' => $t->motoris,
+                'tanggal' => substr((string) $t->tanggal, 0, 10),
+                'kategori_label' => config("marketama.tanda_motoris.{$t->kategori}", $t->kategori),
+                'catatan' => $t->catatan,
+            ]);
+
+        $ids = self::motorisCakupan($request);
+        $titik = SinkronTemuan::tandaOutletTim($ids)->join('mk_outlet as o', 'o.id', '=', 't.outlet_id')
+            ->where('t.status', 'perlu_dicek')->whereNotNull('t.kelompok')
+            ->orderByDesc('t.skor')->orderBy('t.kelompok')->orderBy('o.nama')
+            ->get(['t.id', 't.kelompok', 't.skor', 't.catatan', 't.outlet_id', 'o.nama', 'o.dibuat_oleh', 'o.latitude', 'o.longitude'])
+            ->groupBy('kelompok')
+            ->map(function ($g) {
+                $o = $g->first();
+
+                return [
+                    // Tanda mana pun di kelompok; memeriksanya menutup seluruh kelompok (TandaOutletController@periksa).
+                    'tanda_id' => (int) $o->id,
+                    'kelompok' => $o->kelompok,
+                    'skor' => (int) $o->skor,
+                    'catatan' => $o->catatan,
+                    'pendaftar' => $o->dibuat_oleh,
+                    'jumlah' => $g->count(),
+                    'outlet' => $g->pluck('nama')->take(3)->values(),
+                    'acuan' => ['id' => (int) $o->outlet_id, 'nama' => $o->nama, 'latitude' => (float) $o->latitude, 'longitude' => (float) $o->longitude],
+                ];
+            })->values();
+
+        $diperiksa = DB::table('pemeriksaan_motoris')->whereIn('karyawan_id', $ids ?: [0])->whereBetween('tanggal', [$dari, $sampai]);
+        $hari = Carbon::parse($dari)->diffInDays(Carbon::parse($sampai)) + 1;
+
+        return [
+            'motoris' => $motoris,
+            'titik' => $titik,
+            'antrean_titik' => (int) config('marketama.tanda_outlet_sistem.antrean_titik'),
+            'pemeriksaan' => [
+                'diperiksa' => (int) (clone $diperiksa)->count(),
+                'total' => (int) (count($ids) * $hari),
+                'terakhir' => JamLokal::format((clone $diperiksa)->max('diperiksa_at'), 'j M Y H:i', 'id'),
+            ],
+        ];
+    }
+
+    /**
      * Rentang tanggal yang bisa dipilih bebas di Beranda Koordinator (Tim Saya: tim_dari/tim_sampai; Tren
-     * Harian: tren_dari/tren_sampai). Bawaan 7 hari terakhir; terbalik ditukar; maksimal RENTANG_MAKS_HARI
-     * hari (batas awal digeser) supaya query detail tim/penjualan tidak melebar tanpa batas.
+     * Harian: tren_dari/tren_sampai; Temuan Sistem: temuan_dari/temuan_sampai). Bawaan 7 hari terakhir; terbalik
+     * ditukar; maksimal $maksHari hari (bawaan RENTANG_MAKS_HARI, batas awal digeser) supaya query detail
+     * tim/penjualan tidak melebar tanpa batas.
      *
      * @return array{0: string, 1: string}
      */
-    private static function rentangFilter(Request $request, string $kunciDari, string $kunciSampai): array
+    private static function rentangFilter(Request $request, string $kunciDari, string $kunciSampai, int $maksHari = self::RENTANG_MAKS_HARI): array
     {
         $hariIni = Pengaturan::sekarang()->toDateString();
         $valid = fn (?string $v): bool => (bool) $v && (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) && strtotime($v) !== false;
@@ -117,7 +232,7 @@ class HomeController extends Controller
             [$dari, $sampai] = [$sampai, $dari];
         }
 
-        $palingAwal = Carbon::parse($sampai)->subDays(self::RENTANG_MAKS_HARI - 1)->toDateString();
+        $palingAwal = Carbon::parse($sampai)->subDays($maksHari - 1)->toDateString();
 
         return [max($dari, $palingAwal), $sampai];
     }
@@ -234,15 +349,15 @@ class HomeController extends Controller
     }
 
     /**
-     * Isi drawer kartu "Motoris Ditandai": tanda aktif pada tim, sama dengan menu Rekap Motoris Ditandai
-     * (App\Support\Menu\Motoris\SumberTandaMotoris) — hanya kolom yang perlu buat tinjauan cepat.
+     * Isi drawer kartu "Motoris Ditandai": tanda Perlu dicek pada tim (spec 062), sama dengan menu Rekap Motoris
+     * Ditandai (App\Support\Menu\Motoris\SumberTandaMotoris) — hanya kolom yang perlu buat tinjauan cepat.
      */
     public function motorisDitandaiDetail(Request $request): JsonResponse
     {
         abort_unless(Akses::bisa($request->user(), 'motoris_ditandai'), 403);
 
         $baris = Akses::batasiKaryawan(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'), $request->user())
-            ->whereNull('tm.dicabut_at')->orderByDesc('tm.tanggal')->orderByDesc('tm.id')
+            ->where('tm.status', 'perlu_dicek')->orderByDesc('tm.tanggal')->orderByDesc('tm.id')
             ->get(['tm.id', 'k.nama as motoris', 'tm.tanggal', 'tm.kategori', 'tm.dibuat_nama as ditandai_oleh'])
             ->map(fn ($b) => [
                 'motoris' => $b->motoris,
@@ -255,7 +370,7 @@ class HomeController extends Controller
     }
 
     /**
-     * Isi drawer kartu "Outlet Ditandai": tanda aktif pada outlet milik tim, sama dengan menu Rekap Outlet
+     * Isi drawer kartu "Outlet Ditandai": tanda Perlu dicek pada outlet milik tim, sama dengan menu Rekap Outlet
      * Ditandai (App\Support\Menu\SumberTandaOutlet) — cakupannya sama dengan tandaOutlet() di atas.
      */
     public function outletDitandaiDetail(Request $request): JsonResponse
@@ -276,9 +391,9 @@ class HomeController extends Controller
     }
 
     /**
-     * Tanda motoris (tanda_motoris, lihat App\Support\Menu\Motoris\SumberTandaMotoris) yang masih aktif (belum
-     * dicabut) pada tim koordinator — lepas dari tanggal tanda itu sendiri, sama seperti tandaOutlet, supaya
-     * tanda lama yang belum dicabut tidak hilang dari ringkasan ini. Cakupannya sama dengan "Rekap Motoris
+     * Tanda motoris (tanda_motoris, lihat App\Support\Menu\Motoris\SumberTandaMotoris) berstatus Perlu dicek pada
+     * tim koordinator — lepas dari tanggal tanda itu sendiri, sama seperti tandaOutlet, supaya tanda lama yang belum
+     * diperiksa tidak hilang dari ringkasan ini. Cakupannya sama dengan "Rekap Motoris
      * Ditandai" (Akses::batasiKaryawan), supaya berapa pun koordinator di-nest tetap melihat tim sendiri saja.
      *
      * @return array{motoris: int, total: int}
@@ -289,18 +404,20 @@ class HomeController extends Controller
 
         return Cache::remember($kunci, self::CACHE_TTL, function () use ($request) {
             $q = Akses::batasiKaryawan(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'), $request->user())
-                ->whereNull('tm.dicabut_at');
+                ->where('tm.status', 'perlu_dicek');
 
             return ['motoris' => (int) (clone $q)->distinct()->count('tm.karyawan_id'), 'total' => (int) (clone $q)->count()];
         });
     }
 
     /**
-     * Tanda outlet (tanda_outlet, lihat App\Support\Menu\SumberTandaOutlet) yang masih aktif (belum dicabut) pada
-     * outlet milik tim koordinator — dicocokkan lewat motoris pendaftar outlet itu (trx_outlet_baru.karyawan_id,
+     * Tanda outlet (tanda_outlet, lihat App\Support\Menu\SumberTandaOutlet) berstatus Perlu dicek pada outlet milik
+     * tim koordinator — dicocokkan lewat motoris pendaftar outlet itu (trx_outlet_baru.karyawan_id,
      * atau mk_outlet.dibuat_oleh sebagai cadangan untuk data lama tanpa trx_outlet_baru), PERSIS sama dengan kolom
      * "Koordinator" di menu Rekap Outlet Ditandai (SumberTandaOutlet) — bukan lewat depo outlet, yang bisa beda
-     * kalau area/depo outletnya tidak lengkap sehingga sebetulnya milik tim tapi tidak ketemu lewat depo.
+     * kalau area/depo outletnya tidak lengkap sehingga sebetulnya milik tim tapi tidak ketemu lewat depo — ditambah
+     * titik outlet di rute tim (SinkronTemuan::tandaOutletTim), karena nama pendaftar data lama tidak selalu sama
+     * dengan nama motoris.
      *
      * @return array{outlet: int, total: int}
      */
@@ -320,8 +437,8 @@ class HomeController extends Controller
     }
 
     /**
-     * tanda_outlet (alias t) aktif pada outlet milik tim koordinator — dicocokkan lewat motoris pendaftar
-     * outlet (lihat catatan di tandaOutlet()). Null bila tim kosong (tidak ada karyawan dalam cakupan).
+     * tanda_outlet (alias t) Perlu dicek pada outlet milik tim koordinator — dicocokkan lewat motoris pendaftar
+     * outlet atau rute tim (lihat catatan di tandaOutlet()). Null bila tim kosong (tidak ada karyawan dalam cakupan).
      */
     private static function outletTimQuery(Request $request): ?Builder
     {
@@ -335,10 +452,11 @@ class HomeController extends Controller
         $nama = $tim->values();
 
         return DB::table('tanda_outlet as t')->join('mk_outlet as o', 'o.id', '=', 't.outlet_id')
-            ->whereNull('t.dicabut_at')
+            ->where('t.status', 'perlu_dicek')
             ->where(fn ($w) => $w->whereExists(fn ($e) => $e->selectRaw('1')->from('trx_outlet_baru as ob')
                 ->whereColumn('ob.outlet_id', 'o.id')->whereIn('ob.karyawan_id', $ids))
-                ->orWhereIn('o.dibuat_oleh', $nama));
+                ->orWhereIn('o.dibuat_oleh', $nama)
+                ->orWhereIn('t.id', SinkronTemuan::tandaOutletTim($ids->map(fn ($id) => (int) $id)->all(), 'tt')->select('tt.id')));
     }
 
     /**

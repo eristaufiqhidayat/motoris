@@ -26,17 +26,18 @@ class RekapMotorisDitandaiTest extends AdminTestCase
 
         // Rudi (1): dua tanda aktif dalam jendela, satu di luar jendela, satu dicabut. Sinta (2): satu tanda aktif.
         $this->tanda(1, $this->hari2, 'lokasi_palsu', 'GPS loncat');
-        $this->tanda(1, $this->hari5, 'penjualan_fiktif', null);
-        $this->tanda(1, $this->hari40, 'kunjungan_tidak_wajar', 'Terlalu lama');
-        $this->tanda(1, Pengaturan::sekarang()->subDays(3)->toDateString(), 'potensi_kecurangan', 'Dicabut', dicabut: true);
+        $this->tanda(1, $this->hari5, 'lokasi_palsu', null);
+        $this->tanda(1, $this->hari40, 'lokasi_palsu', 'Terlalu lama');
+        $this->tanda(1, Pengaturan::sekarang()->subDays(3)->toDateString(), 'lokasi_palsu', 'Dicabut', dicabut: true);
         $this->tanda(2, Pengaturan::sekarang()->subDay()->toDateString(), 'lokasi_palsu', 'Sinta ditandai');
     }
 
-    private function tanda(int $sales, string $tanggal, string $kategori, ?string $catatan, bool $dicabut = false, string $oleh = 'koor'): int
+    private function tanda(int $sales, string $tanggal, string $kategori, ?string $catatan, bool $dicabut = false, string $oleh = 'Sistem'): int
     {
         return DB::table('tanda_motoris')->insertGetId([
             'karyawan_id' => $sales, 'tanggal' => $tanggal, 'kategori' => $kategori, 'catatan' => $catatan,
-            'dibuat_oleh' => $this->admin->id, 'dibuat_nama' => $oleh, 'dicabut_at' => $dicabut ? '2026-10-30 04:00:00' : null,
+            'status' => $dicabut ? 'wajar' : 'perlu_dicek', 'hasil_catatan' => $dicabut ? 'Sudah dicek' : null, 'dicek_nama' => $dicabut ? 'koor' : null,
+            'dibuat_oleh' => null, 'dibuat_nama' => $oleh, 'dicabut_at' => $dicabut ? '2026-10-30 04:00:00' : null,
             'created_at' => '2026-10-30 03:00:00', 'updated_at' => '2026-10-30 03:00:00',
         ]);
     }
@@ -139,7 +140,8 @@ class RekapMotorisDitandaiTest extends AdminTestCase
             [Pengaturan::sekarang()->subDay()->toDateString(), $this->hari2, Pengaturan::sekarang()->subDays(3)->toDateString(), $this->hari5, $this->hari40],
             array_column($baris, 'tanggal')
         );
-        $this->assertSame(['Aktif', 'Aktif', 'Dicabut', 'Aktif', 'Aktif'], array_column($baris, 'status'));
+        $this->assertSame(['Perlu dicek', 'Perlu dicek', 'Wajar', 'Perlu dicek', 'Perlu dicek'], array_column($baris, 'status'));
+        $this->assertSame('Sudah dicek (koor)', $baris[2]['hasil_cek']);
     }
 
     public function test_rekap_menampilkan_kolom_dengan_label_dan_jam_lokal(): void
@@ -149,9 +151,9 @@ class RekapMotorisDitandaiTest extends AdminTestCase
         $this->assertSame('Sinta Wulandari', $sinta['motoris']);
         $this->assertSame('Balaraja', $sinta['depo']);
         $this->assertNull($sinta['koordinator']);
-        $this->assertSame('Lokasi / GPS palsu', $sinta['kategori']);
+        $this->assertSame('Diduga lokasi / GPS palsu', $sinta['kategori']);
         $this->assertSame('Sinta ditandai', $sinta['catatan']);
-        $this->assertSame('koor', $sinta['ditandai_oleh']);
+        $this->assertSame('Sistem', $sinta['ditandai_oleh']);
         // 03:00 UTC = 10:00 WIB.
         $this->assertSame('2026-10-30 10:00', $sinta['ditandai_pada']);
         $this->assertSame(2, (int) $sinta['karyawan_id']);
@@ -167,15 +169,16 @@ class RekapMotorisDitandaiTest extends AdminTestCase
         $this->assertCount(4, $this->baris('/motoris_ditandai?q=Rudi'));
         $this->assertCount(1, $this->baris('/motoris_ditandai?q='.urlencode('GPS loncat')));
         $this->assertCount(1, $this->baris('/motoris_ditandai?q=Balaraja'));
-        $this->assertCount(4, $this->baris('/motoris_ditandai?status=aktif'));
-        $this->assertCount(1, $this->baris('/motoris_ditandai?status=dicabut'));
+        $this->assertCount(4, $this->baris('/motoris_ditandai?status=perlu_dicek'));
+        $this->assertCount(1, $this->baris('/motoris_ditandai?status=wajar'));
+        $this->assertCount(0, $this->baris('/motoris_ditandai?status=terbukti'));
         $this->assertCount(5, $this->baris('/motoris_ditandai?status=tidak_dikenal'));
     }
 
     public function test_rekap_memuat_pilihan_status_untuk_dropdown(): void
     {
         $this->get('/motoris_ditandai')->assertOk()->assertInertia(fn (Assert $p) => $p->loadDeferredProps(fn (Assert $p) => $p
-            ->where('tables.0.pilihan_status', ['aktif' => 'Aktif', 'dicabut' => 'Dicabut'])
+            ->where('tables.0.pilihan_status', ['perlu_dicek' => 'Perlu dicek', 'terbukti' => 'Terbukti', 'wajar' => 'Wajar'])
             ->where('tables.0.columns.status', 'Status')
         ));
     }
@@ -249,10 +252,10 @@ class RekapMotorisDitandaiTest extends AdminTestCase
     {
         $res = $this->lainnya($this->hari2);
 
-        // Yang dilihat: tanda hari-2. Tanggal lain: hanya hari-5 (hari-40 di luar jendela, hari-3 dicabut).
+        // Yang dilihat: tanda hari-2. Tanggal lain: hanya hari-5 (hari-40 di luar jendela, hari-3 sudah diperiksa Wajar).
         $this->assertCount(1, $res->json('tanda'));
         $this->assertSame([$this->hari5], array_column($res->json('lainnya'), 'tanggal'));
-        $res->assertJsonPath('lainnya.0.kategori_label', 'Penjualan fiktif')->assertJsonPath('lainnya.0.oleh', 'koor');
+        $res->assertJsonPath('lainnya.0.kategori_label', 'Diduga lokasi / GPS palsu')->assertJsonPath('lainnya.0.oleh', 'Sistem');
     }
 
     public function test_tanda_tanggal_lain_urut_terbaru_dan_tidak_memuat_motoris_lain(): void
