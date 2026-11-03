@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SummaryDepoController;
 use App\Http\Controllers\Auth\DemoLoginController;
 use App\Http\Controllers\Auth\GantiPasswordController;
+use App\Http\Controllers\Auth\ImpersonateLoginController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\AutoGridController;
 use App\Http\Controllers\BarangCanvassingController;
@@ -37,6 +38,7 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
     Route::post('/login', [LoginController::class, 'store']);
     Route::post('/login/demo/{peran}', [DemoLoginController::class, 'store'])->name('login.demo');
+    Route::post('/login/impersonate/{user}', [ImpersonateLoginController::class, 'store'])->name('login.impersonate');
 });
 
 Route::middleware('auth')->group(function () {
