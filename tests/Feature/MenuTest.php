@@ -103,7 +103,7 @@ class MenuTest extends TestCase
             );
     }
 
-    public function test_tanggal_filter_only_applies_to_table_with_date_filter(): void
+    public function test_tanggal_filter_applies_to_sales_tidak_penjualan_per_hari(): void
     {
         Carbon::setTestNow('2026-10-23 08:00:00');
 
@@ -112,14 +112,24 @@ class MenuTest extends TestCase
             ['tanggal_data' => '2026-10-22', 'nama_sales' => 'Kemarin'],
         ]);
 
-        // Tab sales_tidak_penjualan tidak punya date_filter_column, jadi query tanggal diabaikan total.
+        // Tab sales_tidak_penjualan punya date_filter_column, jadi hanya baris tanggal yang dipilih yang tampil.
         $this->get('/monitoring_harian_sales?tab=sales_tidak_penjualan&tanggal=2026-10-22')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('tanggal', null)
-                ->where('hasDateFilter', false)
+                ->where('tanggal', '2026-10-22')
+                ->where('hasDateFilter', true)
                 ->loadDeferredProps(fn (Assert $page) => $page
-                    ->where('tables.0.rows.total', 2)
+                    ->where('tables.0.rows.total', 1)
+                )
+            );
+
+        // Tanpa ?tanggal, bawaannya hari ini.
+        $this->get('/monitoring_harian_sales?tab=sales_tidak_penjualan')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tanggal', '2026-10-23')
+                ->loadDeferredProps(fn (Assert $page) => $page
+                    ->where('tables.0.rows.total', 1)
                 )
             );
 
