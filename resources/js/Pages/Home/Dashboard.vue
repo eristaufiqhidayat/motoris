@@ -3,8 +3,8 @@ import { computed, ref } from 'vue';
 import { Deferred, Head, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
-import Input from '@/Components/ui/atoms/Input.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
 import InfoPopover from '@/Components/ui/molecules/InfoPopover.vue';
 import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
@@ -69,7 +69,7 @@ const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
                 <InfoPopover title="Tentang Beranda" class="ms-1 align-middle">
                     <ul class="list-disc ps-4 space-y-1">
                         <li>KPI nasional dihitung dari tabel motoris yang sama dengan Summary All Depo — total digabung dulu, baru dihitung AVG per hari kerja (rata-rata berbobot, bukan rata-rata dari rata-rata).</li>
-                        <li><b>Funnel Outlet:</b> NOO (outlet baru pada rentang ini) → AC (dikunjungi, belum pernah EC) → EC (effective call) → RO (EC di ≥2 tanggal berbeda), sama dengan definisi Lap. Outlet.</li>
+                        <li><b>Funnel Outlet:</b> NOO (outlet baru pada rentang ini) → AC (dikunjungi, belum pernah EC) → EC (effective call) → RO (EC di ≥2 tanggal berbeda), sama dengan definisi Lap. Outlet. NOO hanya menghitung outlet yang didaftarkan lewat aplikasi HP motoris (belum termasuk riwayat outlet dari Marketama sebelum aplikasi ini dipakai).</li>
                         <li><b>OSS</b> bukan tahap funnel: ini outlet AC yang kunjungan terakhirnya tidak tercatat stok sendiri — peringatan kualitas kunjungan.</li>
                         <li><b>Depo Teratas</b> diurutkan dari EC Achievement tertinggi (8 besar), sama seperti Summary All Depo.</li>
                     </ul>
@@ -77,8 +77,8 @@ const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
             </template>
             <template #actions>
                 <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="tampilkan">
-                    <Input id="date_from" v-model="filterDari" type="date" aria-label="Dari tanggal" class="w-36" />
-                    <Input id="date_to" v-model="filterSampai" type="date" aria-label="Sampai tanggal" class="w-36" />
+                    <DatePicker id="date_from" v-model="filterDari" aria-label="Dari tanggal" class="w-36" />
+                    <DatePicker id="date_to" v-model="filterSampai" aria-label="Sampai tanggal" class="w-36" />
                     <Button type="submit" :loading="memuat" :disabled="!berubah"><Icon name="search" class="me-1 w-3.5 h-3.5" />Tampilkan</Button>
                 </form>
             </template>

@@ -12,11 +12,12 @@ use Illuminate\Support\Facades\DB;
 // Beranda (home): ringkasan nasional data motoris untuk kartu KPI (lewat SummaryDepo), funnel outlet, dan
 // tren harian. Funnel outlet (NOO → AC → EC → RO, OSS sebagai peringatan terpisah) memakai definisi yang
 // sama dengan App\Support\Menu\Motoris\SumberOutletStatus — status seumur hidup outlet, bukan dibatasi
-// tanggal, kecuali NOO yang memang punya tanggal daftar. Dibatasi cakupan akun lewat depo (sama dengan
-// SummaryDepo / SumberOutletStatus), masing-masing menghitung ulang cakupannya sendiri (lihat pola yang sama
-// di SummaryDepo::depoCakupan). funnelOutlet() dan trenHarian() scan trx_penjualan/trx_kunjungan yang di
-// produksi bisa sampai jutaan baris (lihat CLAUDE.md § Data loading) dan Beranda dibuka jauh lebih sering
-// daripada menu lain, jadi hasilnya di-cache singkat (lihat CACHE_TTL) per rentang tanggal + cakupan akun.
+// tanggal, kecuali NOO yang memang punya tanggal daftar. Dibatasi cakupan akun lewat depo outlet (sama dengan
+// SummaryDepo / SumberOutletStatus, lihat depoCakupan), KECUALI NOO yang dibatasi lewat motoris pendaftarnya
+// (lihat outletBaru) karena kolom depo_id di trx_outlet_baru tidak selalu terisi. funnelOutlet() dan
+// trenHarian() scan trx_penjualan/trx_kunjungan yang di produksi bisa sampai jutaan baris (lihat CLAUDE.md
+// § Data loading) dan Beranda dibuka jauh lebih sering daripada menu lain, jadi hasilnya di-cache singkat
+// (lihat CACHE_TTL) per rentang tanggal + cakupan akun.
 class Dashboard
 {
     private const CACHE_TTL = 300; // detik; Beranda tidak perlu detik-per-detik real-time.
@@ -60,8 +61,7 @@ class Dashboard
                     COALESCE(SUM(CASE WHEN kt.outlet_id IS NOT NULL AND e.outlet_id IS NULL AND s.kunjungan_id IS NULL THEN 1 ELSE 0 END), 0) AS oss
                 ')->first();
 
-            $jumlahNoo = DB::table('trx_outlet_baru as b')
-                ->when($depo !== null, fn ($q) => $q->whereIn('b.depo_id', $depo ?: [0]))
+            $jumlahNoo = $this->outletBaru()
                 ->whereBetween(DB::raw('DATE(b.recorded_at)'), [$this->dari, $this->sampai])
                 ->count();
 
@@ -76,10 +76,11 @@ class Dashboard
     }
 
     /**
-     * Total sales (Rp) dan jumlah EC per tanggal dalam rentang, dibatasi cakupan depo. Tanggal tanpa transaksi
-     * tetap muncul dengan nilai 0, supaya grafik tidak putus.
+     * Total sales (Rp), jumlah EC, dan jumlah outlet baru didaftarkan (NOO, sama dengan definisi di
+     * funnelOutlet) per tanggal dalam rentang, dibatasi cakupan depo. Tanggal tanpa transaksi tetap muncul
+     * dengan nilai 0, supaya grafik tidak putus.
      *
-     * @return array<int, array{tanggal: string, sales: int, ec: int}>
+     * @return array<int, array{tanggal: string, sales: int, ec: int, noo: int}>
      */
     public function trenHarian(): array
     {
@@ -95,6 +96,12 @@ class Dashboard
                 ->selectRaw('p.tanggal, COALESCE(SUM(p.total), 0) AS sales, SUM(CASE WHEN p.is_effective_call THEN 1 ELSE 0 END) AS ec')
                 ->get()->keyBy('tanggal');
 
+            $noo = $this->outletBaru()
+                ->whereBetween(DB::raw('DATE(b.recorded_at)'), [$this->dari, $this->sampai])
+                ->groupBy(DB::raw('DATE(b.recorded_at)'))
+                ->selectRaw('DATE(b.recorded_at) AS tanggal, COUNT(*) AS jumlah')
+                ->get()->keyBy('tanggal');
+
             // Array murni (bukan Collection/stdClass): aman di-cache lewat PHP serialize() apa pun cache
             // driver-nya, dan Inertia men-JSON-kan array persis sama dengan Collection.
             $hasil = [];
@@ -102,7 +109,10 @@ class Dashboard
             for ($t = CarbonImmutable::parse($this->dari); $t->lte(CarbonImmutable::parse($this->sampai)); $t = $t->addDay()) {
                 $tgl = $t->toDateString();
                 $b = $baris->get($tgl);
-                $hasil[] = ['tanggal' => $tgl, 'sales' => (int) ($b->sales ?? 0), 'ec' => (int) ($b->ec ?? 0)];
+                $hasil[] = [
+                    'tanggal' => $tgl, 'sales' => (int) ($b->sales ?? 0), 'ec' => (int) ($b->ec ?? 0),
+                    'noo' => (int) ($noo->get($tgl)->jumlah ?? 0),
+                ];
             }
 
             return $hasil;
@@ -122,6 +132,23 @@ class Dashboard
         return DB::table('mk_outlet as o')
             ->leftJoin('mk_area as a', 'a.id', '=', 'o.area_id')
             ->when($depo !== null, fn ($q) => $q->whereIn('a.depo_id', $depo ?: [0]));
+    }
+
+    /**
+     * trx_outlet_baru (alias b) dibatasi cakupan lewat motoris yang mendaftarkannya (b.karyawan_id), sama
+     * dengan App\Support\Menu\Motoris\SumberOutletNoo (Lap. Outlet NOO) — BUKAN lewat b.depo_id seperti
+     * metrik funnel lain, karena kolom itu tidak selalu terisi untuk data outlet baru yang lama/migrasi,
+     * sehingga NOO bisa salah tampil 0 untuk akun bercakupan selain "semua" kalau dibatasi lewat depo_id.
+     *
+     * CATATAN: trx_outlet_baru hanya terisi dari pendaftaran outlet lewat aplikasi HP motoris Enesis (lihat
+     * App\Http\Controllers\Mobile\OutletController), BUKAN dari riwayat outlet hasil tarikan Marketama
+     * (mk_outlet.dibuat_pada, teks bebas "02 Mar 2026 09:23" tanpa parser tanggal) — jadi NOO bisa tetap 0
+     * untuk akun yang belum pernah pakai pendaftaran outlet lewat aplikasi ini (keputusan produk: dibiarkan
+     * begini, tidak ikut riwayat Marketama).
+     */
+    private function outletBaru(): Builder
+    {
+        return Akses::batasiKaryawan(DB::table('trx_outlet_baru as b')->join('mk_karyawan as k', 'k.id', '=', 'b.karyawan_id'), $this->user);
     }
 
     /** @return array<int>|null null = semua depo (sama dengan SummaryDepo::depoCakupan / SumberOutletStatus::depoCakupan) */

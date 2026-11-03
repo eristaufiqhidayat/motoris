@@ -195,6 +195,14 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
     // kosong, lihat HomeController. Dideklarasikan sebelum catch-all /{slug} supaya rute ini yang dipakai.
     Route::get('/home', [HomeController::class, 'index'])->middleware('hak:home')->name('home');
 
+    // Isi drawer kartu ringkas Beranda Koordinator (lihat Home/DashboardKoordinator.vue) — JSON, dibuka lewat
+    // fetch tanpa pindah halaman, bukan Inertia::render. motoris_ditandai/outlet_ditandai diperiksa lagi di
+    // dalam controller (abort_unless Akses::bisa) karena haknya beda dari menu "home" sendiri.
+    Route::get('/home/absen-hari-ini', [HomeController::class, 'absenDetail'])->middleware('hak:home')->name('home.absen');
+    Route::get('/home/checkin-outlet', [HomeController::class, 'checkinOutletDetail'])->middleware('hak:home')->name('home.checkin-outlet');
+    Route::get('/home/motoris-ditandai', [HomeController::class, 'motorisDitandaiDetail'])->middleware('hak:home')->name('home.motoris-ditandai');
+    Route::get('/home/outlet-ditandai', [HomeController::class, 'outletDitandaiDetail'])->middleware('hak:home')->name('home.outlet-ditandai');
+
     // Motoris Report (Coverage, Performance, Absensi) dihitung dari tabel motoris + kuota isian admin.
     Route::get('/motoris_report', [MotorisReportController::class, 'index'])->middleware('hak:motoris_report')->name('motoris-report');
     Route::get('/kuota_motoris', [KuotaMotorisController::class, 'index'])->middleware('hak:kuota_motoris')->name('kuota-motoris.index');

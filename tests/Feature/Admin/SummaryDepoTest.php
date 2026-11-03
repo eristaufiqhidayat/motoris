@@ -77,6 +77,13 @@ class SummaryDepoTest extends AdminTestCase
 
     public function test_detail_per_koordinator_dan_sales(): void
     {
+        // Rudi ditandai aktif (muncul sebagai lencana bendera di samping nama — lihat DetailDepoTim.vue);
+        // Tegar punya tanda tapi sudah dicabut, jadi tidak ikut dihitung.
+        DB::table('tanda_motoris')->insert([
+            ['karyawan_id' => 1, 'tanggal' => '2026-10-01', 'kategori' => 'lokasi_palsu', 'dibuat_oleh' => 137, 'dibuat_nama' => 'Koor Satu', 'dicabut_at' => null, 'created_at' => now(), 'updated_at' => now()],
+            ['karyawan_id' => 3, 'tanggal' => '2026-10-01', 'kategori' => 'lokasi_palsu', 'dibuat_oleh' => 137, 'dibuat_nama' => 'Koor Satu', 'dicabut_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
         $d = $this->summary()->detail(46);
 
         $this->assertSame(5, $d['total']->hari_kerja);
@@ -84,8 +91,8 @@ class SummaryDepoTest extends AdminTestCase
         $tim = $d['tim'][0];
         $this->assertSame(['Koor Satu', 1.5], [$tim->nama, $tim->avg_visit]);
         $this->assertSame(
-            [['Rudi Hartono', 3, 2, 1, 120000, 0.7, 4.0], ['Tegar Mahendra', 1, 2, 1, 50000, 2.0, 2.0], ['Joko Lama', 1, 1, 0, 0, 1.0, 0.0]],
-            $tim->sales->map(fn ($s) => [$s->nama, $s->hari_kerja, $s->call, $s->ec, $s->sales, $s->avg_call, $s->avg_ipt])->all(),
+            [['Rudi Hartono', 3, 2, 1, 120000, 0.7, 4.0, true], ['Tegar Mahendra', 1, 2, 1, 50000, 2.0, 2.0, false], ['Joko Lama', 1, 1, 0, 0, 1.0, 0.0, false]],
+            $tim->sales->map(fn ($s) => [$s->nama, $s->hari_kerja, $s->call, $s->ec, $s->sales, $s->avg_call, $s->avg_ipt, $s->ditandai])->all(),
         );
         $this->assertSame([5, 5, 2], [$tim->akumulasi->hari_kerja, $tim->akumulasi->call, $tim->akumulasi->ec]);
 

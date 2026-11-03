@@ -278,14 +278,18 @@ class SummaryDepo
         $call = DB::table('trx_kunjungan')->whereBetween('tanggal', $rentang)->groupBy('karyawan_id')->selectRaw('karyawan_id, COUNT(*) AS n');
         $jual = DB::table('trx_penjualan')->whereBetween('tanggal', $rentang)->whereNull('dibatalkan_at')->groupBy('karyawan_id')
             ->selectRaw('karyawan_id, SUM(CASE WHEN is_effective_call THEN 1 ELSE 0 END) AS ec, SUM(total) AS nilai, SUM(jumlah_sku) AS sku, SUM(poin) AS poin');
+        // Tanda aktif (belum dicabut, lepas dari tanggal — sama dengan definisi di Rekap Motoris Ditandai/
+        // HomeController::tandaMotoris), dipakai untuk lencana bendera di samping nama motoris.
+        $tanda = DB::table('tanda_motoris')->whereNull('dicabut_at')->groupBy('karyawan_id')->selectRaw('karyawan_id, COUNT(*) AS n');
 
         return $this->sales = $this->karyawan('sales')
             ->leftJoinSub($hari, 'h', 'h.karyawan_id', '=', 'k.id')
             ->leftJoinSub($call, 'c', 'c.karyawan_id', '=', 'k.id')
             ->leftJoinSub($jual, 'j', 'j.karyawan_id', '=', 'k.id')
+            ->leftJoinSub($tanda, 't', 't.karyawan_id', '=', 'k.id')
             ->whereNotNull('k.depo_id')
             ->where(fn ($w) => $w->where('k.aktif', true)->orWhereNotNull('h.karyawan_id')->orWhereNotNull('j.karyawan_id'))
-            ->get(['k.id', 'k.nama', 'k.aktif', 'k.depo_id', 'k.koordinator_id', 'h.hari', 'c.n as call', 'j.ec', 'j.nilai', 'j.sku', 'j.poin'])
+            ->get(['k.id', 'k.nama', 'k.aktif', 'k.depo_id', 'k.koordinator_id', 'h.hari', 'c.n as call', 'j.ec', 'j.nilai', 'j.sku', 'j.poin', 't.n as tanda'])
             ->map(function ($s) {
                 $hk = (int) $s->hari;
                 $o = (object) [
@@ -293,6 +297,7 @@ class SummaryDepo
                     'depo_id' => (int) $s->depo_id, 'koordinator_id' => $s->koordinator_id ? (int) $s->koordinator_id : null,
                     'hari_kerja' => $hk, 'call' => (int) $s->call, 'ec' => (int) $s->ec,
                     'sales' => (int) $s->nilai, 'sku' => (int) $s->sku, 'point' => (int) $s->poin,
+                    'ditandai' => (int) ($s->tanda ?? 0) > 0,
                 ];
                 $o->avg_call = $this->bagi($o->call, $hk, 1);
                 $o->avg_ec = $this->bagi($o->ec, $hk, 1);

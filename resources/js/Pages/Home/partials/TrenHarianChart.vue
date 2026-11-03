@@ -4,15 +4,15 @@ import Select from '@/Components/ui/atoms/Select.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import { angkaRingkas, tanggalPendek } from '@/Support/format.js';
 
-// Grafik garis tren harian (SVG, tanpa pustaka, sama teknik dengan BarChart) untuk Beranda: Total Sales (Rp)
-// atau Total EC per tanggal dalam rentang yang sedang difilter. Metrik dipilih lewat Select, seperti grafik
-// per depo di Motoris/SummaryDepo.vue.
+// Grafik garis tren harian (SVG, tanpa pustaka, sama teknik dengan BarChart) untuk Beranda: Total Sales (Rp),
+// Total EC, atau Outlet Baru (NOO) per tanggal dalam rentang yang sedang difilter. Metrik dipilih lewat Select,
+// seperti grafik per depo di Motoris/SummaryDepo.vue.
 const props = defineProps({
-    // [{ tanggal, sales, ec }]
+    // [{ tanggal, sales, ec, noo }]
     data: { type: Array, required: true },
 });
 
-const METRIK = { sales: 'Total Sales (Rp)', ec: 'Total EC' };
+const METRIK = { sales: 'Total Sales (Rp)', ec: 'Total EC', noo: 'Outlet Baru (NOO)' };
 const opsiMetrik = Object.entries(METRIK).map(([value, label]) => ({ value, label }));
 const metrik = ref('sales');
 
