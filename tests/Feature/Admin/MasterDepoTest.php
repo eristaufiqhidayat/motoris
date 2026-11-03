@@ -111,16 +111,23 @@ class MasterDepoTest extends AdminTestCase
             'target_call' => 45, 'target_ec' => 35, 'aktif' => true, 'multi_polygon_sales' => false,
         ]);
 
+        // Diurutkan alfabetis (lihat SumberMasterDepo::query), jadi "Balaraja" tampil lebih dulu dari
+        // "Sidoarjo" — cari baris lewat kode, bukan asumsi index 0.
         $this->get('/master_depo')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Menu/Show')
             ->loadDeferredProps(fn (Assert $page) => $page
-                ->where('tables.0.rows.data.0.nama', 'Sidoarjo')
-                ->where('tables.0.rows.data.0.kode', 'SDA')
-                ->where('tables.0.rows.data.0.target_call', 45)
-                ->where('tables.0.rows.data.0.status', 'Aktif')
-                ->where('tables.0.rows.data.0.multi_polygon_sales', 'Tidak')
-                ->where('tables.0.rows.data.0.total_koordinator', 1)
-                ->where('tables.0.rows.data.0.jumlah_sales_aktif', 3)
+                ->where('tables.0.rows.data', function ($baris) {
+                    $sidoarjo = collect($baris)->firstWhere('kode', 'SDA');
+
+                    $this->assertSame('Sidoarjo', $sidoarjo['nama']);
+                    $this->assertSame(45, $sidoarjo['target_call']);
+                    $this->assertSame('Aktif', $sidoarjo['status']);
+                    $this->assertSame('Tidak', $sidoarjo['multi_polygon_sales']);
+                    $this->assertSame(1, $sidoarjo['total_koordinator']);
+                    $this->assertSame(3, $sidoarjo['jumlah_sales_aktif']);
+
+                    return true;
+                })
             ));
     }
 
