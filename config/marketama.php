@@ -30,6 +30,7 @@ use App\Support\Menu\SumberMasterArea;
 use App\Support\Menu\SumberMasterDepo;
 use App\Support\Menu\SumberOutletBaru;
 use App\Support\Menu\SumberOutletMaster;
+use App\Support\Menu\SumberSalesTidakAbsen;
 use App\Support\Menu\SumberTandaOutlet;
 
 // Struktur menu sidebar disamakan dengan Marketama Canvassing System.
@@ -908,7 +909,7 @@ return [
                     'tab_key' => 'sales_tidak_absen',
                     'tab_label' => 'Sales Tidak Absen Pagi',
                     'tables' => [
-                        ['table' => 'sales_tidak_absen', 'date_filter_column' => null, 'kpi' => null],
+                        ['table' => 'sales_tidak_absen', 'date_filter_column' => 'tanggal'],
                     ],
                 ],
             ],
@@ -2355,12 +2356,13 @@ return [
         ],
         'sales_tidak_absen' => [
             'title' => 'Sales Tidak Absen Pagi',
+            // Dihitung dari trx_absensi + mk_karyawan untuk tanggal terpilih (tabel sales_tidak_absen = salinan lama Marketama).
+            'sumber' => SumberSalesTidakAbsen::class,
             'columns' => [
-                'tanggal_data' => 'Tanggal Data',
                 'no' => 'No',
-                'depo' => 'Depo',
-                'koordinator' => 'Koordinator',
                 'nama_sales' => 'Nama Sales',
+                'koordinator' => 'Koordinator',
+                'depo' => 'Depo',
             ],
         ],
         'sales_tidak_penjualan' => [
