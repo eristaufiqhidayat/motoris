@@ -152,4 +152,18 @@ return [
         'lainnya' => 'Lainnya',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Impersonate login (koordinator asli)
+    |--------------------------------------------------------------------------
+    |
+    | Bagian "Impersonate koordinator" di halaman login: masuk tanpa password
+    | sebagai salah satu akun koordinator sungguhan (bukan akun demo generik),
+    | supaya data yang terlihat sesuai cakupan role akun itu. Bawaan hanya aktif
+    | di APP_ENV=local. Jangan nyalakan di server yang berisi data asli.
+    |
+    */
+
+    'impersonate_login' => (bool) env('IMPERSONATE_LOGIN', env('APP_ENV') === 'local'),
+
 ];

@@ -25,7 +25,23 @@ class LoginController extends Controller
         return Inertia::render('Auth/Login', [
             // Tombol demo hanya dikirim bila fitur demo aktif (config auth.demo_login).
             'demoPeran' => config('auth.demo_login') ? config('auth.demo_peran') : null,
+            // Daftar koordinator sungguhan hanya dikirim bila config auth.impersonate_login aktif.
+            'koordinatorImpersonasi' => config('auth.impersonate_login') ? $this->koordinatorImpersonasi() : null,
         ]);
+    }
+
+    /** @return array<int, array{id: int, name: string, username: string, depo_nama: ?string}> */
+    private function koordinatorImpersonasi(): array
+    {
+        return User::query()
+            ->where('users.kategori', 'koordinator')
+            ->where('users.aktif', true)
+            ->leftJoin('mk_karyawan', 'mk_karyawan.id', '=', 'users.karyawan_id')
+            ->leftJoin('mk_depo', 'mk_depo.id', '=', 'mk_karyawan.depo_id')
+            ->orderBy('users.name')
+            ->get(['users.id', 'users.name', 'users.username', 'mk_depo.nama as depo_nama'])
+            ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'username' => $u->username, 'depo_nama' => $u->depo_nama])
+            ->all();
     }
 
     public function store(Request $request): RedirectResponse

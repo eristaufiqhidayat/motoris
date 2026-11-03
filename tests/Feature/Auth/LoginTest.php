@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -156,6 +157,41 @@ class LoginTest extends TestCase
         $this->post('/login/demo/bukan-peran')->assertNotFound();
         $this->post('/login/demo/koordinator')->assertRedirect('/home');
         $this->assertSame(1, User::where('username', 'demo.koordinator')->count());
+    }
+
+    public function test_impersonate_koordinator_mati_secara_bawaan(): void
+    {
+        $koordinator = User::factory()->create(['kategori' => 'koordinator']);
+
+        $this->get('/login')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Auth/Login')->where('koordinatorImpersonasi', null));
+        $this->post("/login/impersonate/{$koordinator->id}")->assertNotFound();
+        $this->assertGuest();
+    }
+
+    public function test_impersonate_koordinator_bila_diaktifkan(): void
+    {
+        config(['auth.impersonate_login' => true]);
+
+        $depo = DB::table('mk_depo')->insertGetId(['nama' => 'Depo Jakarta']);
+        $karyawan = DB::table('mk_karyawan')->insertGetId(['nama' => 'Budi', 'depo_id' => $depo, 'kategori' => 'koordinator']);
+
+        $koordinator = User::factory()->create(['name' => 'Budi Koordinator', 'kategori' => 'koordinator', 'karyawan_id' => $karyawan]);
+        $sales = User::factory()->create(['kategori' => 'sales']);
+        $nonaktif = User::factory()->create(['kategori' => 'koordinator', 'aktif' => false]);
+
+        $this->get('/login')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Auth/Login')->where('koordinatorImpersonasi', [
+                ['id' => $koordinator->id, 'name' => 'Budi Koordinator', 'username' => $koordinator->username, 'depo_nama' => 'Depo Jakarta'],
+            ]));
+
+        $this->post("/login/impersonate/{$sales->id}")->assertNotFound();
+        $this->post("/login/impersonate/{$nonaktif->id}")->assertNotFound();
+        $this->assertGuest();
+
+        $this->post("/login/impersonate/{$koordinator->id}")->assertRedirect('/home');
+        $this->assertAuthenticatedAs($koordinator);
+        $this->assertNotNull($koordinator->fresh()->login_terakhir_pada);
     }
 
     public function test_seeder_admin_lokal_bisa_dipakai_login(): void
