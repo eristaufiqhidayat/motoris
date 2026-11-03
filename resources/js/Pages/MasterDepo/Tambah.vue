@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Badge from '@/Components/ui/atoms/Badge.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
@@ -178,7 +178,7 @@ function simpan() {
     <AppLayout breadcrumb-slug="master_depo">
         <PageHeader title="Tambah Warehouse / Depo" subtitle="Tersimpan ke data master (mk_depo); lihat kartu “Depo terbaru” di bawah.">
             <template #actions>
-                <Button tag="a" variant="light" href="/master_depo">Kembali ke daftar</Button>
+                <Button :tag="Link" variant="light" href="/master_depo">Kembali ke daftar</Button>
             </template>
         </PageHeader>
 
@@ -337,7 +337,7 @@ function simpan() {
 
                 <div v-if="bisaTambah" class="flex flex-wrap items-center gap-2 mb-3">
                     <Button type="submit" :loading="form.processing" :disabled="form.processing">Submit</Button>
-                    <Button variant="light" tag="a" href="/master_depo">Batal</Button>
+                    <Button variant="light" :tag="Link" href="/master_depo">Batal</Button>
                 </div>
             </fieldset>
         </form>
