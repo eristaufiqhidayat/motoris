@@ -4,29 +4,17 @@ import TandaOutlet from './TandaOutlet.vue';
 
 const URL = '/outlet_all/tanda';
 const props = { url: URL, outletId: 10 };
-const kategori = { outlet_fiktif: 'Outlet fiktif' };
 const tanda = [
-    { id: 5, kategori: 'outlet_fiktif', kategori_label: 'Outlet fiktif', catatan: 'Alamat tidak ditemukan', oleh: 'koor', waktu: '2026-10-25 09:00', bisa_cabut: true },
-    { id: 6, kategori: 'outlet_fiktif', kategori_label: 'Outlet fiktif', catatan: null, oleh: 'admin', waktu: '2026-10-25 10:00', bisa_cabut: false },
+    { id: 5, kategori: 'outlet_fiktif', kategori_label: 'Diduga outlet fiktif', catatan: '4 outlet didaftarkan Wawan08 di koordinat yang sama persis.', oleh: 'Sistem', waktu: '2026-10-25 09:00', status: 'perlu_dicek', status_label: 'Perlu dicek', hasil_catatan: null, dicek_oleh: null, dicek_waktu: null, bisa_periksa: true, sekelompok: 3 },
+    { id: 6, kategori: 'outlet_fiktif', kategori_label: 'Diduga outlet fiktif', catatan: null, oleh: 'Sistem', waktu: '2026-10-25 10:00', status: 'terbukti', status_label: 'Terbukti', hasil_catatan: 'Toko tidak ada.', dicek_oleh: 'koor', dicek_waktu: '2026-10-26 08:00', bisa_periksa: false, sekelompok: 0 },
 ];
+const outlet = { nama: 'Warung Aming', dibuat_oleh: 'Budi Santoso', dibuat_pada: '2026-10-22 11:23' };
 
 let daftar;
-let outlet;
-let bisaTambah;
-let balasan;
 
 function pasangFetch() {
-    global.fetch = vi.fn((url, opsi = {}) => {
-        const metode = opsi.method ?? 'GET';
-        if (metode === 'GET') {
-            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ outlet, tanda: daftar, bisa_tambah: bisaTambah, kategori }) });
-        }
-
-        return Promise.resolve(balasan[metode] ?? { ok: true, status: metode === 'POST' ? 201 : 200, json: () => Promise.resolve({}) });
-    });
+    global.fetch = vi.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ outlet, tanda: daftar }) }));
 }
-
-const panggilan = (metode) => fetch.mock.calls.filter(([, opsi]) => (opsi?.method ?? 'GET') === metode);
 
 async function siapkan(lain = {}) {
     const wrapper = mount(TandaOutlet, { props: { ...props, ...lain } });
@@ -35,173 +23,91 @@ async function siapkan(lain = {}) {
     return wrapper;
 }
 
+const tombolPeriksa = (wrapper) => wrapper.findAll('button').find((b) => b.text().includes('Periksa'));
+
 describe('TandaOutlet', () => {
     beforeEach(() => {
         daftar = tanda;
-        outlet = { nama: 'Warung Aming', dibuat_oleh: 'Budi Santoso', dibuat_pada: '2026-10-22 11:23:00' };
-        bisaTambah = true;
-        balasan = {};
-        document.head.innerHTML = '<meta name="csrf-token" content="token-rahasia">';
-        window.confirm = vi.fn(() => true);
         pasangFetch();
     });
 
     afterEach(() => {
-        document.head.innerHTML = '';
+        document.body.innerHTML = '';
     });
 
-    it('memuat tanda outlet dan menampilkannya', async () => {
+    it('memuat tanda outlet dan pendaftar outletnya', async () => {
         const wrapper = await siapkan();
 
         expect(fetch.mock.calls[0][0]).toBe(`${URL}?outlet_id=10`);
-        const item = wrapper.findAll('.tanda-motoris-item');
-        expect(item).toHaveLength(2);
-        expect(item[0].text()).toContain('Outlet fiktif');
-        expect(item[0].text()).toContain('koor · 2026-10-25 09:00');
-        expect(item[0].text()).toContain('Alamat tidak ditemukan');
-        expect(item[1].text()).toContain('Outlet fiktif');
+        expect(wrapper.text()).toContain('Didaftarkan oleh: Budi Santoso');
+        expect(wrapper.text()).toContain('Diduga outlet fiktif');
+        expect(wrapper.text()).toContain('Perlu dicek');
+        expect(wrapper.text()).toContain('Terbukti');
     });
 
-    it('menampilkan kerangka (skeleton) dua baris selama data outlet diambil lalu menyembunyikannya', async () => {
-        const wrapper = mount(TandaOutlet, { props });
-
-        expect(wrapper.find('[role="status"]').attributes('aria-label')).toBe('Memuat data outlet');
-        expect(wrapper.findAll('[role="status"] .skeleton')).toHaveLength(2);
-        expect(wrapper.find('.spinner').exists()).toBe(false);
-        expect(wrapper.text()).not.toContain('Belum ada tanda untuk outlet ini.');
-
-        await flushPromises();
-        expect(wrapper.find('[role="status"]').exists()).toBe(false);
-    });
-
-    it('menampilkan siapa yang mendaftarkan outlet dan kapan', async () => {
-        const teks = (await siapkan()).text();
-
-        expect(teks).toContain('Didaftarkan oleh: Budi Santoso');
-        expect(teks).toContain('22 Okt 2026 · 11:23');
-    });
-
-    it('menampilkan "tidak diketahui" bila pendaftar kosong, dan waktu apa adanya bila formatnya lain', async () => {
-        outlet = { nama: 'X', dibuat_oleh: null, dibuat_pada: '22 Oct 2026 11:23' };
-        const teks = (await siapkan()).text();
-
-        expect(teks).toContain('Didaftarkan oleh: tidak diketahui');
-        expect(teks).toContain('22 Oct 2026 11:23');
-    });
-
-    it('tidak mengirim event berubah saat memuat awal', async () => {
+    it('menampilkan alasan dari sistem dan hasil cek koordinator', async () => {
         const wrapper = await siapkan();
 
-        expect(wrapper.emitted('berubah')).toBeUndefined();
+        expect(wrapper.text()).toContain('4 outlet didaftarkan Wawan08');
+        expect(wrapper.text()).toContain('Hasil cek (koor · 2026-10-26 08:00): Toko tidak ada.');
     });
 
-    it('tidak punya pilihan kategori di form — hanya catatan', async () => {
+    it('tidak punya tombol Tandai: tanda hanya dibuat sistem', async () => {
         const wrapper = await siapkan();
-        await wrapper.find('button.btn-outline-danger').trigger('click');
 
-        expect(wrapper.find('select').exists()).toBe(false);
-        expect(wrapper.find('textarea').exists()).toBe(true);
+        expect(wrapper.findAll('button').map((b) => b.text())).not.toContain('Tandai');
+        expect(wrapper.text()).not.toContain('Tandai outlet');
     });
 
-    it('mengirim jumlah tanda lewat event berubah setelah menandai', async () => {
+    it('tombol Periksa hanya pada tanda Perlu dicek yang boleh diperiksa akun', async () => {
         const wrapper = await siapkan();
-        await wrapper.find('button.btn-outline-danger').trigger('click');
-        await wrapper.find('form').trigger('submit');
+
+        expect(wrapper.findAll('button').filter((b) => b.text().includes('Periksa'))).toHaveLength(1);
+
+        daftar = tanda.map((t) => ({ ...t, bisa_periksa: false }));
+        expect(tombolPeriksa(await siapkan())).toBeUndefined();
+    });
+
+    it('membuka form hasil cek dengan keterangan titik sekelompok, dan menutupnya lewat Batal', async () => {
+        const wrapper = await siapkan();
+
+        await tombolPeriksa(wrapper).trigger('click');
+        expect(wrapper.find('form[aria-label="Hasil cek tanda"]').exists()).toBe(true);
+        expect(wrapper.text()).toContain('Berlaku juga untuk 3 outlet lain di titik yang sama.');
+
+        await wrapper.findAll('button').find((b) => b.text() === 'Batal').trigger('click');
+        expect(wrapper.find('form[aria-label="Hasil cek tanda"]').exists()).toBe(false);
+    });
+
+    it('setelah pemeriksaan selesai memuat ulang dan memberi tahu induknya', async () => {
+        const wrapper = await siapkan();
+        await tombolPeriksa(wrapper).trigger('click');
+        fetch.mockClear();
+
+        wrapper.findComponent({ name: 'PeriksaTanda' }).vm.$emit('selesai', {});
         await flushPromises();
 
-        expect(wrapper.emitted('berubah')).toEqual([[2]]);
-    });
-
-    it('mengirim jumlah tanda lewat event berubah setelah mencabut', async () => {
-        const wrapper = await siapkan();
-        await wrapper.find('.tanda-motoris-item button').trigger('click');
-        await flushPromises();
-
-        expect(wrapper.emitted('berubah')).toEqual([[2]]);
-    });
-
-    it('menampilkan pesan bila belum ada tanda', async () => {
-        daftar = [];
-
-        expect((await siapkan()).text()).toContain('Belum ada tanda untuk outlet ini.');
-    });
-
-    it('tombol Tandai hanya tampil bila akun punya hak Tambah', async () => {
-        expect((await siapkan()).text()).toContain('Tambah tanda');
-
-        bisaTambah = false;
-        expect((await siapkan()).text()).not.toContain('Tambah tanda');
-    });
-
-    it('tombol Cabut hanya pada tanda yang boleh dicabut', async () => {
-        const item = (await siapkan()).findAll('.tanda-motoris-item');
-
-        expect(item[0].text()).toContain('Cabut');
-        expect(item[1].text()).not.toContain('Cabut');
-    });
-
-    it('mengirim tanda dengan header CSRF (tanpa kategori), lalu menutup form dan memuat ulang daftar', async () => {
-        const wrapper = await siapkan();
-        await wrapper.find('button.btn-outline-danger').trigger('click');
-        await wrapper.find('textarea').setValue('Alamat tidak cocok dengan peta');
-        await wrapper.find('form').trigger('submit');
-        await flushPromises();
-
-        const [url, opsi] = panggilan('POST')[0];
-        expect(url).toBe(URL);
-        expect(opsi.headers['X-CSRF-TOKEN']).toBe('token-rahasia');
-        expect(JSON.parse(opsi.body)).toEqual({ outlet_id: 10, catatan: 'Alamat tidak cocok dengan peta' });
-        expect(panggilan('GET')).toHaveLength(2);
-        expect(wrapper.find('form').exists()).toBe(false);
-    });
-
-    it('menampilkan galat tanda kembar sebagai pesan umum dan membiarkan form terbuka', async () => {
-        balasan.POST = { ok: false, status: 422, json: () => Promise.resolve({ errors: { outlet_id: ['Outlet ini sudah ditandai oleh koor pada 2026-10-25 09:00.'] } }) };
-        const wrapper = await siapkan();
-        await wrapper.find('button.btn-outline-danger').trigger('click');
-        await wrapper.find('form').trigger('submit');
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('Outlet ini sudah ditandai oleh koor pada 2026-10-25 09:00.');
-        expect(wrapper.find('form').exists()).toBe(true);
-        expect(panggilan('GET')).toHaveLength(1);
-    });
-
-    it('menampilkan galat validasi catatan di form', async () => {
-        balasan.POST = { ok: false, status: 422, json: () => Promise.resolve({ errors: { catatan: ['Catatan maksimal 500 karakter.'] } }) };
-        const wrapper = await siapkan();
-        await wrapper.find('button.btn-outline-danger').trigger('click');
-        await wrapper.find('form').trigger('submit');
-        await flushPromises();
-
-        expect(wrapper.find('form').text()).toContain('Catatan maksimal 500 karakter.');
-    });
-
-    it('mencabut tanda setelah konfirmasi lalu memuat ulang', async () => {
-        const wrapper = await siapkan();
-        await wrapper.find('.tanda-motoris-item button').trigger('click');
-        await flushPromises();
-
-        expect(window.confirm).toHaveBeenCalled();
-        const [url, opsi] = panggilan('DELETE')[0];
-        expect(url).toBe(`${URL}/5`);
-        expect(opsi.headers['X-CSRF-TOKEN']).toBe('token-rahasia');
-        expect(panggilan('GET')).toHaveLength(2);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(wrapper.emitted('berubah')).toHaveLength(1);
+        expect(wrapper.find('form[aria-label="Hasil cek tanda"]').exists()).toBe(false);
     });
 
     it('memuat ulang tanda dan menutup form saat outlet diganti', async () => {
         const wrapper = await siapkan();
-        await wrapper.find('button.btn-outline-danger').trigger('click');
+        await tombolPeriksa(wrapper).trigger('click');
+
         await wrapper.setProps({ outletId: 20 });
         await flushPromises();
 
         expect(fetch.mock.calls.at(-1)[0]).toBe(`${URL}?outlet_id=20`);
-        expect(wrapper.find('form').exists()).toBe(false);
+        expect(wrapper.find('form[aria-label="Hasil cek tanda"]').exists()).toBe(false);
     });
 
-    it('menampilkan pesan bila daftar gagal dimuat', async () => {
-        global.fetch = vi.fn(() => Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }));
+    it('menampilkan pesan bila memuat gagal dan keterangan kosong bila tidak ada tanda', async () => {
+        daftar = [];
+        expect((await siapkan()).text()).toContain('Belum ada tanda untuk outlet ini.');
 
+        global.fetch = vi.fn(() => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) }));
         expect((await siapkan()).text()).toContain('Gagal memuat tanda outlet.');
     });
 });

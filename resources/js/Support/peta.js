@@ -23,6 +23,9 @@ export function ikonLingkaran(warna, isi) {
     });
 }
 
+// Penanda lingkaran berisi angka: beberapa outlet berkoordinat identik digambar sebagai satu penanda (spec 062).
+export const ikonJumlah = (warna, jumlah) => ikonLingkaran(warna, '<text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-weight="700" font-size="' + (jumlah > 99 ? 20 : 26) + '" fill="#fff">' + jumlah + '</text>');
+
 // Ikon Lucide (outline putih, sama dengan ikon menu aplikasi) di tengah lingkaran penanda 64x64: ikon 24px
 // diperbesar 1,5x dan digeser ke tengah.
 const ikonLucidePutih = (isi) => '<g transform="translate(14 14) scale(1.5)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + isi + '</g>';
@@ -36,6 +39,9 @@ export const ikonBendera = ikonLucidePutih('<path d="M4 22V4a1 1 0 0 1 .4-.8A6 6
 export const ikonOutlet = ikonLucidePutih('<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7"/>');
 
 export const ikonDepo = ikonLucidePutih('<path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M12 6h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/><path d="M8 6h.01"/><path d="M9 22v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><rect x="4" y="2" width="16" height="20" rx="2"/>');
+
+// Google Street View di satu koordinat (Maps URLs API, tanpa API key): dipakai memeriksa titik outlet diduga fiktif (spec 062).
+export const urlStreetView = (lat, lng) => `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
 
 export const tautanGoogleMap = (lat, lng) => '<a class="btn btn-sm btn-primary mt-2" style="font-size:11px" target="_blank" rel="noopener" href="https://maps.google.com/maps?q=loc:' + lat + ',' + lng + '&t=k">' + ikonPin + 'Lihat di Google Map</a>';
 

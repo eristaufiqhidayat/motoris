@@ -10,13 +10,12 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Rekap Motoris Ditandai: semua tanda motoris (tanda_motoris, diberikan koordinator dari drawer Riwayat Lacak Motoris),
- * termasuk yang sudah dicabut sebagai jejak. Dibatasi cakupan role (alias k = motoris); bisa disaring menurut status.
+ * Rekap Motoris Ditandai: semua tanda motoris (tanda_motoris, dibuat sistem lewat Sinkronisasi Data di Beranda Koordinator,
+ * spec 062), termasuk yang sudah diperiksa (Terbukti / Wajar) sebagai jejak. Dibatasi cakupan role (alias k = motoris);
+ * bisa disaring menurut status (config marketama.status_tanda).
  */
 class SumberTandaMotoris implements SumberBerstatus
 {
-    private const STATUS = ['aktif' => 'Aktif', 'dicabut' => 'Dicabut'];
-
     public function tabelUtama(): string
     {
         return 'tanda_motoris';
@@ -30,7 +29,7 @@ class SumberTandaMotoris implements SumberBerstatus
             ->leftJoin('mk_karyawan as ko', 'ko.id', '=', 'k.koordinator_id')
             ->select([
                 'tm.id', 'tm.karyawan_id', 'tm.tanggal', 'k.nama as motoris', 'd.nama as depo', 'ko.nama as koordinator',
-                'tm.kategori', 'tm.catatan', 'tm.dibuat_nama as ditandai_oleh', 'tm.created_at', 'tm.dicabut_at',
+                'tm.kategori', 'tm.catatan', 'tm.dibuat_nama as ditandai_oleh', 'tm.created_at', 'tm.status', 'tm.hasil_catatan', 'tm.dicek_nama',
             ])
             ->orderByDesc('tm.tanggal')->orderByDesc('tm.id');
 
@@ -42,28 +41,27 @@ class SumberTandaMotoris implements SumberBerstatus
         $baris->tanggal = substr((string) $baris->tanggal, 0, 10);
         $baris->kategori = config("marketama.tanda_motoris.{$baris->kategori}", $baris->kategori);
         $baris->ditandai_pada = JamLokal::format($baris->created_at, 'Y-m-d H:i');
-        $baris->status = $baris->dicabut_at === null ? self::STATUS['aktif'] : self::STATUS['dicabut'];
-        unset($baris->created_at, $baris->dicabut_at);
+        $baris->status = config("marketama.status_tanda.{$baris->status}", $baris->status);
+        $baris->hasil_cek = $baris->hasil_catatan ? "{$baris->hasil_catatan} ({$baris->dicek_nama})" : null;
+        unset($baris->created_at, $baris->hasil_catatan, $baris->dicek_nama);
 
         return $baris;
     }
 
     public function kolomCari(): array
     {
-        return ['k.nama', 'd.nama', 'ko.nama', 'tm.catatan', 'tm.dibuat_nama'];
+        return ['k.nama', 'd.nama', 'ko.nama', 'tm.catatan', 'tm.hasil_catatan'];
     }
 
     public function pilihanStatus(): array
     {
-        return self::STATUS;
+        return config('marketama.status_tanda');
     }
 
     public function batasiStatus(Builder $query, string $status): void
     {
-        match ($status) {
-            'aktif' => $query->whereNull('tm.dicabut_at'),
-            'dicabut' => $query->whereNotNull('tm.dicabut_at'),
-            default => null,
-        };
+        if (array_key_exists($status, config('marketama.status_tanda'))) {
+            $query->where('tm.status', $status);
+        }
     }
 }

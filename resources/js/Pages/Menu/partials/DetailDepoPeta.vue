@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import Button from '@/Components/ui/atoms/Button.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
 import { useLeafletMap } from '@/Composables/useLeafletMap.js';
-import { escapeHtml, ikonDepo, ikonLingkaran, ikonMotoris, ikonOutlet, tautanGoogleMap } from '@/Support/peta.js';
+import { escapeHtml, ikonDepo, ikonJumlah, ikonLingkaran, ikonMotoris, ikonOutlet, tautanGoogleMap } from '@/Support/peta.js';
 
 // Peta satu titik di drawer: lokasi depo (kolom latitude/longitude mk_depo) atau posisi terakhir motoris
 // (ikon 'motoris', baris Tracking Last Seen). Objek `depo` cukup memuat nama, latitude, dan longitude.
@@ -18,7 +18,10 @@ const props = defineProps({
     // true = popup penanda memuat tombol "Lihat di Google Map" (mis. peta outlet bertanda).
     googleMap: { type: Boolean, default: false },
     // Penanda tambahan di sekitar titik utama: [{ outlet, latitude, longitude, jarak_m, kategori_label }], merah.
+    // Beberapa outlet berkoordinat identik digambar sebagai satu penanda berangka.
     sekitar: { type: Array, default: () => [] },
+    // Banyaknya outlet di titik utama (titik temuan sistem, koordinatnya identik): > 1 = penanda berangka.
+    jumlah: { type: Number, default: 1 },
 });
 
 const wadah = ref(null);
@@ -37,20 +40,30 @@ const { peta } = useLeafletMap(wadah, {
     pusat: adaKoordinat ? [lat, lng] : undefined,
     zoom: 15,
     onSiap(map, L) {
-        const ikon = {
+        const ikon = props.jumlah > 1 ? ikonJumlah('#d97706', props.jumlah) : {
             motoris: ikonLingkaran('#0d6efd', ikonMotoris),
             outlet: ikonLingkaran('#d97706', ikonOutlet),
         }[props.ikon] ?? ikonLingkaran('#dc2626', ikonDepo);
+        const rincian = props.jumlah > 1 ? `${props.jumlah} outlet di koordinat ini` : props.rincian;
         const penanda = L.marker([lat, lng], { icon: ikon })
             .addTo(map)
-            .bindPopup(escapeHtml(props.depo.nama) + (props.rincian ? `<br><small class="text-gray-500">${escapeHtml(props.rincian)}</small>` : '') + (props.googleMap ? `<br>${tautanGoogleMap(lat, lng)}` : ''));
+            .bindPopup(escapeHtml(props.depo.nama) + (rincian ? `<br><small class="text-gray-500">${escapeHtml(rincian)}</small>` : '') + (props.googleMap ? `<br>${tautanGoogleMap(lat, lng)}` : ''));
 
         if (props.rincian || props.googleMap) penanda.openPopup();
 
+        const tumpukan = new Map();
         props.sekitar.forEach((o) => {
-            L.marker([Number(o.latitude), Number(o.longitude)], { icon: ikonLingkaran('#dc2626', ikonOutlet) })
+            const kunci = `${Number(o.latitude)},${Number(o.longitude)}`;
+            tumpukan.set(kunci, [...(tumpukan.get(kunci) ?? []), o]);
+        });
+        tumpukan.forEach((grup) => {
+            const o = grup[0];
+            const isi = grup.length > 1
+                ? `${grup.length} outlet di koordinat ini · ${o.jarak_m} m<br><small class="text-gray-500">${grup.map((g) => escapeHtml(g.outlet)).join(', ')}</small>`
+                : `${escapeHtml(o.outlet)}<br><small class="text-gray-500">${escapeHtml(o.kategori_label)} · ${o.jarak_m} m</small>`;
+            L.marker([Number(o.latitude), Number(o.longitude)], { icon: grup.length > 1 ? ikonJumlah('#dc2626', grup.length) : ikonLingkaran('#dc2626', ikonOutlet) })
                 .addTo(map)
-                .bindPopup(`${escapeHtml(o.outlet)}<br><small class="text-gray-500">${escapeHtml(o.kategori_label)} · ${o.jarak_m} m</small>`);
+                .bindPopup(isi);
         });
         if (props.sekitar.length) {
             map.fitBounds(L.latLngBounds([[lat, lng], ...props.sekitar.map((o) => [Number(o.latitude), Number(o.longitude)])]), { padding: [30, 30], maxZoom: 17 });

@@ -356,27 +356,19 @@ describe('RuteHarianPeta', () => {
             return wrapper;
         }
 
-        it('tombol Tandai outlet hanya tampil pada kunjungan yang punya outlet_id', async () => {
+        it('tombol bendera outlet hanya tampil pada kunjungan yang outletnya ditandai sistem', async () => {
             const wrapper = await dengan();
             const tombol = wrapper.findAll('.tombol-tanda-outlet');
 
-            // Kunjungan 1 dan 3 punya outlet_id; kunjungan 2 (outlet baru belum disetujui) tidak.
-            expect(tombol).toHaveLength(2);
-        });
-
-        it('membedakan tombol bendera outlet yang sudah ditandai dari yang belum', async () => {
-            jawab({ total: 0, locations: [], depo: null, kunjungan });
-            const tombol = (await siapkan()).findAll('.tombol-tanda-outlet');
-
-            // Kunjungan 1 ditandai, kunjungan 3 belum.
+            // Kunjungan 1 punya outlet_id dan ditandai; kunjungan 3 punya outlet_id tapi belum ditandai; kunjungan 2
+            // (outlet baru belum disetujui) tanpa outlet_id. Tanda dibuat sistem (spec 062), jadi tidak ada tombol Tandai.
+            expect(tombol).toHaveLength(1);
             expect(tombol[0].classes()).toContain('tombol-tanda-ditandai');
             expect(tombol[0].attributes('aria-label')).toBe('Lihat tanda outlet');
-            expect(tombol[1].classes()).not.toContain('tombol-tanda-ditandai');
-            expect(tombol[1].classes()).toContain('tombol-tanda-belum');
-            expect(tombol[1].attributes('aria-label')).toBe('Tandai outlet');
+            expect(wrapper.find('[aria-label="Tandai outlet"]').exists()).toBe(false);
         });
 
-        it('mengklik tombol Tandai outlet membuka drawer dengan outlet yang tepat', async () => {
+        it('mengklik tombol bendera outlet membuka drawer dengan outlet yang tepat', async () => {
             const wrapper = await dengan();
             expect(wrapper.find('.stub-tanda-outlet').exists()).toBe(false);
 
@@ -396,10 +388,10 @@ describe('RuteHarianPeta', () => {
             jumlah: 6, kunjungan_id: [10, 11, 12, 13, 14, 15], outlet_id: [80, 81], dari_jam: '13:04', sampai_jam: '13:17',
             saran: { kategori: 'kunjungan_tidak_wajar', catatan: '6 kunjungan outlet berturutan berjarak kurang dari 5 m satu sama lain, dari jam 13:04 sampai 13:17.' },
         };
-        // TandaOutlet (spec 059) tidak lagi punya prop saran; TandaMotoris yang menerimanya.
+        // Tanda dibuat sistem (spec 062): tidak ada prop saran isian form untuk TandaMotoris maupun TandaOutlet.
         const stub = {
             TandaOutlet: { props: ['url', 'outletId'], template: '<div class="stub-tanda-outlet">{{ url }}|{{ outletId }}</div>' },
-            TandaMotoris: { props: ['url', 'salesId', 'tanggal', 'saran'], template: '<div class="stub-tanda">{{ saran ? saran.kategori + "|" + saran.catatan : "tanpa-saran" }}</div>' },
+            TandaMotoris: { props: ['url', 'salesId', 'tanggal'], template: '<div class="stub-tanda">{{ url }}|{{ salesId }}|{{ tanggal }}</div>' },
         };
 
         async function dengan(indikasi, lainnya = {}) {
@@ -483,31 +475,30 @@ describe('RuteHarianPeta', () => {
             expect(baris[2].text()).toContain('Jarak dekat');
         });
 
-        it('tombol Tandai outlet tidak lagi membawa saran (hanya url dan outletId)', async () => {
+        it('tombol bendera outlet hanya membawa url dan outletId', async () => {
             const wrapper = await dengan([runtun1]);
 
             await wrapper.findAll('.tombol-tanda-outlet')[0].trigger('click');
             expect(wrapper.find('.stub-tanda-outlet').text()).toBe('/outlet_all/tanda|70');
         });
 
-        it('mengisi saran Tandai motoris dari runtun jarak kunjungan bila tidak ada indikasi GPS', async () => {
+        it('indikasi jarak dekat hanya info di panel Temuan: tidak diteruskan ke tanda motoris sebagai saran', async () => {
             const wrapper = await dengan([runtun1], { tandaUrl: '/tracking_sales/tanda' });
 
-            expect(wrapper.find('.stub-tanda').text()).toBe(
-                'kunjungan_tidak_wajar|2 kunjungan outlet berturutan berjarak kurang dari 5 m satu sama lain, dari jam 09:00 sampai 12:00.',
-            );
+            expect(wrapper.find('.stub-tanda').text()).toBe('/tracking_sales/tanda|11|2026-10-21');
+            expect(wrapper.html()).not.toContain('saran');
         });
     });
 
-    describe('saran dari indikasi GPS tidak wajar', () => {
+    describe('indikasi GPS tidak wajar', () => {
         const segmen = [
             { dari: { lat: -6.6, lng: 106.8, waktu: '2026-10-22 10:17:28' }, ke: { lat: -6.5, lng: 106.85, waktu: '2026-10-22 10:18:28' }, km: 10.5, menit: 1, kmh: 627, kembali: false },
         ];
         const indikasi = { tingkat: 'indikasi', lompatan: 20, kembali_ke_asal: 11, titik_mock: 0, kunjungan_mock: 0, terjauh: { km: 10.5, menit: 1, kmh: 627, jam: '10:17' }, segmen };
-        const stub = { TandaMotoris: { props: ['url', 'salesId', 'tanggal', 'saran'], template: '<div class="stub-tanda">{{ saran ? saran.kategori + "|" + saran.catatan : "tanpa-saran" }}</div>' } };
+        const stub = { TandaMotoris: { props: ['url', 'salesId', 'tanggal'], template: '<div class="stub-tanda">{{ url }}|{{ tanggal }}</div>' } };
 
-        async function dengan(anomali, lainnya = { tandaUrl: '/tracking_sales/tanda' }, indikasiJarak = []) {
-            jawab({ total: 0, locations: [], depo: null, kunjungan, anomali_gps: anomali, indikasi_jarak_kunjungan: indikasiJarak });
+        async function dengan(anomali, lainnya = { tandaUrl: '/tracking_sales/tanda' }) {
+            jawab({ total: 0, locations: [], depo: null, kunjungan, anomali_gps: anomali, indikasi_jarak_kunjungan: [] });
             const wrapper = mount(RuteHarianPeta, { props: { ...props, ...lainnya }, global: { stubs: stub } });
             useLeafletMap.mock.calls.at(-1)[1].onSiap(map, L);
             await flushPromises();
@@ -515,48 +506,14 @@ describe('RuteHarianPeta', () => {
             return wrapper;
         }
 
-        const runtunJarak = {
-            jumlah: 2, kunjungan_id: [1, 3], outlet_id: [70, 71], dari_jam: '09:00', sampai_jam: '12:00',
-            saran: { kategori: 'kunjungan_tidak_wajar', catatan: '2 kunjungan outlet berturutan berjarak dekat.' },
-        };
-
-        it('mengisi form Tandai motoris dengan kategori lokasi palsu dan ringkasan peringatan', async () => {
-            const teks = (await dengan(indikasi)).find('.stub-tanda').text();
-
-            expect(teks).toContain('lokasi_palsu|Indikasi GPS tidak wajar. 20 lompatan posisi mustahil, 11 di antaranya langsung kembali');
-        });
-
-        it('menambahkan kalimat titik GPS menyimpang ke catatan tanda dan memakai titiknya untuk digambar', async () => {
+        it('memakai titik GPS menyimpang untuk digambar di peta', async () => {
             const titik = [{ lat: -6.55, lng: 106.8, waktu: '2026-10-22 14:09:06', km: 5.7 }];
-            const wrapper = await dengan({
+            await dengan({
                 ...indikasi, lompatan: 0, kembali_ke_asal: 0, terjauh: null, segmen: [],
                 menyimpang: 3, menyimpang_terjauh: { km: 8.4, jam: '15:00' }, titik_menyimpang: titik,
             });
 
-            expect(wrapper.find('.stub-tanda').text()).toContain('3 titik GPS menyimpang jauh');
             expect(gambarLompatan).toHaveBeenLastCalledWith(L, lapisan, [], titik);
-        });
-
-        it('judul "lokasi palsu terdeteksi" dipakai sebagai kategori catatan bila HP menandai mock location', async () => {
-            const teks = (await dengan({ ...indikasi, tingkat: 'terdeteksi', titik_mock: 3, kunjungan_mock: 1 })).find('.stub-tanda').text();
-
-            expect(teks).toContain('Lokasi palsu terdeteksi oleh aplikasi HP. Aplikasi HP menandai lokasi palsu (mock location) pada 3 titik GPS dan 1 kunjungan.');
-        });
-
-        it('tanpa peringatan form tidak diberi isian otomatis', async () => {
-            expect((await dengan(null)).find('.stub-tanda').text()).toBe('tanpa-saran');
-        });
-
-        it('memakai saran indikasi jarak kunjungan bila tidak ada indikasi GPS', async () => {
-            const teks = (await dengan(null, undefined, [runtunJarak])).find('.stub-tanda').text();
-
-            expect(teks).toBe('kunjungan_tidak_wajar|2 kunjungan outlet berturutan berjarak dekat.');
-        });
-
-        it('indikasi GPS diprioritaskan daripada indikasi jarak kunjungan bila keduanya ada', async () => {
-            const teks = (await dengan(indikasi, undefined, [runtunJarak])).find('.stub-tanda').text();
-
-            expect(teks).toContain('lokasi_palsu|');
         });
 
         it('menggambar lompatan di peta dan mengosongkannya bila tidak ada anomali', async () => {
@@ -567,15 +524,11 @@ describe('RuteHarianPeta', () => {
             expect(gambarLompatan).toHaveBeenLastCalledWith(L, lapisan, [], []);
         });
 
-        it('saran ikut berubah ketika tanggal diganti ke hari tanpa anomali', async () => {
+        it('tanda motoris tidak lagi menerima saran isian form: tanda hanya dibuat sistem', async () => {
             const wrapper = await dengan(indikasi);
-            expect(wrapper.find('.stub-tanda').text()).not.toBe('tanpa-saran');
 
-            jawab({ total: 0, locations: [], depo: null, kunjungan, anomali_gps: null });
-            wrapper.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', '2026-10-22');
-            await flushPromises();
-
-            expect(wrapper.find('.stub-tanda').text()).toBe('tanpa-saran');
+            expect(wrapper.find('.stub-tanda').text()).toBe('/tracking_sales/tanda|2026-10-21');
+            expect(wrapper.html()).not.toContain('saran');
         });
     });
 

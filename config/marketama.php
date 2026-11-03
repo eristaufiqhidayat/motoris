@@ -115,20 +115,34 @@ return [
         'min_kunjungan_berturutan' => 3,
     ],
 
-    // Kategori tanda motoris (kode => label) yang diberikan koordinator dari drawer Riwayat Lacak Motoris (TandaMotorisController).
+    // Tanda dibuat sistem (tombol Sinkronisasi Data di Beranda Koordinator, App\Support\Tracking\SinkronTemuan, spec 062)
+    // sebagai saran untuk dicek koordinator di lapangan; tidak ada lagi tanda manual. Kategori tanda motoris (kode => label):
     'tanda_motoris' => [
-        'penjualan_fiktif' => 'Penjualan fiktif',
-        'lokasi_palsu' => 'Lokasi / GPS palsu',
-        'kunjungan_tidak_wajar' => 'Kunjungan tidak wajar',
-        'potensi_kecurangan' => 'Potensi kecurangan lainnya',
+        'lokasi_palsu' => 'Diduga lokasi / GPS palsu',
     ],
 
-    // Kategori tanda outlet (kode => label), melekat ke outlet (mk_outlet) dari drawer Riwayat Lacak Motoris atau menu
-    // All Outlet (TandaOutletController). Hanya satu kategori (spec 059 — satu-satunya alasan masuk akal untuk
-    // menandai outlet secara manual); "pola kunjungan tidak wajar" dipindah jadi saran otomatis tanda_motoris
-    // (kunjungan_tidak_wajar) karena soal perilaku checkin motoris, bukan sifat permanen outlet.
+    // Kategori tanda outlet (kode => label), melekat ke outlet (mk_outlet).
     'tanda_outlet' => [
-        'outlet_fiktif' => 'Outlet fiktif',
+        'outlet_fiktif' => 'Diduga outlet fiktif',
+    ],
+
+    // Status tanda (kode => label): perlu_dicek dibuat sistem; terbukti / wajar = hasil cek koordinator (wajar juga mengisi
+    // dicabut_at, jadi tidak lagi dihitung sebagai tanda aktif).
+    'status_tanda' => [
+        'perlu_dicek' => 'Perlu dicek',
+        'terbukti' => 'Terbukti',
+        'wajar' => 'Wajar',
+    ],
+
+    // Deteksi titik outlet berkoordinat identik (spec 062): satu titik = outlet dari pendaftar yang sama dengan koordinat
+    // master sama (dibulatkan 6 desimal). Titik masuk bila berisi >= min_outlet outlet, ada yang bertransaksi, dan ada yang
+    // dikunjungi motoris tim; antrean Perlu dicek per tim dibatasi antrean_titik titik (urut skor). Transaksi "kecil":
+    // rata-rata nilai < kecil_rupiah atau <= kecil_sku jenis barang.
+    'tanda_outlet_sistem' => [
+        'min_outlet' => 3,
+        'antrean_titik' => 10,
+        'kecil_rupiah' => 20000,
+        'kecil_sku' => 1,
     ],
 
     'menu' => [
@@ -1826,6 +1840,7 @@ return [
                 'ditandai_oleh' => 'Ditandai Oleh',
                 'ditandai_pada' => 'Ditandai Pada',
                 'status' => 'Status',
+                'hasil_cek' => 'Hasil Cek',
                 'riwayat' => 'Riwayat',
             ],
         ],
@@ -1839,8 +1854,10 @@ return [
                 'area' => 'Area',
                 'depo' => 'Depo',
                 'kategori' => 'Kategori',
+                'catatan' => 'Catatan',
                 'ditandai_oleh' => 'Ditandai Oleh',
                 'ditandai_pada' => 'Ditandai Pada',
+                'status' => 'Status',
             ],
         ],
         'pembayaran_pembelian' => [

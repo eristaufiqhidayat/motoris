@@ -27,7 +27,9 @@ const props = defineProps({
 const KOLOM_HARIAN = { tanggal: 'Tanggal', masuk: 'Jam Masuk', pulang: 'Jam Pulang', kunjungan: 'Call', ec: 'EC', ipt: 'IPT', transaksi: 'Transaksi', penjualan: 'Penjualan' };
 const KOLOM_TRANSAKSI = { kode: 'Kode', waktu: 'Waktu', outlet: 'Outlet', sku: 'SKU', qty: 'Qty', diskon: 'Diskon', total: 'Total', status: 'Status' };
 const KOLOM_PRODUK = { nama: 'Produk', qty: 'Qty', nilai: 'Nilai' };
-const KOLOM_TANDA_MOTORIS = { tanggal: 'Tanggal', kategori_label: 'Kategori', catatan: 'Catatan', oleh: 'Ditandai Oleh', waktu: 'Ditandai Pada', dicabut: 'Status' };
+const KOLOM_TANDA_MOTORIS = { tanggal: 'Tanggal', kategori_label: 'Kategori', catatan: 'Catatan', waktu: 'Ditandai Pada', status: 'Status', hasil_catatan: 'Hasil Cek' };
+// Warna status tanda sistem (config marketama.status_tanda, spec 062).
+const WARNA_STATUS = { perlu_dicek: 'warning', terbukti: 'danger', wajar: 'secondary' };
 const KOLOM_TANDA_OUTLET = { outlet: 'Outlet', kategori_label: 'Kategori', catatan: 'Catatan', oleh: 'Ditandai Oleh', waktu: 'Ditandai Pada' };
 
 const memuat = ref(true);
@@ -298,7 +300,8 @@ onMounted(() => {
                     >
                         <template #cell-tanggal="{ row }">{{ tanggalSingkat(row.tanggal) }}</template>
                         <template #cell-catatan="{ row }">{{ row.catatan || '-' }}</template>
-                        <template #cell-dicabut="{ row }"><Badge :variant="row.dicabut ? 'secondary' : 'danger'">{{ row.dicabut ? 'Dicabut' : 'Aktif' }}</Badge></template>
+                        <template #cell-status="{ row }"><Badge :variant="WARNA_STATUS[row.status] ?? 'secondary'">{{ row.status_label }}</Badge></template>
+                        <template #cell-hasil_catatan="{ row }">{{ row.hasil_catatan || '-' }}</template>
                     </DataTable>
                     <DataTable
                         title="Tanda outlet yang didaftarkan motoris ini"

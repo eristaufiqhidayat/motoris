@@ -62,7 +62,7 @@ class DetailMotoris
         return ['call' => (int) $target['call'], 'ec' => (int) $target['ec'], 'ipt' => (float) $target['ipt']];
     }
 
-    /** Tanda motoris pada tanggal dalam periode (yang sudah dicabut tetap tampil sebagai riwayat), terbaru dulu. */
+    /** Tanda motoris pada tanggal dalam periode (yang sudah diperiksa tetap tampil sebagai riwayat), terbaru dulu. */
     private function tandaMotoris(): array
     {
         return DB::table('tanda_motoris')->where('karyawan_id', $this->motoris->id)->whereBetween('tanggal', [$this->dari, $this->sampai])
@@ -75,6 +75,9 @@ class DetailMotoris
                 'oleh' => $t->dibuat_nama,
                 'waktu' => JamLokal::format($t->created_at),
                 'dicabut' => $t->dicabut_at !== null,
+                'status' => $t->status,
+                'status_label' => config("marketama.status_tanda.{$t->status}", $t->status),
+                'hasil_catatan' => $t->hasil_catatan,
             ])->all();
     }
 

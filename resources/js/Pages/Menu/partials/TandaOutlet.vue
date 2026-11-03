@@ -1,40 +1,34 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue';
 import Badge from '@/Components/ui/atoms/Badge.vue';
-import Button from '@/Components/ui/atoms/Button.vue';
-import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
-import Label from '@/Components/ui/atoms/Label.vue';
 import Skeleton from '@/Components/ui/atoms/Skeleton.vue';
-import Textarea from '@/Components/ui/atoms/Textarea.vue';
 import { tanggalWaktuPendek } from '@/Support/format.js';
+import PeriksaTanda from './PeriksaTanda.vue';
 
-// Tanda outlet (TandaOutletController): koordinator menandai outlet yang dicurigai fiktif. Berbeda dari tanda
-// motoris, tanda ini melekat ke OUTLET (bukan per kunjungan/tanggal), jadi komponen ini tidak punya dimensi
-// tanggal atau daftar "tanda di tanggal lain" — isinya seluruh drawer/modal yang membukanya (dipasang di
-// RuteHarianPeta.vue per baris kunjungan, dan di Menu/Show.vue untuk menu All Outlet). Hanya satu kategori
-// (spec 059), jadi form tidak punya pilihan kategori — hanya catatan opsional, modal yang membukanya sudah
-// berfungsi sebagai dialog konfirmasi.
+// Tanda outlet (TandaOutletController) satu outlet: diduga outlet fiktif, dibuat sistem (spec 062) per titik lokasi.
+// Koordinator tidak lagi menandai manual; ia memeriksa tanda Perlu dicek (Terbukti / Wajar + catatan), dan hasilnya
+// berlaku untuk semua outlet di titik yang sama. Tanda melekat ke OUTLET (bukan per kunjungan/tanggal); dipasang di
+// RuteHarianPeta.vue per baris kunjungan dan di Menu/Show.vue untuk menu All Outlet.
 const props = defineProps({
     url: { type: String, required: true },
     outletId: { type: Number, required: true },
 });
 
-// 'berubah': dikirim hanya setelah tandai/cabut berhasil (bukan saat muat awal), supaya komponen induk tahu
-// kapan perlu menyegarkan tampilannya sendiri (mis. muat ulang tabel outlet_all) tanpa melakukannya tiap drawer dibuka.
+// 'berubah': dikirim hanya setelah pemeriksaan berhasil (bukan saat muat awal), supaya komponen induk tahu kapan perlu
+// menyegarkan tampilannya sendiri (mis. muat ulang tabel outlet_all).
 const emit = defineEmits(['berubah']);
+
+// Warna status tanda (config marketama.status_tanda).
+const WARNA_STATUS = { perlu_dicek: 'warning', terbukti: 'danger', wajar: 'secondary' };
 
 const tanda = ref([]);
 // Pendaftar outlet { nama, dibuat_oleh, dibuat_pada } dari master outlet; null sebelum dimuat.
 const outlet = ref(null);
-const bisaTambah = ref(false);
 const memuat = ref(true);
-const formBuka = ref(false);
-const catatan = ref('');
-const menyimpan = ref(false);
-// Galat validasi per kolom ({ kategori: ['...'] }) dan pesan umum untuk galat lain.
-const galat = ref({});
 const pesan = ref(null);
+// Id tanda yang form hasil ceknya sedang terbuka; null = tertutup.
+const periksaId = ref(null);
 
 // "22 Okt 2026 · 11:23" bila formatnya Y-m-d H:i; selain itu apa adanya dari sumber.
 function waktuPendaftaran(nilai) {
@@ -42,8 +36,6 @@ function waktuPendaftaran(nilai) {
 
     return waktu ? `${waktu.tanggal} · ${waktu.jam}` : nilai;
 }
-
-const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content;
 
 async function muat() {
     const outletId = props.outletId;
@@ -59,7 +51,6 @@ async function muat() {
         if (outletId !== props.outletId) return;
         tanda.value = data.tanda;
         outlet.value = data.outlet ?? null;
-        bisaTambah.value = data.bisa_tambah;
     } catch {
         pesan.value = 'Gagal memuat tanda outlet.';
     } finally {
@@ -67,68 +58,15 @@ async function muat() {
     }
 }
 
-function bukaForm() {
-    catatan.value = '';
-    formBuka.value = true;
-}
-
-function batal() {
-    formBuka.value = false;
-    catatan.value = '';
-    galat.value = {};
-}
-
-async function simpan() {
-    menyimpan.value = true;
-    galat.value = {};
-    pesan.value = null;
-
-    try {
-        const respon = await fetch(props.url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf() },
-            body: JSON.stringify({ outlet_id: props.outletId, catatan: catatan.value }),
-        });
-
-        if (respon.status === 422) {
-            const errors = (await respon.json()).errors ?? {};
-            galat.value = errors;
-            // Satu-satunya galat selain catatan adalah "outlet ini sudah ditandai" (tidak punya field di form ini).
-            pesan.value = errors.outlet_id?.[0] ?? null;
-
-            return;
-        }
-        if (!respon.ok) throw new Error(`HTTP ${respon.status}`);
-
-        batal();
-        await muat();
-        emit('berubah', tanda.value.length);
-    } catch {
-        pesan.value = 'Gagal menyimpan tanda.';
-    } finally {
-        menyimpan.value = false;
-    }
-}
-
-async function cabut(item) {
-    if (!window.confirm(`Cabut tanda "${item.kategori_label}"?`)) return;
-
-    pesan.value = null;
-
-    try {
-        const respon = await fetch(`${props.url}/${item.id}`, { method: 'DELETE', headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrf() } });
-        if (!respon.ok) throw new Error(`HTTP ${respon.status}`);
-
-        await muat();
-        emit('berubah', tanda.value.length);
-    } catch {
-        pesan.value = 'Gagal mencabut tanda.';
-    }
+async function selesaiPeriksa() {
+    periksaId.value = null;
+    await muat();
+    emit('berubah', tanda.value.length);
 }
 
 onMounted(muat);
 watch(() => props.outletId, () => {
-    batal();
+    periksaId.value = null;
     outlet.value = null;
     tanda.value = [];
     muat();
@@ -140,10 +78,9 @@ watch(() => props.outletId, () => {
         <div class="flex flex-wrap items-center gap-2">
             <h6 class="font-semibold text-sm mb-0">Tanda outlet</h6>
             <Badge v-if="tanda.length" variant="danger">{{ tanda.length }}</Badge>
-            <Button v-if="bisaTambah && !formBuka" variant="outline-danger" class="ml-auto" @click="bukaForm"><Icon name="flag" class="me-1" />{{ tanda.length ? 'Tambah tanda' : 'Tandai' }}</Button>
         </div>
 
-        <!-- Kerangka dua baris (pendaftar outlet dan satu tanda) selama data awal diambil; muat ulang setelah simpan/cabut tidak mengosongkan isi. -->
+        <!-- Kerangka dua baris (pendaftar outlet dan satu tanda) selama data awal diambil; muat ulang setelah periksa tidak mengosongkan isi. -->
         <div v-if="memuat && !outlet" class="animate-pulse space-y-2" role="status" aria-busy="true" aria-label="Memuat data outlet">
             <Skeleton class="h-3 w-3/4" />
             <Skeleton class="h-12 w-full" />
@@ -155,27 +92,26 @@ watch(() => props.outletId, () => {
 
         <p v-if="pesan" class="mb-0 text-xs text-red-600">{{ pesan }}</p>
 
-        <form v-if="formBuka" class="tanda-motoris-form" @submit.prevent="simpan">
-            <p class="mb-0 text-xs text-gray-500">Tandai outlet ini sebagai outlet fiktif?</p>
-            <div>
-                <Label>Catatan (opsional)</Label>
-                <Textarea v-model="catatan" maxlength="500" rows="3" aria-label="Catatan tanda" />
-                <FieldError v-if="galat.catatan">{{ galat.catatan[0] }}</FieldError>
-            </div>
-            <div class="flex gap-2">
-                <Button type="submit" variant="primary" :loading="menyimpan">Tandai outlet</Button>
-                <Button variant="light" @click="batal">Batal</Button>
-            </div>
-        </form>
-
         <ul v-if="tanda.length" class="tanda-motoris-daftar">
             <li v-for="item in tanda" :key="item.id" class="tanda-motoris-item">
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <div class="tanda-item-kepala">
                     <Badge variant="danger">{{ item.kategori_label }}</Badge>
-                    <span class="text-xs text-gray-500">{{ item.oleh }} · {{ item.waktu }}</span>
-                    <button v-if="item.bisa_cabut" type="button" class="tautan-depo ml-auto text-xs" @click="cabut(item)">Cabut</button>
+                    <Badge :variant="WARNA_STATUS[item.status] ?? 'secondary'">{{ item.status_label }}</Badge>
+                    <span class="tanda-item-meta">{{ item.oleh }} · {{ item.waktu }}</span>
+                    <div v-if="item.bisa_periksa && periksaId !== item.id" class="tanda-item-aksi">
+                        <button type="button" class="tautan-depo text-xs" @click="periksaId = item.id"><Icon name="badge-check" class="me-1" />Periksa</button>
+                    </div>
                 </div>
-                <p v-if="item.catatan" class="mb-0 mt-1 text-sm">{{ item.catatan }}</p>
+                <p v-if="item.catatan" class="tanda-item-catatan">{{ item.catatan }}</p>
+                <p v-if="item.hasil_catatan" class="tanda-item-catatan"><span class="font-semibold">Hasil cek ({{ item.dicek_oleh }} · {{ item.dicek_waktu }}):</span> {{ item.hasil_catatan }}</p>
+                <PeriksaTanda
+                    v-if="periksaId === item.id"
+                    class="mt-1"
+                    :url="`${url}/${item.id}/periksa`"
+                    :keterangan="item.sekelompok ? `Berlaku juga untuk ${item.sekelompok} outlet lain di titik yang sama.` : null"
+                    @selesai="selesaiPeriksa"
+                    @batal="periksaId = null"
+                />
             </li>
         </ul>
         <p v-else-if="!memuat && !pesan" class="mb-0 text-xs text-gray-500">Belum ada tanda untuk outlet ini.</p>

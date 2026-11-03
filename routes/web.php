@@ -85,20 +85,15 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
         ->middleware('hak:tracking_sales')->name('tanda-motoris.index');
     Route::get('/tracking_sales/tanda/outlet-terdekat', [TandaMotorisController::class, 'outletTerdekat'])
         ->middleware('hak:tracking_sales')->name('tanda-motoris.outlet-terdekat');
-    Route::post('/tracking_sales/tanda', [TandaMotorisController::class, 'store'])
-        ->middleware('hak:tracking_sales,tambah')->name('tanda-motoris.store');
-    Route::patch('/tracking_sales/tanda/{tanda}', [TandaMotorisController::class, 'update'])
-        ->whereNumber('tanda')->middleware('hak:tracking_sales,tambah')->name('tanda-motoris.update');
-    Route::delete('/tracking_sales/tanda/{tanda}', [TandaMotorisController::class, 'cabut'])
-        ->whereNumber('tanda')->middleware('hak:tracking_sales,tambah')->name('tanda-motoris.cabut');
+    // Tanda dibuat sistem (spec 062); koordinator hanya memeriksa (Terbukti / Wajar + catatan).
+    Route::patch('/tracking_sales/tanda/{tanda}/periksa', [TandaMotorisController::class, 'periksa'])
+        ->whereNumber('tanda')->middleware('hak:tracking_sales,tambah')->name('tanda-motoris.periksa');
 
     // Tanda outlet (potensi kecurangan dll.), melekat ke outlet; hak mengikuti menu outlet_all.
     Route::get('/outlet_all/tanda', [TandaOutletController::class, 'index'])
         ->middleware('hak:outlet_all')->name('tanda-outlet.index');
-    Route::post('/outlet_all/tanda', [TandaOutletController::class, 'store'])
-        ->middleware('hak:outlet_all,tambah')->name('tanda-outlet.store');
-    Route::delete('/outlet_all/tanda/{tanda}', [TandaOutletController::class, 'cabut'])
-        ->whereNumber('tanda')->middleware('hak:outlet_all,tambah')->name('tanda-outlet.cabut');
+    Route::patch('/outlet_all/tanda/{tanda}/periksa', [TandaOutletController::class, 'periksa'])
+        ->whereNumber('tanda')->middleware('hak:outlet_all,tambah')->name('tanda-outlet.periksa');
 
     Route::prefix('master_area/design_area')->name('design-area.')->controller(DesignAreaController::class)->group(function () {
         Route::get('/', 'index')->middleware('hak:master_area')->name('index');
@@ -194,6 +189,16 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
     // teratas). Rute sendiri (bukan catch-all MenuController@show) karena "home" tidak lagi sekadar tabel
     // kosong, lihat HomeController. Dideklarasikan sebelum catch-all /{slug} supaya rute ini yang dipakai.
     Route::get('/home', [HomeController::class, 'index'])->middleware('hak:home')->name('home');
+
+    // Isi drawer kartu ringkas Beranda Koordinator (lihat Home/DashboardKoordinator.vue) — JSON, dibuka lewat
+    // fetch tanpa pindah halaman, bukan Inertia::render. motoris_ditandai/outlet_ditandai diperiksa lagi di
+    // dalam controller (abort_unless Akses::bisa) karena haknya beda dari menu "home" sendiri.
+    Route::get('/home/absen-hari-ini', [HomeController::class, 'absenDetail'])->middleware('hak:home')->name('home.absen');
+    Route::get('/home/checkin-outlet', [HomeController::class, 'checkinOutletDetail'])->middleware('hak:home')->name('home.checkin-outlet');
+    Route::get('/home/motoris-ditandai', [HomeController::class, 'motorisDitandaiDetail'])->middleware('hak:home')->name('home.motoris-ditandai');
+    Route::get('/home/outlet-ditandai', [HomeController::class, 'outletDitandaiDetail'])->middleware('hak:home')->name('home.outlet-ditandai');
+    // Tombol Sinkronisasi Data di kartu Temuan Sistem Beranda Koordinator (deteksi fake GPS & kunjungan berdekatan tim).
+    Route::post('/home/sinkronisasi-temuan', [HomeController::class, 'sinkronTemuan'])->middleware('hak:home')->name('home.sinkronisasi-temuan');
 
     // Motoris Report (Coverage, Performance, Absensi) dihitung dari tabel motoris + kuota isian admin.
     Route::get('/motoris_report', [MotorisReportController::class, 'index'])->middleware('hak:motoris_report')->name('motoris-report');

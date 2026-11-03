@@ -56,4 +56,27 @@ describe('DetailDepoPeta', () => {
         expect(penanda.bindPopup.mock.calls[1][0]).toContain('222 m');
         expect(map.fitBounds).toHaveBeenCalledOnce();
     });
+
+    it('menggambar outlet berkoordinat identik sebagai satu penanda berangka', () => {
+        const penanda = { addTo: vi.fn(() => penanda), bindPopup: vi.fn(() => penanda), openPopup: vi.fn() };
+        const L = { marker: vi.fn(() => penanda), divIcon: vi.fn((o) => o), latLngBounds: vi.fn((titik) => titik) };
+        window.L = L;
+        const sama = { latitude: -7.402, longitude: 112.7, jarak_m: 222, kategori_label: 'Outlet fiktif' };
+        mount(DetailDepoPeta, {
+            props: {
+                depo: { nama: 'Toko A', latitude: -7.4, longitude: 112.7 },
+                ikon: 'outlet',
+                jumlah: 34,
+                sekitar: [{ ...sama, outlet: 'Toko B' }, { ...sama, outlet: 'Toko C' }],
+            },
+        });
+        useLeafletMap.mock.calls.at(-1)[1].onSiap({ invalidateSize: vi.fn(), fitBounds: vi.fn() }, L);
+
+        expect(L.marker).toHaveBeenCalledTimes(2);
+        expect(L.marker.mock.calls[0][1].icon.html).toContain('>34<');
+        expect(penanda.bindPopup.mock.calls[0][0]).toContain('34 outlet di koordinat ini');
+        expect(L.marker.mock.calls[1][1].icon.html).toContain('>2<');
+        expect(penanda.bindPopup.mock.calls[1][0]).toContain('Toko B, Toko C');
+        delete window.L;
+    });
 });

@@ -170,25 +170,27 @@ class DetailMotorisTest extends AdminTestCase
             ->assertJsonPath('ringkasan.target_call', 30 * $hk);
     }
 
-    public function test_tanda_motoris_dalam_periode_termasuk_yang_dicabut(): void
+    public function test_tanda_motoris_dalam_periode_termasuk_yang_sudah_diperiksa(): void
     {
-        $baris = fn (string $tgl, string $kategori, ?string $cabut = null) => [
-            'karyawan_id' => 1, 'tanggal' => $tgl, 'kategori' => $kategori, 'catatan' => 'Nota janggal', 'dibuat_oleh' => $this->admin->id,
-            'dibuat_nama' => 'admin', 'created_at' => "{$tgl} 05:00:00", 'dicabut_at' => $cabut,
+        $baris = fn (string $tgl, string $status = 'perlu_dicek', ?string $cabut = null) => [
+            'karyawan_id' => 1, 'tanggal' => $tgl, 'kategori' => 'lokasi_palsu', 'catatan' => 'Mock location', 'status' => $status,
+            'hasil_catatan' => $status === 'perlu_dicek' ? null : 'Sudah dicek', 'dibuat_oleh' => null,
+            'dibuat_nama' => 'Sistem', 'created_at' => "{$tgl} 05:00:00", 'dicabut_at' => $cabut,
         ];
         DB::table('tanda_motoris')->insert([
-            $baris('2026-11-03', 'penjualan_fiktif'), $baris('2026-11-04', 'lokasi_palsu', '2026-11-05 01:00:00'),
-            $baris('2026-10-20', 'penjualan_fiktif'), ['karyawan_id' => 3] + $baris('2026-11-03', 'penjualan_fiktif'),
+            $baris('2026-11-03'), $baris('2026-11-04', 'wajar', '2026-11-05 01:00:00'),
+            $baris('2026-10-20'), ['karyawan_id' => 3] + $baris('2026-11-03'),
         ]);
 
         $res = $this->getJson($this->url())->assertOk()->assertJsonCount(2, 'tanda_motoris');
 
         $res->assertJsonPath('tanda_motoris.0.tanggal', '2026-11-04')
-            ->assertJsonPath('tanda_motoris.0.kategori_label', 'Lokasi / GPS palsu')
-            ->assertJsonPath('tanda_motoris.0.dicabut', true)
-            ->assertJsonPath('tanda_motoris.1.kategori_label', 'Penjualan fiktif')
-            ->assertJsonPath('tanda_motoris.1.dicabut', false)
-            ->assertJsonPath('tanda_motoris.1.oleh', 'admin');
+            ->assertJsonPath('tanda_motoris.0.kategori_label', 'Diduga lokasi / GPS palsu')
+            ->assertJsonPath('tanda_motoris.0.status', 'wajar')
+            ->assertJsonPath('tanda_motoris.0.status_label', 'Wajar')
+            ->assertJsonPath('tanda_motoris.0.hasil_catatan', 'Sudah dicek')
+            ->assertJsonPath('tanda_motoris.1.status', 'perlu_dicek')
+            ->assertJsonPath('tanda_motoris.1.oleh', 'Sistem');
     }
 
     public function test_tanda_outlet_pada_outlet_yang_didaftarkan_motoris_ini(): void
@@ -199,17 +201,17 @@ class DetailMotorisTest extends AdminTestCase
         DB::table('trx_outlet_baru')->insert(['karyawan_id' => 1, 'nama' => 'Toko Makmur', 'lat' => -7.4, 'lng' => 112.7, 'status' => 'disetujui', 'outlet_id' => 70]);
 
         $tanda = fn (int $outlet) => [
-            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'catatan' => 'Tidak ada toko', 'dibuat_oleh' => $this->admin->id,
-            'dibuat_nama' => 'admin', 'created_at' => now()->utc(),
+            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'catatan' => 'Tidak ada toko', 'status' => 'perlu_dicek', 'dibuat_oleh' => null,
+            'dibuat_nama' => 'Sistem', 'created_at' => now()->utc(),
         ];
-        foreach ([$tanda(70), $tanda(71), $tanda(72), ['dicabut_at' => now()->utc()] + $tanda(70)] as $baris) {
+        foreach ([$tanda(70), $tanda(71), $tanda(72), ['dicabut_at' => now()->utc(), 'status' => 'wajar'] + $tanda(70)] as $baris) {
             DB::table('tanda_outlet')->insert($baris);
         }
 
         $res = $this->getJson($this->url())->assertOk()->assertJsonCount(2, 'tanda_outlet');
 
         $this->assertEqualsCanonicalizing(['Toko Makmur', 'Warung Bu Sri'], array_column($res->json('tanda_outlet'), 'outlet'));
-        $res->assertJsonPath('tanda_outlet.0.kategori_label', 'Outlet fiktif')->assertJsonPath('tanda_outlet.0.oleh', 'admin');
+        $res->assertJsonPath('tanda_outlet.0.kategori_label', 'Diduga outlet fiktif')->assertJsonPath('tanda_outlet.0.oleh', 'Sistem');
     }
 
     public function test_payload_utama_tidak_memuat_daftar_transaksi(): void

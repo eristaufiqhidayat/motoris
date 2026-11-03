@@ -1,19 +1,23 @@
 <script setup>
 import Badge from '@/Components/ui/atoms/Badge.vue';
+import Icon from '@/Components/ui/atoms/Icon.vue';
 import { angka, angkaRingkas } from '@/Support/format.js';
 
 // Isi "Lihat Detail" (total keseluruhan depo + per koordinator & sales), dipakai oleh halaman penuh
-// (SummaryDepoDetail.vue) dan modal detail depo (Pages/Motoris/SummaryDepo.vue).
+// (SummaryDepoDetail.vue), modal detail depo (Pages/Motoris/SummaryDepo.vue), dan Beranda Koordinator.
 defineProps({
     total: { type: Object, required: true },
     tim: { type: Array, required: true },
+    // true: sembunyikan kotak "Total keseluruhan depo" — dipakai Beranda Koordinator, yang cakupannya cuma
+    // satu tim (bukan seluruh depo), jadi angkanya sama persis dengan baris "Akumulasi" di bawah (duplikat).
+    tanpaTotalDepo: { type: Boolean, default: false },
 });
 
 const rupiah = (n) => `Rp ${angka(n)}`;
 </script>
 
 <template>
-    <div class="rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2 mb-3 text-xs">
+    <div v-if="!tanpaTotalDepo" class="rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2 mb-3 text-xs">
         <div class="font-semibold text-blue-700 uppercase tracking-wide mb-1 border-l-2 border-blue-600 ps-2">Total keseluruhan depo</div>
         <div class="flex flex-wrap gap-x-5 gap-y-1 text-gray-600">
             <span>Hari Kerja: <b class="text-gray-900">{{ angka(total.hari_kerja) }}</b></span>
@@ -41,7 +45,7 @@ const rupiah = (n) => `Rp ${angka(n)}`;
                 <thead>
                     <tr>
                         <th scope="col" rowspan="2">No</th>
-                        <th scope="col" rowspan="2">Nama Sales</th>
+                        <th scope="col" rowspan="2">Nama Motoris</th>
                         <th scope="col" rowspan="2" class="text-center">Status</th>
                         <th scope="colgroup" colspan="6" class="text-center">Total</th>
                         <th scope="colgroup" colspan="5" class="text-center">Rata-rata / Hari Kerja</th>
@@ -63,10 +67,10 @@ const rupiah = (n) => `Rp ${angka(n)}`;
                 <tbody>
                     <tr v-for="(s, i) in t.sales" :key="s.id" :class="{ 'text-gray-400': !s.aktif }">
                         <td>{{ i + 1 }}</td>
-                        <td>{{ s.nama }}</td>
+                        <td>{{ s.nama }} <Icon v-if="s.ditandai" name="flag" class="inline h-3 w-3 text-rose-600" aria-label="Motoris ditandai" /></td>
                         <td class="text-center"><Badge :variant="s.aktif ? 'success' : 'secondary'">{{ s.aktif ? 'Aktif' : 'Non-aktif' }}</Badge></td>
                         <td class="text-center"><Badge>{{ s.hari_kerja }}</Badge></td>
-                        <td class="text-center"><Badge variant="primary">{{ angka(s.call) }}</Badge></td>
+                        <td class="text-center"><Badge variant="info">{{ angka(s.call) }}</Badge></td>
                         <td class="text-center"><Badge variant="success">{{ angka(s.ec) }}</Badge></td>
                         <td class="text-end whitespace-nowrap">{{ rupiah(s.sales) }}</td>
                         <td class="text-end">{{ angka(s.sku) }}</td>
@@ -85,7 +89,7 @@ const rupiah = (n) => `Rp ${angka(n)}`;
                     <tr class="font-semibold bg-blue-50">
                         <th scope="row" colspan="3" class="text-center">Akumulasi</th>
                         <td class="text-center"><Badge>{{ angka(t.akumulasi.hari_kerja) }}</Badge></td>
-                        <td class="text-center"><Badge variant="primary">{{ angka(t.akumulasi.call) }}</Badge></td>
+                        <td class="text-center"><Badge variant="info">{{ angka(t.akumulasi.call) }}</Badge></td>
                         <td class="text-center"><Badge variant="success">{{ angka(t.akumulasi.ec) }}</Badge></td>
                         <td class="text-end whitespace-nowrap">{{ rupiah(t.akumulasi.sales) }}</td>
                         <td class="text-end">{{ angka(t.akumulasi.sku) }}</td>
