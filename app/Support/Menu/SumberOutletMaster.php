@@ -3,12 +3,14 @@
 namespace App\Support\Menu;
 
 use App\Models\User;
+use App\Support\Menu\Motoris\SumberOutletStatus;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Master outlet (mk_outlet) — tabel yang sama dengan yang dibaca API mobile sales motoris.
- * Nama area dan depo diambil dari mk_area / mk_depo lewat area_id.
+ * Nama area dan depo diambil dari mk_area / mk_depo lewat area_id. Akun dengan cakupan selain
+ * "semua" (mis. koordinator) hanya melihat outlet di area depo timnya (sama dengan menu Outlet lain).
  */
 class SumberOutletMaster implements SumberTabel
 {
@@ -21,10 +23,12 @@ class SumberOutletMaster implements SumberTabel
     {
         // Lencana "Ditandai" (tanda outlet, spec 053): jumlah tanda aktif outlet itu, lepas dari motoris/tanggal kunjungan.
         $ditandai = DB::table('tanda_outlet as t')->whereColumn('t.outlet_id', 'o.id')->whereNull('t.dicabut_at')->selectRaw('COUNT(*)');
+        $depo = SumberOutletStatus::depoCakupan($user);
 
         return DB::table('mk_outlet as o')
             ->leftJoin('mk_area as a', 'a.id', '=', 'o.area_id')
             ->leftJoin('mk_depo as d', 'd.id', '=', 'a.depo_id')
+            ->when($depo !== null, fn ($w) => $w->whereIn('a.depo_id', $depo ?: [0]))
             ->select([
                 'o.id', 'o.kode', 'o.nama', 'o.alamat',
                 // Area dari master; 8.751 outlet memang tanpa area (tampil "-" seperti di aplikasi lama).
