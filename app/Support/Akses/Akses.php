@@ -23,7 +23,16 @@ class Akses
     ];
 
     /** Menu kelola akun & role: hanya untuk role yang diberi hak eksplisit. */
-    public const MENU_ADMIN = ['super_admin', 'user_koordinator', 'user_sales', 'user_lainnya', 'role', 'login_session', 'backup_data'];
+    public const MENU_ADMIN = [
+        'super_admin', 'user_koordinator', 'user_sales', 'user_lainnya', 'role', 'login_session', 'backup_data',
+        'karyawan_supervisor', 'karyawan_koordinator', 'karyawan_sales', 'karyawan_lainnya',
+        'kategori_surat_peringatan', 'surat_peringatan', 'lap_karyawan', 'lap_user',
+        // Grup sidebar "Absensi dan Penggajian": data gaji/absensi sensitif, hanya untuk Super Admin.
+        'absensi_sales', 'absensi_sales_terlambat', 'absensi_koordinator', 'absensi_ssk_supervisor', 'permintaan_izin',
+        'parameter_pemotong_gaji', 'potongan_gaji', 'penggajian_sales', 'penggajian_koordinator',
+        'lap_absensi_sales', 'lap_absensi_koordinator', 'lap_izin_sakit', 'lap_insentif_sales', 'lap_insentif_koordinator',
+        'lap_penggajian_sales', 'lap_penggajian_koordinator',
+    ];
 
     /** Hapus cache role permintaan ini (setelah role diubah). */
     public static function lupakan(): void

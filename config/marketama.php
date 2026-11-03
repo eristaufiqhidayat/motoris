@@ -601,9 +601,27 @@ return [
             ],
         ],
         [
-            'label' => 'User dan Karyawan',
-            'icon' => 'users',
+            'label' => 'Master Data & Pengaturan',
+            'icon' => 'settings',
+            // Tidak ditampilkan di daftar scroll sidebar, tapi di popup menu user (footer sidebar).
+            'posisi' => 'footer',
             'items' => [
+                [
+                    'slug' => 'panduan',
+                    'title' => 'Panduan',
+                    'icon' => 'info',
+                ],
+                [
+                    'slug' => 'pengumuman',
+                    'title' => 'Pengumuman',
+                    'icon' => 'megaphone',
+                ],
+                [
+                    'slug' => 'backup_data',
+                    'title' => 'Backup Data',
+                    'icon' => 'database',
+                ],
+                // Dipindah dari grup sidebar "User dan Karyawan": hanya untuk Super Admin (lihat Akses::MENU_ADMIN).
                 [
                     'title' => 'Users',
                     'icon' => 'users',
@@ -694,29 +712,6 @@ return [
                             'icon' => null,
                         ],
                     ],
-                ],
-            ],
-        ],
-        [
-            'label' => 'Master Data & Pengaturan',
-            'icon' => 'settings',
-            // Tidak ditampilkan di daftar scroll sidebar, tapi di popup menu user (footer sidebar).
-            'posisi' => 'footer',
-            'items' => [
-                [
-                    'slug' => 'panduan',
-                    'title' => 'Panduan',
-                    'icon' => 'info',
-                ],
-                [
-                    'slug' => 'pengumuman',
-                    'title' => 'Pengumuman',
-                    'icon' => 'megaphone',
-                ],
-                [
-                    'slug' => 'backup_data',
-                    'title' => 'Backup Data',
-                    'icon' => 'database',
                 ],
                 [
                     'title' => 'Manajemen Produk',

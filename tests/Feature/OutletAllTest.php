@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -101,6 +102,30 @@ class OutletAllTest extends TestCase
                     ->where('tables.0.rows.data.0.depo', 'Depo Bekasi')
                     ->where('tables.0.rows.data.0.area', 'Bekasi Timur 01')
                     ->where('tables.0.rows.data.1.outlet_id', 1)
+                )
+            );
+    }
+
+    public function test_koordinator_hanya_melihat_outlet_di_depo_timnya(): void
+    {
+        DB::table('mk_depo')->insert(['id' => 8, 'nama' => 'Depo Lain']);
+        DB::table('mk_area')->insert(['id' => 71, 'nama' => 'Area Lain', 'depo_id' => 8]);
+        DB::table('mk_karyawan')->insert(['id' => 137, 'kategori' => 'koordinator', 'nama' => 'Koor Satu', 'depo_id' => 7, 'aktif' => true]);
+        DB::table('mk_outlet')->insert([
+            ['id' => 1, 'nama' => 'Toko Depo Bekasi', 'area_id' => 70],
+            ['id' => 2, 'nama' => 'Toko Depo Lain', 'area_id' => 71],
+            ['id' => 3, 'nama' => 'Toko Tanpa Area', 'area_id' => null],
+        ]);
+
+        $koor = User::factory()->create(['kategori' => 'koordinator', 'karyawan_id' => 137]);
+        $this->actingAs($koor);
+
+        $this->get('/outlet_all')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->loadDeferredProps(fn (Assert $page) => $page
+                    ->where('tables.0.rows.total', 1)
+                    ->where('tables.0.rows.data.0.id', 1)
                 )
             );
     }

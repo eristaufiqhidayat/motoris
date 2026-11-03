@@ -8,6 +8,14 @@ use Illuminate\Support\Facades\DB;
 // untuk lihat/ekspor dan tertutup untuk ubah, supaya admin tinggal mempersempit dari menu Role.
 class RoleBawaan
 {
+    /** Menu yang tidak diberikan ke role bawaan Koordinator: Manajemen Produk, Konfigurasi, Master Data. */
+    public const MENU_TERTUTUP_KOORDINATOR = [
+        'produk', 'produk_kompetitor', 'kategori_produk', 'merk_produk', 'satuan_produk',
+        'master_area', 'master_depo', 'kuota_motoris', 'wilayah_depo', 'master_project', 'holiday_dates', 'waktu_aktif_app', 'target_setting',
+        'provinsi', 'city_group', 'kota_kabupaten', 'kecamatan', 'kelurahan', 'kategori_user', 'kategori_karyawan', 'tipe_outlet', 'kategori_outlet',
+        'rumus_insentif_point_sales', 'sales_point_conversion_per_warehouse', 'rumus_insentif_sales', 'rumus_insentif_koordinator',
+    ];
+
     /** @return array<string, array<string, mixed>> */
     public static function daftar(): array
     {
@@ -55,7 +63,7 @@ class RoleBawaan
             ]);
 
             $menu = match ($r['hak']) {
-                'lihat' => array_diff($slug, Akses::MENU_ADMIN),
+                'lihat' => array_diff($slug, Akses::MENU_ADMIN, $kode === 'koordinator' ? self::MENU_TERTUTUP_KOORDINATOR : []),
                 'beranda' => ['home'],
                 default => [],
             };
