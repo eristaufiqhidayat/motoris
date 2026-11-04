@@ -3,6 +3,8 @@
 namespace Tests\Feature\Admin;
 
 use App\Models\User;
+use App\Support\Mobile\Pengaturan;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 // Buat dan ubah Laporan Kendala (spec 064): data pelapor diambil dari akun login, ubah hanya oleh pelapor selama Terbuka.
@@ -54,17 +56,29 @@ class LaporanKendalaSimpanTest extends AdminTestCase
 
     public function test_validasi_per_field(): void
     {
+        // 17:03 UTC = 00:03 WIB: tanggal "besok" menurut UTC sudah sama dengan hari ini menurut zona aplikasi, jadi
+        // tanggal masa depan harus dihitung di zona aplikasi (test ini sempat gagal di CI pada jam itu).
+        $this->travelTo(Carbon::parse('2026-11-04 17:03:00', 'UTC'));
         $this->actingAs($this->koordinator());
 
-        $this->post('/laporan_kendala', $this->data(['kategori' => 'ngawur', 'tanggal_kejadian' => now()->addDay()->toDateString(), 'judul' => str_repeat('a', 121), 'uraian' => '']))
+        $this->post('/laporan_kendala', $this->data(['kategori' => 'ngawur', 'tanggal_kejadian' => Carbon::now(Pengaturan::zona())->addDay()->toDateString(), 'judul' => str_repeat('a', 121), 'uraian' => '']))
             ->assertSessionHasErrors(['kategori', 'tanggal_kejadian', 'judul', 'uraian']);
+
+        $this->assertSame(0, DB::table('laporan_kendala')->count());
+    }
+
+    public function test_super_admin_tidak_boleh_membuat_laporan(): void
+    {
+        $this->post('/laporan_kendala', $this->data())->assertForbidden();
 
         $this->assertSame(0, DB::table('laporan_kendala')->count());
     }
 
     public function test_akun_tanpa_karyawan_ditolak_dengan_pesan(): void
     {
-        // Super Admin bawaan test tidak punya karyawan_id.
+        $role = $this->role('Pelapor', 'semua', ['laporan_kendala' => ['lihat', 'tambah']]);
+        $this->actingAs($this->akun('tanpakar', 'lainnya', null, ['role_id' => $role]));
+
         $this->post('/laporan_kendala', $this->data())->assertSessionHasErrors(['karyawan']);
 
         $this->assertSame(0, DB::table('laporan_kendala')->count());

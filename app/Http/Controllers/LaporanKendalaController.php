@@ -96,7 +96,7 @@ class LaporanKendalaController extends Controller
             // Pilihan depo hanya berguna bila cakupan lebih luas dari downline (satu tim biasanya satu depo).
             'daftarDepo' => in_array($cakupan, ['semua', 'depo'], true) ? $this->daftarDepo($user) : [],
             'bisa' => [
-                'tambah' => Akses::bisa($user, LaporanKendala::MENU, 'tambah'),
+                'tambah' => LaporanKendala::bolehMelapor($user),
             ],
             'hariIni' => self::hariIni(),
         ]);
@@ -208,6 +208,7 @@ class LaporanKendalaController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
+        abort_unless(LaporanKendala::bolehMelapor($user), 403, 'Laporan kendala hanya dibuat oleh Sales Koordinator atau Supervisor.');
         $data = $request->validate($this->aturan());
 
         $karyawan = $user->karyawan_id ? DB::table('mk_karyawan')->find($user->karyawan_id) : null;

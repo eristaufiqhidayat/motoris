@@ -94,7 +94,7 @@ class LaporanKendala
                     'id' => $l->id, 'judul' => $l->judul, 'kategori_label' => self::labelKategori($l->kategori),
                     'pelapor' => $l->pelapor_nama, 'tanggal_kejadian' => $l->tanggal_kejadian,
                 ])->values()->all(),
-            'bisa_tambah' => Akses::bisa($user, self::MENU, 'tambah'),
+            'bisa_tambah' => self::bolehMelapor($user),
         ];
     }
 
@@ -125,5 +125,14 @@ class LaporanKendala
     public static function labelStatus(?string $kode): string
     {
         return self::STATUS[$kode] ?? (string) $kode;
+    }
+
+    /**
+     * Melapor kendala adalah tugas Sales Koordinator / Supervisor, bukan admin: Super Admin (hak penuh otomatis)
+     * hanya membaca dan berdiskusi, meski hak Tambah/Ubah menyala untuk semua menu.
+     */
+    public static function bolehMelapor(?User $user): bool
+    {
+        return ! Akses::penuh($user) && Akses::bisa($user, self::MENU, 'tambah');
     }
 }

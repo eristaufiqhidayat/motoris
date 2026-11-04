@@ -2,18 +2,28 @@
 import { Link } from '@inertiajs/vue3';
 import Badge from '@/Components/ui/atoms/Badge.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
+import Icon from '@/Components/ui/atoms/Icon.vue';
+import StatLabel from '@/Components/ui/atoms/StatLabel.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
 import { angka, tanggalSingkat } from '@/Support/format.js';
 
 // Kartu Laporan Kendala di Beranda (spec 064). Cakupan tim (koordinator): jumlah Terbuka tim, 5 terbaru, tombol Buat
 // Laporan. Cakupan lain (supervisor/admin): jumlah Terbuka dan Belum dibaca, 5 terbaru yang belum dibaca.
+// `ringkas` (Beranda admin): kartu statistik berisi jumlah Terbuka, menuju /laporan_kendala.
 defineProps({
     kendala: { type: Object, required: true },
+    ringkas: { type: Boolean, default: false },
 });
 </script>
 
 <template>
-    <Card class="mb-4" body-class="card-body py-2">
+    <Link v-if="ringkas" href="/laporan_kendala" class="block no-underline">
+        <Card class="shadow-sm h-full" body-class="py-3 text-center">
+            <StatLabel>Laporan Kendala</StatLabel>
+            <div class="text-lg font-bold text-amber-600"><Icon name="flag" class="w-4 h-4 inline -mt-1" /> {{ angka(kendala.terbuka) }} Terbuka</div>
+        </Card>
+    </Link>
+    <Card v-else class="mb-4" body-class="card-body py-2">
         <template #header>
             <div class="flex items-center justify-between gap-2">
                 <span>{{ kendala.tim ? 'Laporan Kendala' : 'Kendala Lapangan' }}</span>

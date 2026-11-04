@@ -13,11 +13,12 @@ import StatRow from '@/Components/ui/molecules/StatRow.vue';
 import BarChart from '@/Components/ui/molecules/BarChart.vue';
 import DashboardSkeleton from './partials/DashboardSkeleton.vue';
 import KartuKendala from './partials/KartuKendala.vue';
+import KinerjaDepo from './partials/KinerjaDepo.vue';
 import FunnelOutletChart from './partials/FunnelOutletChart.vue';
 import TrenHarianChart from './partials/TrenHarianChart.vue';
 import { angka, angkaRingkas } from '@/Support/format.js';
 import { bersihkanQuery } from '@/Support/query.js';
-import { rupiah, warnaCapai } from '@/Support/summaryDepo.js';
+import { warnaCapai } from '@/Support/summaryDepo.js';
 import { useAmbilData } from '@/Support/ambilData.js';
 
 const props = defineProps({
@@ -34,6 +35,10 @@ const props = defineProps({
     ringkasanDepo: { type: Object, default: null },
     funnel: { type: Array, default: null },
     tren: { type: Array, default: null },
+    // Kinerja per Depo (spec 066): grup tunda sendiri, rentang sendiri (bawaan 30 hari).
+    kinerja: { type: Array, default: null },
+    kinerjaFilter: { type: Object, required: true },
+    tautanSummaryDepo: { type: Boolean, default: false },
 });
 
 const kpi = computed(() => props.ringkasanDepo?.kpi ?? null);
@@ -74,6 +79,7 @@ const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
                         <li>KPI nasional dihitung dari tabel motoris yang sama dengan Summary All Depo — total digabung dulu, baru dihitung AVG per hari kerja (rata-rata berbobot, bukan rata-rata dari rata-rata).</li>
                         <li><b>Funnel Outlet:</b> NOO (outlet baru pada rentang ini) → AC (dikunjungi, belum pernah EC) → EC (effective call) → RO (EC di ≥2 tanggal berbeda), sama dengan definisi Lap. Outlet. NOO hanya menghitung outlet yang didaftarkan lewat aplikasi HP motoris (belum termasuk riwayat outlet dari Marketama sebelum aplikasi ini dipakai).</li>
                         <li><b>OSS</b> bukan tahap funnel: ini outlet AC yang kunjungan terakhirnya tidak tercatat stok sendiri — peringatan kualitas kunjungan.</li>
+                        <li><b>Kinerja per Depo</b> memakai rentang sendiri (bawaan 30 hari terakhir) dan angka yang sama dengan Summary All Depo: AVG Call/EC per hari kerja motoris, AVG IPT = SKU ÷ EC, dihitung dari total depo (rata-rata berbobot).</li>
                         <li><b>Depo Teratas</b> diurutkan dari EC Achievement tertinggi (8 besar), sama seperti Summary All Depo.</li>
                     </ul>
                 </InfoPopover>
@@ -87,18 +93,13 @@ const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
             </template>
         </PageHeader>
 
-        <KartuKendala v-if="kendala" :kendala="kendala" />
-
         <Deferred :data="['ringkasanDepo', 'funnel', 'tren']">
             <template #fallback>
                 <DashboardSkeleton />
             </template>
 
             <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 mb-4">
-                <Card class="shadow-sm" body-class="py-3 text-center">
-                    <StatLabel>Total Sales</StatLabel>
-                    <div class="text-lg font-bold text-green-600"><Icon name="banknote" class="w-4 h-4 inline -mt-1" /> {{ rupiah(kpi.sales) }}</div>
-                </Card>
+                <KartuKendala v-if="kendala" :kendala="kendala" ringkas />
                 <Card class="shadow-sm" body-class="py-3 text-center">
                     <StatLabel>Total EC</StatLabel>
                     <div class="text-lg font-bold text-sky-600">{{ angka(kpi.ec) }}</div>
@@ -141,10 +142,21 @@ const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
                 </Card>
             </div>
 
-            <Card class="shadow-sm">
+            <Card class="shadow-sm mb-4">
                 <template #header>Depo Teratas · EC Achievement</template>
                 <BarChart :items="topDepoChart" suffix="%" :desimal="1" />
             </Card>
+        </Deferred>
+
+        <Deferred data="kinerja">
+            <template #fallback>
+                <Card class="shadow-sm" body-class="p-4 animate-pulse" aria-busy="true">
+                    <div class="h-4 w-1/4 rounded bg-gray-300 mb-3"></div>
+                    <div class="h-40 rounded bg-gray-200"></div>
+                </Card>
+            </template>
+
+            <KinerjaDepo :kinerja="kinerja" :filter="kinerjaFilter" :tautan="tautanSummaryDepo" />
         </Deferred>
     </AppLayout>
 </template>
