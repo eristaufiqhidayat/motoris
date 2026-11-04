@@ -1,6 +1,6 @@
 <script setup>
 import { inject, ref } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import Icon from '@/Components/ui/atoms/Icon.vue';
 import SidebarSubmenu from './SidebarSubmenu.vue';
 import { SIDEBAR_CONTEXT } from './sidebarContext.js';
@@ -13,6 +13,8 @@ const props = defineProps({
 });
 
 const { currentSlug } = inject(SIDEBAR_CONTEXT);
+// Angka Belum dibaca Laporan Kendala (shared prop kendalaBelumDibaca, spec 064).
+const page = usePage();
 
 // Satu level menu hanya boleh punya satu flyout terbuka: membuka sibling otomatis menutup yang lain.
 const openFlyoutId = ref(null);
@@ -63,6 +65,7 @@ defineExpose({ closeFlyouts });
                     <Icon :name="item.icon" class="nav-link-icon-svg" />
                 </span>
                 <span class="nav-link-text">{{ item.title }}</span>
+                <span v-if="item.slug === 'laporan_kendala' && page.props.kendalaBelumDibaca" class="nav-link-angka" :title="`${page.props.kendalaBelumDibaca} laporan belum dibaca`">{{ page.props.kendalaBelumDibaca }}</span>
             </Link>
         </li>
     </template>

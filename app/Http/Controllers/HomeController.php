@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Akses\Akses;
+use App\Support\Kendala\LaporanKendala;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Motoris\Dashboard;
@@ -53,6 +54,8 @@ class HomeController extends Controller
             'periode' => self::periode($summary),
             'filter' => ['date_from' => $dari, 'date_to' => $sampai],
             'target' => $summary->target,
+            // Kartu Kendala Lapangan (spec 064): ringan, null bila akun tanpa hak Lihat laporan_kendala.
+            'kendala' => LaporanKendala::ringkasan($request->user()),
             // Berat (query semua depo/outlet/tren); ditunda supaya halaman tampil dulu (lihat Home/Dashboard.vue).
             // kpi & topDepo digabung jadi satu prop (ringkasanDepo) supaya SummaryDepo::kartu() — yang query
             // semua depo/sales — cuma dihitung sekali, bukan sekali per prop.
@@ -87,6 +90,8 @@ class HomeController extends Controller
             'periode' => self::periode($summary),
             'target' => $summary->target,
             'depo' => $identitas,
+            // Kartu Laporan Kendala (spec 064): ringan, null bila akun tanpa hak Lihat laporan_kendala.
+            'kendala' => LaporanKendala::ringkasan($request->user()),
             // Ringan (dua COUNT); dikirim langsung, tidak ikut ditunda, supaya status absen hari ini langsung terlihat.
             'absenHariIni' => self::absenHariIni($request),
             'checkinOutlet' => self::checkinOutletHariIni($request),
@@ -251,7 +256,9 @@ class HomeController extends Controller
 
         $kunci = "beranda:tim:{$summary->dari}:{$summary->sampai}:user_{$request->user()?->id}";
 
-        return Cache::remember($kunci, self::CACHE_TTL, fn () => $summary->detail($identitas->id));
+        // Diubah ke array murni (bukan Collection/stdClass): cache.serializable_classes=false membuat kelas-kelas itu
+        // kembali sebagai __PHP_Incomplete_Class dari cache, sehingga tim di Vue bukan array.
+        return Cache::remember($kunci, self::CACHE_TTL, fn () => json_decode(json_encode($summary->detail($identitas->id)), true));
     }
 
     /**

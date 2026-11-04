@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\Akses\Akses;
+use App\Support\Kendala\LaporanKendala;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -47,6 +48,9 @@ class HandleInertiaRequests extends Middleware
             'tabHalaman' => fn () => Akses::tabHalaman($request->user(), $request->route('slug') ?? $request->path()),
             // Slug riwayat yang boleh diakses akun: dasar tombol "Lihat riwayat" (modal Riwayat) di tabel Lacak Motoris.
             'slugRiwayat' => fn () => array_values(array_filter(config('marketama.slug_riwayat', []), fn ($s) => Akses::bisa($request->user(), $s))),
+            // Angka Belum dibaca pada entri Laporan Kendala di sidebar (null = tanpa lencana). Dihitung per permintaan
+            // (satu COUNT beralamat indeks) supaya langsung turun setelah detail dibuka.
+            'kendalaBelumDibaca' => fn () => LaporanKendala::angkaSidebar($request->user()),
             'appName' => config('app.name'),
             // Boleh menambah muatan canvassing: menampilkan modal Atur Muatan Motoris dan shortcut-nya di Topbar.
             'bisaTambahMuatan' => fn () => Akses::bisa($request->user(), 'barang_canvassing', 'tambah'),

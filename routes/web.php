@@ -22,6 +22,7 @@ use App\Http\Controllers\DetailMotorisController;
 use App\Http\Controllers\GenerateKelurahanController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LapLoadingBarangController;
+use App\Http\Controllers\LaporanKendalaController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\OutletBaruController;
 use App\Http\Controllers\PetaSebaranSalesController;
@@ -88,6 +89,18 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
     // Tanda dibuat sistem (spec 062); koordinator hanya memeriksa (Terbukti / Wajar + catatan).
     Route::patch('/tracking_sales/tanda/{tanda}/periksa', [TandaMotorisController::class, 'periksa'])
         ->whereNumber('tanda')->middleware('hak:tracking_sales,tambah')->name('tanda-motoris.periksa');
+
+    // Laporan Kendala Lapangan (spec 064): koordinator melaporkan kendala operasional, atasan membaca sesuai cakupan.
+    Route::get('/laporan_kendala', [LaporanKendalaController::class, 'index'])
+        ->middleware('hak:laporan_kendala')->name('laporan-kendala.index');
+    Route::post('/laporan_kendala', [LaporanKendalaController::class, 'store'])
+        ->middleware('hak:laporan_kendala,tambah')->name('laporan-kendala.store');
+    Route::put('/laporan_kendala/{id}', [LaporanKendalaController::class, 'update'])
+        ->whereNumber('id')->middleware('hak:laporan_kendala,ubah')->name('laporan-kendala.update');
+    Route::post('/laporan_kendala/{id}/dibaca', [LaporanKendalaController::class, 'dibaca'])
+        ->whereNumber('id')->middleware('hak:laporan_kendala')->name('laporan-kendala.dibaca');
+    Route::patch('/laporan_kendala/{id}/selesai', [LaporanKendalaController::class, 'selesai'])
+        ->whereNumber('id')->middleware('hak:laporan_kendala,ubah')->name('laporan-kendala.selesai');
 
     // Tanda outlet (potensi kecurangan dll.), melekat ke outlet; hak mengikuti menu outlet_all.
     Route::get('/outlet_all/tanda', [TandaOutletController::class, 'index'])
