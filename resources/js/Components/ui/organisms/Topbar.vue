@@ -31,16 +31,19 @@ onUnmounted(() => document.removeEventListener('click', closeNotifOnOutsideClick
             <Breadcrumb :current-slug="breadcrumbSlug" />
         </div>
         <div class="flex items-center gap-2">
-            <Tooltip label="Tambah Loading Barang" align="end"><Link class="shortcut-btn" href="/loading_barang/add" aria-label="Tambah Loading Barang">
-                    <Icon name="truck" />
+            <Tooltip v-if="page.props.bisaTambahLoading" label="Tambah Loading Barang" align="end"><Link class="shortcut-btn" href="/loading_barang/add" aria-label="Tambah Loading Barang">
+                    <Icon name="warehouse" />
                 </Link></Tooltip>
             <Tooltip v-if="page.props.bisaTambahMuatan" label="Atur Muatan Motoris" align="end"><button type="button" class="shortcut-btn" aria-label="Atur Muatan Motoris" @click="bukaTambahMuatan">
                     <Icon name="boxes" />
                 </button></Tooltip>
-            <Tooltip label="Peta Sebaran Sales" align="end"><Link class="shortcut-btn" href="/peta_sebaran_sales" aria-label="Peta Sebaran Sales">
+            <Tooltip v-if="page.props.bisaLihatBarangCanvassing" label="Barang Canvassing" align="end"><Link class="shortcut-btn" href="/barang_canvassing" aria-label="Barang Canvassing">
+                    <Icon name="truck" />
+                </Link></Tooltip>
+            <Tooltip v-if="page.props.bisaKelolaArea" label="Peta Sebaran Sales" align="end"><Link class="shortcut-btn" href="/peta_sebaran_sales" aria-label="Peta Sebaran Sales">
                     <Icon name="map" />
                 </Link></Tooltip>
-            <Tooltip label="Design Polygon Area" align="end"><Link class="shortcut-btn" href="/master_area/design_area">
+            <Tooltip v-if="page.props.bisaKelolaArea" label="Design Polygon Area" align="end"><Link class="shortcut-btn" href="/master_area/design_area">
                     <Icon name="shapes" />
                 </Link></Tooltip>
             <div class="relative" ref="notifWrapper">

@@ -54,6 +54,12 @@ class HandleInertiaRequests extends Middleware
             'appName' => config('app.name'),
             // Boleh menambah muatan canvassing: menampilkan modal Atur Muatan Motoris dan shortcut-nya di Topbar.
             'bisaTambahMuatan' => fn () => Akses::bisa($request->user(), 'barang_canvassing', 'tambah'),
+            // Shortcut Peta Sebaran Sales dan Design Polygon Area di Topbar: khusus akun yang mengelola Master Area (admin).
+            'bisaKelolaArea' => fn () => Akses::bisa($request->user(), 'master_area'),
+            // Shortcut Tambah Loading Barang: tugas koordinator, jadi disembunyikan untuk Super Admin dan akun tanpa hak Tambah.
+            'bisaTambahLoading' => fn () => ! Akses::penuh($request->user()) && Akses::bisa($request->user(), 'loading_barang', 'tambah'),
+            // Shortcut Barang Canvassing: untuk koordinator (non Super Admin) yang boleh melihat menu itu.
+            'bisaLihatBarangCanvassing' => fn () => ! Akses::penuh($request->user()) && Akses::bisa($request->user(), 'barang_canvassing'),
             // Pesan hasil aksi (redirect ->with('sukses'|'galat')), ditampilkan di atas halaman.
             'flash' => fn () => [
                 'sukses' => $request->session()->get('sukses'),
