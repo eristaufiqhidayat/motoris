@@ -3,6 +3,7 @@ import { computed, reactive, watch } from 'vue';
 import Button from '@/Components/ui/atoms/Button.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Select from '@/Components/ui/atoms/Select.vue';
 import Combobox from '@/Components/ui/molecules/Combobox.vue';
@@ -78,16 +79,16 @@ function submit() {
     <form class="flex flex-wrap items-end gap-2" role="search" @submit.prevent="submit">
         <div v-if="satuTanggal">
             <Label for="tanggal">Tanggal</Label>
-            <Input id="tanggal" v-model="form.tanggal" type="date" />
+            <DatePicker id="tanggal" v-model="form.tanggal" />
         </div>
         <template v-else>
             <div>
                 <Label for="dari">Dari</Label>
-                <Input id="dari" v-model="form.dari" type="date" />
+                <DatePicker id="dari" v-model="form.dari" />
             </div>
             <div>
                 <Label for="sampai">Sampai</Label>
-                <Input id="sampai" v-model="form.sampai" type="date" />
+                <DatePicker id="sampai" v-model="form.sampai" />
             </div>
         </template>
         <div class="grow min-w-48">

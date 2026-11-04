@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
 import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
 import Combobox from '@/Components/ui/molecules/Combobox.vue';
@@ -102,11 +103,11 @@ function simpanTarget() {
             <form class="flex flex-wrap items-end gap-2" role="search" @submit.prevent="tampilkan">
                 <div>
                     <Label for="date_from">Dari</Label>
-                    <Input id="date_from" v-model="filterDariTanggal" type="date" />
+                    <DatePicker id="date_from" v-model="filterDariTanggal" />
                 </div>
                 <div>
                     <Label for="date_to">Sampai</Label>
-                    <Input id="date_to" v-model="filterSampaiTanggal" type="date" />
+                    <DatePicker id="date_to" v-model="filterSampaiTanggal" />
                 </div>
                 <div class="min-w-48">
                     <Label for="warehouse_id">Depo <span class="text-gray-500">(kosong = semua)</span></Label>

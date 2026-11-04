@@ -4,6 +4,7 @@ import Card from '@/Components/ui/molecules/Card.vue';
 import Pagination from '@/Components/ui/molecules/Pagination.vue';
 import Badge from '@/Components/ui/atoms/Badge.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
 import Select from '@/Components/ui/atoms/Select.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
@@ -333,8 +334,16 @@ onBeforeUnmount(() => {
                                     :aria-label="`Operator ${label}`"
                                     @update:model-value="ubahOperator(kolom, $event)"
                                 />
+                                <DatePicker
+                                    v-if="filterTanggal.includes(kolom)"
+                                    class="col-filter"
+                                    :model-value="nilaiFilter[kolom]"
+                                    :aria-label="`Nilai ${label}`"
+                                    clearable
+                                    @update:model-value="ubahFilter(kolom, $event)"
+                                />
                                 <Input
-                                    :type="filterTanggal.includes(kolom) ? 'date' : 'text'"
+                                    v-else
                                     :inputmode="filterAngka.includes(kolom) ? 'decimal' : null"
                                     class="col-filter"
                                     :model-value="nilaiFilter[kolom]"

@@ -4,6 +4,7 @@ import { useForm } from '@inertiajs/vue3';
 import Button from '@/Components/ui/atoms/Button.vue';
 import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import InputRibuan from '@/Components/ui/atoms/InputRibuan.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Select from '@/Components/ui/atoms/Select.vue';
@@ -290,7 +291,7 @@ function simpan() {
                             </div>
                             <div>
                                 <Label for="tanggal_lahir">Tanggal lahir{{ fieldDariKtp.has('tanggal_lahir') ? ' (dari KTP)' : '' }}</Label>
-                                <Input id="tanggal_lahir" v-model="form.tanggal_lahir" type="date" />
+                                <DatePicker id="tanggal_lahir" v-model="form.tanggal_lahir" />
                                 <FieldError v-if="form.errors.tanggal_lahir">{{ form.errors.tanggal_lahir }}</FieldError>
                             </div>
                             <div class="sm:col-span-2">
@@ -337,7 +338,7 @@ function simpan() {
                             </div>
                             <div>
                                 <Label for="tanggal_mulai">Tanggal mulai bekerja <span v-if="wajibKontak" class="text-red-600">*</span></Label>
-                                <Input id="tanggal_mulai" v-model="form.tanggal_mulai" type="date" :required="wajibKontak" />
+                                <DatePicker id="tanggal_mulai" v-model="form.tanggal_mulai" :required="wajibKontak" />
                                 <FieldError v-if="form.errors.tanggal_mulai">{{ form.errors.tanggal_mulai }}</FieldError>
                             </div>
                             <div>

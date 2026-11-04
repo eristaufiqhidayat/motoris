@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { Deferred, Head, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
-import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
 import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
@@ -53,7 +53,7 @@ function tampilkan() {
                 <form class="flex flex-wrap items-end gap-2" @submit.prevent="tampilkan">
                     <div>
                         <Label for="bulan">Berlaku mulai bulan</Label>
-                        <Input id="bulan" v-model="filterBulan" type="month" />
+                        <DatePicker id="bulan" v-model="filterBulan" mode="bulan" />
                     </div>
                     <Button type="submit" variant="outline-secondary" :loading="memuat" :disabled="!berubah">Tampilkan</Button>
                 </form>

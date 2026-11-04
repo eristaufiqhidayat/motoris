@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Badge from '@/Components/ui/atoms/Badge.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Select from '@/Components/ui/atoms/Select.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
@@ -142,6 +143,7 @@ async function gantiTanggal() {
 }
 
 watch(grup, pilihOtomatis);
+watch(tanggalDipilih, gantiTanggal);
 </script>
 
 <template>
@@ -156,7 +158,7 @@ watch(grup, pilihOtomatis);
                     <template #header><h6 class="mb-0 font-semibold">Filter Tracking</h6></template>
 
                     <Label for="tanggal_tracking">Tanggal</Label>
-                    <Input id="tanggal_tracking" v-model="tanggalDipilih" type="date" class="mb-3" @change="gantiTanggal" />
+                    <DatePicker id="tanggal_tracking" v-model="tanggalDipilih" class="mb-3" />
 
                     <template v-if="daftarGrup.length">
                         <Label for="filter_grup">Koordinator</Label>

@@ -7,6 +7,7 @@ import Button from '@/Components/ui/atoms/Button.vue';
 import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
 import InfoPopover from '@/Components/ui/molecules/InfoPopover.vue';
@@ -199,8 +200,8 @@ function simpanTarget() {
             </template>
             <template #actions>
                 <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="tampilkan">
-                    <Input id="date_from" v-model="filterDari" type="date" aria-label="Dari tanggal" class="w-36" />
-                    <Input id="date_to" v-model="filterSampai" type="date" aria-label="Sampai tanggal" class="w-36" />
+                    <DatePicker id="date_from" v-model="filterDari" aria-label="Dari tanggal" class="w-36" />
+                    <DatePicker id="date_to" v-model="filterSampai" aria-label="Sampai tanggal" class="w-36" />
                     <Input id="cari-depo" v-model="cari" type="search" placeholder="Cari depo…" aria-label="Cari depo" class="w-40" />
                     <Button type="submit" :loading="memuat" :disabled="!kartuDimuat || !berubah"><Icon name="search" class="me-1 w-3.5 h-3.5" />Tampilkan</Button>
                 </form>
