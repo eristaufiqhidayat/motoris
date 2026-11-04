@@ -35,6 +35,9 @@ class HomeController extends Controller
 
     private const RENTANG_MAKS_HARI = 62;
 
+    // Kartu Kinerja per Depo (spec 066): rentang sendiri, bawaan 30 hari agar rata-rata depo tidak bergeser oleh satu-dua hari.
+    private const RENTANG_KINERJA_HARI = 30;
+
     // Sinkronisasi Data menjalankan deteksi per motoris per tanggal dalam satu permintaan, jadi rentangnya dibatasi pendek.
     private const RENTANG_TEMUAN_MAKS_HARI = 7;
 
@@ -47,6 +50,7 @@ class HomeController extends Controller
         [$dari, $sampai] = self::rentang($request);
         $summary = new SummaryDepo($dari, $sampai, $request->user());
         $dashboard = new Dashboard($dari, $sampai, $request->user());
+        [$kinerjaDari, $kinerjaSampai] = self::rentangFilter($request, 'kinerja_dari', 'kinerja_sampai', bawaanHari: self::RENTANG_KINERJA_HARI);
 
         return Inertia::render('Home/Dashboard', [
             'slug' => self::MENU,
@@ -62,6 +66,10 @@ class HomeController extends Controller
             'ringkasanDepo' => Inertia::defer(fn () => self::ringkasanDepo($summary, $request), 'ringkasan'),
             'funnel' => Inertia::defer(fn () => $dashboard->funnelOutlet(), 'ringkasan'),
             'tren' => Inertia::defer(fn () => $dashboard->trenHarian(), 'ringkasan'),
+            // Kinerja per Depo (spec 066): grup defer sendiri supaya query 30 hari tidak menahan KPI/funnel/tren.
+            'kinerjaFilter' => ['dari' => $kinerjaDari, 'sampai' => $kinerjaSampai],
+            'kinerja' => Inertia::defer(fn () => self::kinerjaDepo(new SummaryDepo($kinerjaDari, $kinerjaSampai, $request->user()), $request), 'kinerja'),
+            'tautanSummaryDepo' => Akses::bisa($request->user(), 'summary_all_depo'),
         ]);
     }
 
@@ -226,11 +234,11 @@ class HomeController extends Controller
      *
      * @return array{0: string, 1: string}
      */
-    private static function rentangFilter(Request $request, string $kunciDari, string $kunciSampai, int $maksHari = self::RENTANG_MAKS_HARI): array
+    private static function rentangFilter(Request $request, string $kunciDari, string $kunciSampai, int $maksHari = self::RENTANG_MAKS_HARI, int $bawaanHari = 7): array
     {
         $hariIni = Pengaturan::sekarang()->toDateString();
         $valid = fn (?string $v): bool => (bool) $v && (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) && strtotime($v) !== false;
-        $dari = $valid($request->query($kunciDari)) ? $request->query($kunciDari) : Carbon::parse($hariIni)->subDays(6)->toDateString();
+        $dari = $valid($request->query($kunciDari)) ? $request->query($kunciDari) : Carbon::parse($hariIni)->subDays($bawaanHari - 1)->toDateString();
         $sampai = $valid($request->query($kunciSampai)) ? $request->query($kunciSampai) : $hariIni;
 
         if ($sampai < $dari) {
@@ -487,6 +495,20 @@ class HomeController extends Controller
                 'topDepo' => $kartu->take(8)->values()->map(fn ($d) => (array) $d)->all(),
             ];
         });
+    }
+
+    /**
+     * Kinerja per depo (spec 066): semua baris SummaryDepo::kartu() (angka sama dengan Summary All Depo), di-cache
+     * sebagai array murni per rentang & cakupan.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function kinerjaDepo(SummaryDepo $summary, Request $request): array
+    {
+        $cakupan = Akses::cakupan($request->user()) === 'semua' ? 'semua' : 'user_'.($request->user()?->id ?? 0);
+
+        return Cache::remember("beranda:kinerja:{$summary->dari}:{$summary->sampai}:{$cakupan}", self::CACHE_TTL,
+            fn () => $summary->kartu()->map(fn ($d) => (array) $d)->values()->all());
     }
 
     /**

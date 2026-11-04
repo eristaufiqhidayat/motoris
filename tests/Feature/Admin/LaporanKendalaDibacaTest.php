@@ -40,13 +40,14 @@ class LaporanKendalaDibacaTest extends AdminTestCase
             ->firstWhere('id', $this->laporan) ?? [];
     }
 
-    public function test_pelapor_membuka_laporannya_sendiri_tidak_tercatat_dibaca(): void
+    public function test_pelapor_membuka_laporannya_sendiri_dicatat_tetapi_tidak_dihitung_pembaca(): void
     {
         $this->actingAs($this->koor);
 
-        $this->postJson("/laporan_kendala/{$this->laporan}/dibaca")->assertOk();
+        $this->postJson("/laporan_kendala/{$this->laporan}/dibaca")->assertOk()->assertJson(['pembaca' => []]);
 
-        $this->assertSame(0, DB::table('laporan_kendala_dibaca')->count());
+        // Dicatat untuk lencana Ada balasan baru, tetapi bukan "pembaca" laporannya sendiri.
+        $this->assertSame(1, DB::table('laporan_kendala_dibaca')->where('user_id', $this->koor->id)->count());
     }
 
     public function test_pembaca_lain_tercatat_dan_lencana_belum_dibaca_hilang_untuknya_saja(): void
@@ -72,24 +73,7 @@ class LaporanKendalaDibacaTest extends AdminTestCase
         $this->assertSame(1, DB::table('laporan_kendala_dibaca')->count());
     }
 
-    public function test_lencana_diperbarui_setelah_pelapor_mengubah(): void
-    {
-        DB::table('laporan_kendala_dibaca')->insert(['laporan_kendala_id' => $this->laporan, 'user_id' => $this->spv->id, 'dibaca_at' => now()->subMinutes(30)]);
-
-        $baris = $this->baris($this->spv);
-        $this->assertFalse($baris['belum_dibaca']);
-        $this->assertFalse($baris['diperbarui_setelah_dibaca']);
-
-        DB::table('laporan_kendala')->where('id', $this->laporan)->update(['updated_at' => now()]);
-
-        $this->assertTrue($this->baris($this->spv)['diperbarui_setelah_dibaca']);
-
-        $this->actingAs($this->spv);
-        $this->postJson("/laporan_kendala/{$this->laporan}/dibaca")->assertOk();
-        $this->assertFalse($this->baris($this->spv)['diperbarui_setelah_dibaca']);
-    }
-
-    public function test_pelapor_tidak_dapat_lencana_dan_melihat_jumlah_pembaca(): void
+    public function test_pelapor_tidak_dapat_lencana_belum_dibaca(): void
     {
         DB::table('laporan_kendala_dibaca')->insert([
             ['laporan_kendala_id' => $this->laporan, 'user_id' => $this->spv->id, 'dibaca_at' => now()],
@@ -99,8 +83,7 @@ class LaporanKendalaDibacaTest extends AdminTestCase
         $baris = $this->baris($this->koor);
 
         $this->assertFalse($baris['belum_dibaca']);
-        $this->assertFalse($baris['diperbarui_setelah_dibaca']);
-        $this->assertSame(2, $baris['jumlah_pembaca']);
+        $this->assertFalse($baris['ada_balasan_baru']);
     }
 
     public function test_pelapor_melihat_daftar_pembaca_dengan_waktu_tetapi_pembaca_lain_tidak(): void

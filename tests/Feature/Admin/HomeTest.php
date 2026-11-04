@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Support\Mobile\Pengaturan;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -85,6 +86,40 @@ class HomeTest extends AdminTestCase
                     ->where('tren.2', ['tanggal' => '2026-10-03', 'sales' => 20000, 'ec' => 0, 'noo' => 0]) // S2, bukan EC
                 )
             );
+    }
+
+    public function test_kinerja_per_depo_memuat_semua_depo_dengan_rentang_bawaan_30_hari(): void
+    {
+        $hariIni = now(Pengaturan::zona())->toDateString();
+
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('kinerjaFilter', ['dari' => now(Pengaturan::zona())->subDays(29)->toDateString(), 'sampai' => $hariIni])
+                // Rentang KPI halaman tetap 7 hari.
+                ->where('filter.date_from', now(Pengaturan::zona())->subDays(6)->toDateString())
+                ->loadDeferredProps(fn (Assert $page) => $page->has('kinerja', 2)));
+    }
+
+    public function test_kinerja_per_depo_sama_dengan_kartu_summary_depo_dan_menghormati_rentang(): void
+    {
+        $this->get('/home?kinerja_dari=2026-10-01&kinerja_sampai=2026-10-03')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('kinerjaFilter', ['dari' => '2026-10-01', 'sampai' => '2026-10-03'])
+                ->loadDeferredProps(fn (Assert $page) => $page
+                    ->has('kinerja', 2)
+                    // Sidoarjo (urutan pertama: EC Achievement tertinggi): hari kerja 4, call 4, EC 2, SKU 6.
+                    ->where('kinerja.0.nama', fn ($n) => is_string($n))
+                    ->where('kinerja.0.avg_call', 1)
+                    ->where('kinerja.0.avg_ec', 0.5)
+                    ->where('kinerja.0.avg_ipt', 3)
+                    ->where('kinerja.0.ipt_achievement', 100)
+                    ->etc()));
+    }
+
+    public function test_rentang_kinerja_dibatasi_62_hari(): void
+    {
+        $this->get('/home?kinerja_dari=2025-01-01&kinerja_sampai=2026-10-03')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('kinerjaFilter', ['dari' => '2026-08-03', 'sampai' => '2026-10-03']));
     }
 
     public function test_kunjungan_kedua_lewat_cache_tidak_korup(): void

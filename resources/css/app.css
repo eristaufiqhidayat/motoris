@@ -704,3 +704,20 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
    @layer kalah dan tombol .btn-primary di popover (mis. Lihat di Google Map) kehilangan warna teksnya. Aturan di luar
    layer dengan spesifisitas lebih tinggi mengembalikannya. */
 .leaflet-container a.btn-primary { color: var(--color-white); }
+
+/* Diskusi Laporan Kendala (spec 065): linimasa komentar di detail laporan. */
+@layer components {
+    .diskusi { @apply border-t border-gray-200 pt-3; }
+    .diskusi-judul { @apply mb-2 text-sm font-semibold; }
+    .diskusi-daftar { @apply m-0 flex list-none flex-col gap-2 p-0; }
+    .komentar { @apply rounded-md border border-gray-200; }
+    .komentar-kepala { @apply flex flex-wrap items-center justify-between gap-2 rounded-t-md border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-xs; }
+    .komentar-isi { @apply m-0 whitespace-pre-line px-3 py-2; }
+}
+
+/* Peristiwa otomatis di linimasa diskusi (Selesai / Dibuka kembali). */
+@layer components {
+    .peristiwa { @apply border-s-2 border-gray-300 ps-3 text-sm; }
+    .peristiwa-teks { @apply m-0; }
+    .peristiwa-isi { @apply m-0 mt-1 whitespace-pre-line rounded-md bg-gray-50 px-3 py-2; }
+}

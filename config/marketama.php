@@ -174,6 +174,11 @@ return [
                     'title' => 'Motoris Report',
                     'icon' => 'bike',
                 ],
+                [
+                    'slug' => 'laporan_kendala',
+                    'title' => 'Laporan Kendala',
+                    'icon' => 'flag',
+                ],
             ],
         ],
         [
@@ -199,11 +204,6 @@ return [
                     'slug' => 'pengembalian_barang',
                     'title' => 'Pengembalian Barang',
                     'icon' => 'undo',
-                ],
-                [
-                    'slug' => 'laporan_kendala',
-                    'title' => 'Laporan Kendala',
-                    'icon' => 'flag',
                 ],
                 [
                     'slug' => 'tracking_sales',

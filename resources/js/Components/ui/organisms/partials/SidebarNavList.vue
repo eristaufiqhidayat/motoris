@@ -13,7 +13,7 @@ const props = defineProps({
 });
 
 const { currentSlug } = inject(SIDEBAR_CONTEXT);
-// Angka Belum dibaca Laporan Kendala (shared prop kendalaBelumDibaca, spec 064).
+// Angka Laporan Kendala = Belum dibaca + Ada balasan baru (shared prop kendalaBelumDibaca, spec 064/065).
 const page = usePage();
 
 // Satu level menu hanya boleh punya satu flyout terbuka: membuka sibling otomatis menutup yang lain.
@@ -65,7 +65,7 @@ defineExpose({ closeFlyouts });
                     <Icon :name="item.icon" class="nav-link-icon-svg" />
                 </span>
                 <span class="nav-link-text">{{ item.title }}</span>
-                <span v-if="item.slug === 'laporan_kendala' && page.props.kendalaBelumDibaca" class="nav-link-angka" :title="`${page.props.kendalaBelumDibaca} laporan belum dibaca`">{{ page.props.kendalaBelumDibaca }}</span>
+                <span v-if="item.slug === 'laporan_kendala' && page.props.kendalaBelumDibaca" class="nav-link-angka" :title="`${page.props.kendalaBelumDibaca} laporan belum dibaca atau ada balasan baru`">{{ page.props.kendalaBelumDibaca }}</span>
             </Link>
         </li>
     </template>
