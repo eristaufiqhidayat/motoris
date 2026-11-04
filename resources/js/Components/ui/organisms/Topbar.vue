@@ -34,7 +34,7 @@ onUnmounted(() => document.removeEventListener('click', closeNotifOnOutsideClick
             <Tooltip v-if="page.props.bisaTambahLoading" label="Tambah Loading Barang" align="end"><Link class="shortcut-btn" href="/loading_barang/add" aria-label="Tambah Loading Barang">
                     <Icon name="warehouse" />
                 </Link></Tooltip>
-            <Tooltip v-if="page.props.bisaTambahMuatan" label="Atur Muatan Motoris" align="end"><button type="button" class="shortcut-btn" aria-label="Atur Muatan Motoris" @click="bukaTambahMuatan">
+            <Tooltip v-if="page.props.bisaShortcutMuatan" label="Atur Muatan Motoris" align="end"><button type="button" class="shortcut-btn" aria-label="Atur Muatan Motoris" @click="bukaTambahMuatan">
                     <Icon name="boxes" />
                 </button></Tooltip>
             <Tooltip v-if="page.props.bisaLihatBarangCanvassing" label="Barang Canvassing" align="end"><Link class="shortcut-btn" href="/barang_canvassing" aria-label="Barang Canvassing">
