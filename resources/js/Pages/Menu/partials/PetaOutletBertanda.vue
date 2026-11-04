@@ -6,9 +6,11 @@ import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Skeleton from '@/Components/ui/atoms/Skeleton.vue';
+import Tabs from '@/Components/ui/molecules/Tabs.vue';
 import { BATAS_DETEKSI, bacaDeteksi, simpanDeteksi } from '@/Support/deteksiKunjungan.js';
 import { jarakSingkat, tanggalSingkat } from '@/Support/format.js';
 import DetailDepoPeta from './DetailDepoPeta.vue';
+import TransaksiOutlet from './TransaksiOutlet.vue';
 
 // Peta satu outlet bertanda beserta outlet bertanda lain di sekitarnya (TandaMotorisController::outletTerdekat):
 // konteks bagi koordinator, mis. beberapa outlet fiktif berdekatan. Titik utama oranye, outlet sekitarnya merah.
@@ -19,11 +21,19 @@ const props = defineProps({
     // Url endpoint terdekat dan outlet acuan: { id, nama, latitude, longitude }.
     url: { type: String, required: true },
     outlet: { type: Object, required: true },
+    // Endpoint rincian transaksi per outlet (dimuat saat tombol "Lihat transaksi" diklik).
+    urlTransaksi: { type: String, default: '/tracking_sales/tanda/outlet-transaksi' },
 });
 
 const sekitar = ref([]);
-// Outlet lain di titik yang sama dengan outlet ini: [{ outlet_id, outlet }].
+// Outlet lain di titik yang sama dengan outlet ini: [{ outlet_id, outlet, ringkasan }].
 const titik = ref([]);
+// Ringkasan transaksi outlet acuan: { transaksi, hari, total } atau null.
+const ringkasan = ref(null);
+// Pendaftar outlet acuan (mk_outlet.dibuat_oleh).
+const pendaftar = ref(null);
+// Waktu outlet acuan didaftarkan (lihat TandaMotorisController::didaftarkan).
+const didaftarkan = ref(null);
 const radius = ref(bacaDeteksi().jarak_dekat_meter);
 const form = ref(radius.value);
 const memuat = ref(true);
@@ -33,6 +43,13 @@ const info = ref(null);
 const menerapkan = ref(false);
 
 const { min, maks } = BATAS_DETEKSI.jarak_dekat_meter;
+const tab = ref('titik');
+const daftarTab = computed(() => [
+    { key: 'titik', label: `Outlet di titik ini (${titik.value.length + 1})` },
+    { key: 'sekitar', label: `Outlet bertanda di sekitar (${sekitar.value.length})` },
+]);
+// Tanpa outlet sekelompok tab "titik" tidak ada, jadi daftar sekitar langsung tampil.
+const tabAktif = computed(() => (titik.value.length ? tab.value : 'sekitar'));
 const sah = computed(() => Number.isInteger(form.value) && form.value >= min && form.value <= maks);
 const berubah = computed(() => form.value !== radius.value);
 
@@ -46,6 +63,9 @@ async function muat() {
         const data = await respon.json();
         sekitar.value = data.sekitar ?? [];
         titik.value = data.titik ?? [];
+        ringkasan.value = data.ringkasan ?? null;
+        pendaftar.value = data.pendaftar ?? null;
+        didaftarkan.value = data.didaftarkan ?? null;
     } catch {
         pesan.value = 'Gagal memuat outlet bertanda di sekitar.';
     } finally {
@@ -68,7 +88,7 @@ onMounted(muat);
 </script>
 
 <template>
-    <div class="space-y-3">
+    <div class="peta-outlet-drawer">
         <Skeleton v-if="memuat" class="h-64 w-full" />
         <DetailDepoPeta v-else :key="radius" :depo="outlet" ikon="outlet" :sekitar="sekitar" :jumlah="titik.length + 1" google-map />
 
@@ -85,24 +105,19 @@ onMounted(muat);
 
         <p v-if="pesan" class="mb-0 text-xs text-red-600">{{ pesan }}</p>
 
-        <section v-if="!memuat && !pesan && titik.length" aria-label="Outlet di titik ini">
-            <div class="tanda-item-kepala">
-                <h6 class="mb-0 font-semibold">Outlet di titik ini</h6>
-                <Badge variant="primary">{{ titik.length + 1 }}</Badge>
-                <span class="tanda-item-meta">koordinat identik</span>
-            </div>
-            <ol class="tanda-titik-daftar mt-2">
-                <li><span class="font-semibold">{{ outlet.nama }}</span></li>
-                <li v-for="o in titik" :key="o.outlet_id">{{ o.outlet }}</li>
-            </ol>
+        <!-- Dua daftar berbagi satu area lewat tab; tanpa outlet sekelompok (titik kosong) hanya "di sekitar" yang ada. -->
+        <Tabs v-if="!memuat && !pesan && titik.length" v-model="tab" :tabs="daftarTab" rapat />
+
+        <section v-if="!memuat && !pesan && tabAktif === 'titik'" class="peta-outlet-daftar" aria-label="Outlet di titik ini">
+            <p class="tanda-item-meta mb-0">{{ titik.length + 1 }} outlet berkoordinat identik.</p>
+            <ul class="list-group tanda-titik-daftar mt-2">
+                <TransaksiOutlet :url="urlTransaksi" :outlet-id="outlet.id" :nama="outlet.nama" :ringkasan="ringkasan" :pendaftar="pendaftar" :didaftarkan="didaftarkan" utama />
+                <TransaksiOutlet v-for="o in titik" :key="o.outlet_id" :url="urlTransaksi" :outlet-id="o.outlet_id" :nama="o.outlet" :ringkasan="o.ringkasan" :pendaftar="o.pendaftar" :didaftarkan="o.didaftarkan" />
+            </ul>
         </section>
 
-        <section v-if="!memuat && !pesan" aria-label="Outlet bertanda di sekitar">
-            <div class="tanda-item-kepala">
-                <h6 class="mb-0 font-semibold">Outlet bertanda di sekitar</h6>
-                <Badge v-if="sekitar.length" variant="primary">{{ sekitar.length }}</Badge>
-                <span class="tanda-item-meta">radius {{ jarakSingkat(radius) }}</span>
-            </div>
+        <section v-if="!memuat && !pesan && tabAktif === 'sekitar'" class="peta-outlet-daftar" aria-label="Outlet bertanda di sekitar">
+            <p class="tanda-item-meta mb-0">Dalam radius {{ jarakSingkat(radius) }} dari outlet ini.</p>
             <ul v-if="sekitar.length" class="tanda-motoris-daftar mt-2">
                 <li v-for="o in sekitar" :key="o.outlet_id" class="tanda-motoris-item">
                     <div class="tanda-item-kepala">

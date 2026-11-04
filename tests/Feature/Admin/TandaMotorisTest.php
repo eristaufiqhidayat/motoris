@@ -5,6 +5,7 @@ namespace Tests\Feature\Admin;
 use App\Http\Controllers\TandaMotorisController;
 use App\Models\User;
 use App\Support\Akses\Akses;
+use App\Support\Menu\JamLokal;
 use Illuminate\Support\Facades\DB;
 
 // Tanda motoris di drawer Riwayat Lacak Motoris (spec 062): tanda dibuat sistem (Perlu dicek); koordinator hanya melihat
@@ -246,6 +247,55 @@ class TandaMotorisTest extends AdminTestCase
 
         // Outlet tanpa kelompok: titik kosong.
         $this->actingAs($koor)->getJson(self::URL.'/outlet-terdekat?outlet_id=9400&radius_m=10')->assertOk()->assertJsonCount(0, 'titik');
+    }
+
+    /** Satu transaksi (dengan item) di outlet oleh motoris; mengembalikan id penjualan. */
+    private function transaksi(int $outlet, int $sales, string $kode, int $total, array $lain = []): int
+    {
+        $id = DB::table('trx_penjualan')->insertGetId($lain + [
+            'kode' => $kode, 'kunjungan_id' => 1, 'karyawan_id' => $sales, 'outlet_id' => $outlet, 'tanggal' => $this->kemarin,
+            'jumlah_sku' => 1, 'total_qty' => 2, 'total' => $total, 'is_effective_call' => true, 'recorded_at' => now()->subDay(),
+        ]);
+        DB::table('trx_penjualan_item')->insert(['penjualan_id' => $id, 'produk_id' => 1, 'qty' => 2, 'harga' => $total / 2, 'diskon' => 0, 'total' => $total]);
+
+        return $id;
+    }
+
+    public function test_outlet_transaksi_menampilkan_transaksi_dan_item_dalam_cakupan_serta_ringkasan_di_outlet_terdekat(): void
+    {
+        DB::table('mk_outlet')->insert([
+            ['id' => 9501, 'nama' => 'Titik A', 'dibuat_oleh' => 'x', 'dibuat_pada' => '02 Mar 2026 09:23', 'latitude' => -7.4, 'longitude' => 112.7],
+            ['id' => 9502, 'nama' => 'Titik B', 'dibuat_oleh' => 'x', 'dibuat_pada' => null, 'latitude' => -7.4, 'longitude' => 112.7],
+        ]);
+        // Titik B didaftarkan dari HP: waktu HP (UTC -> lokal) didahulukan daripada teks Marketama.
+        DB::table('trx_outlet_baru')->insert([
+            'karyawan_id' => 1, 'nama' => 'Titik B', 'lat' => -7.4, 'lng' => 112.7, 'outlet_id' => 9502, 'recorded_at' => '2026-10-20 03:00:00',
+        ]);
+        foreach ([9501, 9502] as $o) {
+            DB::table('tanda_outlet')->insert([
+                'outlet_id' => $o, 'kelompok' => 'k1', 'kategori' => 'outlet_fiktif', 'status' => 'perlu_dicek', 'dibuat_nama' => 'Sistem', 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        $this->transaksi(9501, 1, 'T-1', 50000);
+        $this->transaksi(9501, 1, 'T-2', 70000, ['tanggal' => now()->subDays(2)->toDateString()]);
+        $this->transaksi(9501, 1, 'T-BATAL', 99000, ['dibatalkan_at' => now()]);
+        $this->transaksi(9501, 2, 'T-LUAR', 10000); // Sinta bukan downline koordinator
+
+        $koor = $this->koordinator();
+        $res = $this->actingAs($koor)->getJson(self::URL.'/outlet-transaksi?outlet_id=9501')->assertOk();
+
+        $this->assertSame(['T-1', 'T-2'], array_column($res->json('transaksi'), 'kode'));
+        $res->assertJsonPath('jumlah', 2)->assertJsonPath('transaksi.0.motoris', 'Rudi Hartono')
+            ->assertJsonPath('transaksi.0.total', 50000)->assertJsonPath('transaksi.0.item.0.qty', 2)->assertJsonCount(1, 'transaksi.0.item');
+
+        // Ringkasan: acuan 9501 (2 transaksi, 2 hari, 120.000); outlet lain di titik tanpa transaksi = null.
+        $res = $this->actingAs($koor)->getJson(self::URL.'/outlet-terdekat?outlet_id=9501')->assertOk();
+        $res->assertJsonPath('ringkasan', ['transaksi' => 2, 'hari' => 2, 'total' => 120000])->assertJsonPath('titik.0.ringkasan', null)
+            ->assertJsonPath('pendaftar', 'x')->assertJsonPath('titik.0.pendaftar', 'x')
+            ->assertJsonPath('didaftarkan', '02 Mar 2026 09:23')->assertJsonPath('titik.0.didaftarkan', JamLokal::format('2026-10-20 03:00:00', 'Y-m-d H:i'));
+
+        $this->actingAs($koor)->getJson(self::URL.'/outlet-transaksi?outlet_id=99999')->assertNotFound();
+        $this->actingAs($koor)->getJson(self::URL.'/outlet-transaksi')->assertUnprocessable();
     }
 
     public function test_outlet_terdekat_kosong_bila_acuan_tanpa_koordinat_dan_404_bila_tidak_ada(): void
