@@ -70,7 +70,8 @@ class RoleBawaan
 
             // Koordinator boleh memberi tanda motoris (tracking_sales) dan tanda outlet (outlet_all) dari drawer Riwayat Lacak Motoris.
             // Laporan Kendala (spec 064): koordinator juga boleh mengubah/menutup laporannya sendiri.
-            $tambahKoordinator = ['tracking_sales', 'outlet_all', 'laporan_kendala'];
+            // Tambah Loading Barang (shortcut Topbar) adalah tugas koordinator: hak Tambah pada loading_barang.
+            $tambahKoordinator = ['tracking_sales', 'outlet_all', 'laporan_kendala', 'loading_barang'];
             DB::table('role_hak')->insert(array_map(fn ($m) => [
                 'role_id' => $id, 'menu' => $m, 'lihat' => true, 'tambah' => $kode === 'koordinator' && in_array($m, $tambahKoordinator, true), 'ubah' => $kode === 'koordinator' && $m === 'laporan_kendala', 'hapus' => false,
                 'ekspor' => $r['hak'] === 'lihat',
