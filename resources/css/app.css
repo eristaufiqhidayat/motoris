@@ -65,6 +65,8 @@ body.sidebar-collapsed .sidebar .brand .brand-logo-text { display: none; }
 .sidebar .nav-link-icon { flex: 0 0 1.5rem; width: 1.5rem; display: inline-flex; justify-content: center; align-self: center; }
 .nav-link-icon-svg { width: 1.1rem; height: 1.1rem; }
 .sidebar .nav-link-text { flex: 1 1 auto; min-width: 0; }
+.sidebar .nav-link-angka { flex: 0 0 auto; min-width: 1.25rem; padding: 0 .35rem; border-radius: 999px; background: #dc2626; color: #fff; font-size: .7rem; font-weight: 600; line-height: 1.25rem; text-align: center; text-shadow: none; }
+body.sidebar-collapsed .sidebar .nav-link-angka { display: none; }
 .sidebar .nav-link .nav-chevron { flex: 0 0 auto; align-self: center; }
 .sidebar .nav .nav .nav-link { padding-left: 2.25rem; }
 .sidebar .section-label { display: flex; align-items: center; justify-content: space-between; gap: .5rem; cursor: pointer; font-size: .7rem; text-transform: uppercase; color: #fff; font-weight: 600; margin: 1rem 0 0; padding: 1.35rem .75rem; border-radius: .25rem; transition: color .15s ease, background-color .15s ease; }

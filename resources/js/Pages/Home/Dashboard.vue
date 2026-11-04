@@ -12,6 +12,7 @@ import StatLabel from '@/Components/ui/atoms/StatLabel.vue';
 import StatRow from '@/Components/ui/molecules/StatRow.vue';
 import BarChart from '@/Components/ui/molecules/BarChart.vue';
 import DashboardSkeleton from './partials/DashboardSkeleton.vue';
+import KartuKendala from './partials/KartuKendala.vue';
 import FunnelOutletChart from './partials/FunnelOutletChart.vue';
 import TrenHarianChart from './partials/TrenHarianChart.vue';
 import { angka, angkaRingkas } from '@/Support/format.js';
@@ -25,6 +26,8 @@ const props = defineProps({
     periode: { type: Object, required: true },
     filter: { type: Object, required: true },
     target: { type: Object, required: true },
+    // Ringkasan Laporan Kendala (spec 064); null bila akun tanpa hak Lihat.
+    kendala: { type: Object, default: null },
     // Kosong saat masih ditunda (lihat <Deferred> di bawah); semuanya tiba bersamaan (satu grup "ringkasan").
     // kpi & topDepo digabung jadi satu prop di backend (ringkasanDepo) supaya SummaryDepo::kartu() cuma
     // dihitung sekali (lihat HomeController::ringkasanDepo).
@@ -83,6 +86,8 @@ const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
                 </form>
             </template>
         </PageHeader>
+
+        <KartuKendala v-if="kendala" :kendala="kendala" />
 
         <Deferred :data="['ringkasanDepo', 'funnel', 'tren']">
             <template #fallback>

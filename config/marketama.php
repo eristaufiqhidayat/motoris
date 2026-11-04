@@ -63,7 +63,7 @@ return [
         'karyawan_sales', 'karyawan_koordinator', 'karyawan_supervisor', 'karyawan_lainnya',
         // Grup A analisa menu (25 Okt 2026): dialihkan ke trx_* / mk_* (riwayat lama lewat enesis:migrasi-transaksi)
         'barang_canvassing', 'lap_barang_canvassing', 'lap_barang_habis_terjual', 'pengembalian_barang', 'lap_pengembalian_barang',
-        'tracking_sales', 'tracking_koordinator', 'motoris_ditandai', 'outlet_ditandai',
+        'laporan_kendala', 'tracking_sales', 'tracking_koordinator', 'motoris_ditandai', 'outlet_ditandai',
         'penjualan_barang', 'lap_penjualan_barang', 'lap_penjualan_barang_detail', 'lap_effective_call', 'lap_effective_call_barang',
         'lap_penjualan_barang_terbaik_harian', 'lap_penjualan_barang_terbaik_mingguan', 'lap_penjualan_barang_terbaik_bulanan',
         'stok_outlet', 'lap_stok_outlet', 'stok_kompetitor', 'lap_stok_kompetitor',
@@ -199,6 +199,11 @@ return [
                     'slug' => 'pengembalian_barang',
                     'title' => 'Pengembalian Barang',
                     'icon' => 'undo',
+                ],
+                [
+                    'slug' => 'laporan_kendala',
+                    'title' => 'Laporan Kendala',
+                    'icon' => 'flag',
                 ],
                 [
                     'slug' => 'tracking_sales',
@@ -1007,6 +1012,12 @@ return [
             'tinggi_penuh' => true,
             // Tinggi tabel dipatok setinggi sisa layar walau datanya sedikit atau kosong.
             'tinggi_tetap' => true,
+        ],
+        // Halaman khusus (LaporanKendalaController); entri ini hanya mendaftarkan slug-nya.
+        'laporan_kendala' => [
+            'title' => 'Laporan Kendala',
+            'tables' => [],
+            'same_as' => null,
         ],
         'pengembalian_barang' => [
             'title' => 'Pengembalian Barang',

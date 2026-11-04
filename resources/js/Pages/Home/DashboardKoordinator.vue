@@ -10,6 +10,7 @@ import InfoPopover from '@/Components/ui/molecules/InfoPopover.vue';
 import Modal from '@/Components/ui/molecules/Modal.vue';
 import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
 import StatCard from '@/Components/ui/molecules/StatCard.vue';
+import KartuKendala from './partials/KartuKendala.vue';
 import DashboardSkeletonKoordinator from './partials/DashboardSkeletonKoordinator.vue';
 import DrawerRingkasan from './partials/DrawerRingkasan.vue';
 import TemuanSistemTim from './partials/TemuanSistemTim.vue';
@@ -26,6 +27,8 @@ const props = defineProps({
     // Selalu hari ini (lihat HomeController::koordinator); hanya Tren Harian yang punya rentang sendiri (trenFilter).
     periode: { type: Object, required: true },
     depo: { type: Object, default: null },
+    // Ringkasan Laporan Kendala (spec 064); null bila akun tanpa hak Lihat.
+    kendala: { type: Object, default: null },
     // Ringan; dikirim langsung (bukan Deferred) supaya status hari ini langsung terlihat.
     absenHariIni: { type: Object, required: true },
     // { sudah, belum, total, batas, lewat } — lihat HomeController::checkinOutletHariIni.
@@ -161,6 +164,8 @@ function tampilkanTren() {
                 </InfoPopover>
             </template>
         </PageHeader>
+
+        <KartuKendala v-if="kendala" :kendala="kendala" />
 
         <div class="grid gap-3 lg:grid-cols-2 mb-4">
             <section aria-labelledby="judul-hari-ini">
