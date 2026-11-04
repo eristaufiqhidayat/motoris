@@ -7,8 +7,10 @@ use App\Support\Akses\Akses;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Lokasi;
 use App\Support\Mobile\Pengaturan;
+use App\Support\Outlet\RiwayatTransaksi;
 use App\Support\Tracking\HasilPeriksa;
 use App\Support\Tracking\TandaOutletMotoris;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -95,7 +97,9 @@ class TandaMotorisController extends Controller
         ]);
         $radius = (int) ($data['radius_m'] ?? config('marketama.deteksi_jarak_kunjungan.jarak_dekat_meter'));
 
-        $acuan = DB::table('mk_outlet')->where('id', $data['outlet_id'])->first(['id', 'latitude', 'longitude']);
+        $acuan = DB::table('mk_outlet as o')->where('o.id', $data['outlet_id'])
+            ->select(['o.id', 'o.latitude', 'o.longitude', 'o.dibuat_oleh', 'o.dibuat_pada'])
+            ->selectSub(self::daftarHp(), 'daftar_hp')->first();
 
         abort_unless($acuan, 404);
 
@@ -104,12 +108,18 @@ class TandaMotorisController extends Controller
             ->join('mk_outlet as o', 'o.id', '=', 'tout.outlet_id')
             ->where('tout.kelompok', $kelompok)->where('o.id', '<>', $acuan->id)
             ->distinct()->orderBy('o.nama')
-            ->get(['o.id as outlet_id', 'o.nama as outlet'])
-            ->map(fn ($o) => ['outlet_id' => (int) $o->outlet_id, 'outlet' => $o->outlet])
+            ->select(['o.id as outlet_id', 'o.nama as outlet', 'o.dibuat_oleh as pendaftar', 'o.dibuat_pada'])
+            ->selectSub(self::daftarHp(), 'daftar_hp')->get()
+            ->map(fn ($o) => ['outlet_id' => (int) $o->outlet_id, 'outlet' => $o->outlet, 'pendaftar' => $o->pendaftar, 'didaftarkan' => self::didaftarkan($o)])
             ->values();
 
+        // Ringkasan transaksi acuan + outlet satu titik (bukti alasan "N bertransaksi"); rincian dimuat lewat outletTransaksi.
+        $ringkasan = RiwayatTransaksi::ringkasan([(int) $acuan->id, ...$titik->pluck('outlet_id')->all()], $request->user());
+        $titik = $titik->map(fn ($o) => $o + ['ringkasan' => $ringkasan[$o['outlet_id']] ?? null])->values();
+        $ringkasanAcuan = $ringkasan[(int) $acuan->id] ?? null;
+
         if (! Lokasi::sah($acuan->latitude, $acuan->longitude)) {
-            return response()->json(['sekitar' => [], 'titik' => $titik, 'radius_m' => $radius]);
+            return response()->json(['sekitar' => [], 'titik' => $titik, 'ringkasan' => $ringkasanAcuan, 'pendaftar' => $acuan->dibuat_oleh, 'didaftarkan' => self::didaftarkan($acuan), 'radius_m' => $radius]);
         }
 
         $lat = (float) $acuan->latitude;
@@ -140,7 +150,29 @@ class TandaMotorisController extends Controller
             ->filter(fn ($o) => $o['jarak_m'] <= $radius)
             ->sortBy('jarak_m')->take(self::MAKS_SEKITAR)->values();
 
-        return response()->json(['sekitar' => $sekitar, 'titik' => $titik, 'radius_m' => $radius]);
+        return response()->json(['sekitar' => $sekitar, 'titik' => $titik, 'ringkasan' => $ringkasanAcuan, 'pendaftar' => $acuan->dibuat_oleh, 'didaftarkan' => self::didaftarkan($acuan), 'radius_m' => $radius]);
+    }
+
+    /** Subquery waktu outlet (alias o) pertama kali didaftarkan dari HP (trx_outlet_baru), UTC. */
+    private static function daftarHp(): Builder
+    {
+        return DB::table('trx_outlet_baru as nb')->whereColumn('nb.outlet_id', 'o.id')->selectRaw('MIN(COALESCE(nb.recorded_at, nb.received_at))');
+    }
+
+    /** Kapan outlet didaftarkan: dari HP (UTC -> lokal) bila ada, selain itu teks Marketama apa adanya (bisa null). */
+    private static function didaftarkan(object $o): ?string
+    {
+        return JamLokal::format($o->daftar_hp, 'Y-m-d H:i') ?? $o->dibuat_pada;
+    }
+
+    /** Transaksi terbaru satu outlet beserta item produknya (RiwayatTransaksi), dari motoris dalam cakupan role akun. */
+    public function outletTransaksi(Request $request): JsonResponse
+    {
+        $data = $request->validate(['outlet_id' => ['required', 'integer']]);
+
+        abort_unless(DB::table('mk_outlet')->where('id', $data['outlet_id'])->exists(), 404);
+
+        return response()->json(RiwayatTransaksi::daftar((int) $data['outlet_id'], $request->user()) + ['maks' => RiwayatTransaksi::MAKS_TRANSAKSI]);
     }
 
     /**

@@ -86,6 +86,8 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
         ->middleware('hak:tracking_sales')->name('tanda-motoris.index');
     Route::get('/tracking_sales/tanda/outlet-terdekat', [TandaMotorisController::class, 'outletTerdekat'])
         ->middleware('hak:tracking_sales')->name('tanda-motoris.outlet-terdekat');
+    Route::get('/tracking_sales/tanda/outlet-transaksi', [TandaMotorisController::class, 'outletTransaksi'])
+        ->middleware('hak:tracking_sales')->name('tanda-motoris.outlet-transaksi');
     // Tanda dibuat sistem (spec 062); koordinator hanya memeriksa (Terbukti / Wajar + catatan).
     Route::patch('/tracking_sales/tanda/{tanda}/periksa', [TandaMotorisController::class, 'periksa'])
         ->whereNumber('tanda')->middleware('hak:tracking_sales,tambah')->name('tanda-motoris.periksa');

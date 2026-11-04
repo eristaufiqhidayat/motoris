@@ -39,13 +39,38 @@ describe('PetaOutletBertanda', () => {
     });
 
     it('menampilkan seluruh outlet di titik yang sama, termasuk outlet acuan', async () => {
-        const titik = [{ outlet_id: 73, outlet: 'Toko B' }, { outlet_id: 74, outlet: 'Toko C' }];
-        pasang({ ok: true, json: () => Promise.resolve({ sekitar: [], titik, radius_m: 11 }) });
+        const titik = [{ outlet_id: 73, outlet: 'Toko B', pendaftar: 'Budi', didaftarkan: '2026-10-20 10:00', ringkasan: { transaksi: 4, hari: 3, total: 200000 } }, { outlet_id: 74, outlet: 'Toko C', pendaftar: null, ringkasan: null }];
+        pasang({ ok: true, json: () => Promise.resolve({ sekitar: [], titik, ringkasan: { transaksi: 1, hari: 1, total: 5000 }, radius_m: 11 }) });
         const wrapper = await siapkan();
 
         const daftar = wrapper.find('section[aria-label="Outlet di titik ini"]');
         expect(daftar.text()).toContain('3');
-        expect(daftar.findAll('li').map((li) => li.text())).toEqual(['Toko A', 'Toko B', 'Toko C']);
+        const baris = daftar.findAll('li');
+        expect(baris).toHaveLength(3);
+        expect(baris[0].text()).toContain('Toko A');
+        expect(baris[1].text()).toContain('4 transaksi');
+        expect(baris[2].text()).toContain('Belum bertransaksi');
+        // Tombol hanya untuk outlet yang punya transaksi.
+        expect(daftar.findAll('.transaksi-outlet-klik')).toHaveLength(2);
+        expect(baris[1].text()).toContain('Didaftarkan oleh Budi');
+        expect(baris[1].text()).toContain('10:00');
+        expect(baris[2].text()).toContain('Didaftarkan oleh tidak diketahui');
+    });
+
+    it('memakai tab: titik tampil lebih dulu, tab "di sekitar" menggantikannya', async () => {
+        const titik = [{ outlet_id: 73, outlet: 'Toko B', ringkasan: null }];
+        pasang({ ok: true, json: () => Promise.resolve({ sekitar, titik, radius_m: 11 }) });
+        const wrapper = await siapkan();
+
+        const tab = wrapper.findAll('[role="tab"]');
+        expect(tab.map((t) => t.text())).toEqual(['Outlet di titik ini (2)', 'Outlet bertanda di sekitar (2)']);
+        expect(wrapper.find('section[aria-label="Outlet di titik ini"]').exists()).toBe(true);
+        expect(wrapper.find('section[aria-label="Outlet bertanda di sekitar"]').exists()).toBe(false);
+
+        await tab[1].trigger('click');
+
+        expect(wrapper.find('section[aria-label="Outlet di titik ini"]').exists()).toBe(false);
+        expect(wrapper.findAll('.tanda-motoris-item')).toHaveLength(2);
     });
 
     it('tidak menampilkan bagian titik bila outlet bukan bagian titik', async () => {
