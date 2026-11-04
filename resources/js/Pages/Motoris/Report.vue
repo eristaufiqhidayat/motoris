@@ -4,6 +4,7 @@ import { Deferred, Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Select from '@/Components/ui/atoms/Select.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
@@ -85,7 +86,7 @@ function saring() {
                 <form class="flex flex-wrap items-end gap-2" role="search" @submit.prevent="saring">
                     <div>
                         <Label for="bulan">Bulan</Label>
-                        <Input id="bulan" v-model="filterBulan" type="month" />
+                        <DatePicker id="bulan" v-model="filterBulan" mode="bulan" />
                     </div>
                     <template v-if="tab === 'absensi'">
                         <div class="grow min-w-[12rem]">

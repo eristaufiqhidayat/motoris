@@ -8,6 +8,7 @@ import Checkbox from '@/Components/ui/atoms/Checkbox.vue';
 import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
+import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Alert from '@/Components/ui/molecules/Alert.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
@@ -187,11 +188,11 @@ onUnmounted(() => clearInterval(timer));
                         <div v-if="batasiTanggal" class="grid grid-cols-2 gap-2">
                             <div>
                                 <Label for="backup-dari">Dari</Label>
-                                <Input id="backup-dari" v-model="dari" type="date" />
+                                <DatePicker id="backup-dari" v-model="dari" />
                             </div>
                             <div>
                                 <Label for="backup-sampai">Sampai</Label>
-                                <Input id="backup-sampai" v-model="sampai" type="date" />
+                                <DatePicker id="backup-sampai" v-model="sampai" />
                             </div>
                         </div>
                         <FieldError v-if="form.errors.sampai">{{ form.errors.sampai }}</FieldError>

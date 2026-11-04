@@ -139,4 +139,15 @@ describe('DatePicker', () => {
         expect(wrapper.classes()).toContain('w-40');
         expect(wrapper.find('input').classes()).not.toContain('w-40');
     });
+
+    it('mode bulan: menampilkan nama bulan dan memancarkan nilai Y-m', async () => {
+        const wrapper = pasang({ modelValue: '2026-10', mode: 'bulan' });
+
+        expect(wrapper.find('input').element.value).toBe('Oktober 2026');
+
+        await wrapper.find('input').trigger('click');
+        await wrapper.findAll('.datepicker-hari')[10].trigger('click');
+
+        expect(wrapper.emitted('update:modelValue')[0]).toEqual(['2026-11']);
+    });
 });

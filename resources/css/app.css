@@ -498,6 +498,7 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     .datepicker-judul { @apply font-semibold text-gray-800; }
     .datepicker-nav { @apply rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700; }
     .datepicker-grid { @apply grid grid-cols-7 gap-0.5 text-center; }
+    .datepicker-grid-bulan { @apply grid-cols-3; }
     .datepicker-hari-nama { @apply py-1 text-gray-400; }
     .datepicker-hari { @apply h-8 rounded text-gray-700 hover:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-500; }
     .datepicker-hari-luar { @apply text-gray-300; }

@@ -1,6 +1,7 @@
 <script setup>
 // Pemilih tanggal: kolom tampil "31 Okt 2026" (readonly) yang membuka kalender bulanan (Senin sebagai awal minggu).
 // v-model berformat Y-m-d (sama dengan <input type="date">). min/max (Y-m-d) menonaktifkan tanggal di luar rentang.
+// mode="bulan": pemilih bulan (grid 12 bulan, ganti tahun); v-model berformat Y-m (sama dengan <input type="month">).
 // Atribut non-prop (id, aria-*, required, dst.) diteruskan ke kolom input; class & style ke pembungkus.
 // Keyboard: Enter/Spasi/↓ membuka, panah menggeser tanggal, PageUp/PageDown ganti bulan, Esc menutup.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, watch } from 'vue';
@@ -17,6 +18,8 @@ const props = defineProps({
     disabled: { type: Boolean, default: false },
     // true = ada tombol "Hapus" untuk mengosongkan tanggal.
     clearable: { type: Boolean, default: false },
+    // 'tanggal' (default) atau 'bulan'.
+    mode: { type: String, default: 'tanggal' },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -50,13 +53,38 @@ const hariIni = () => {
     return kePola(t.getFullYear(), t.getMonth(), t.getDate());
 };
 
+const modeBulan = computed(() => props.mode === 'bulan');
+// Nilai model diubah ke pola Y-m-d penuh (mode bulan: tanggal 1) supaya logika kalender sama.
+const kePenuh = (nilai) => (nilai ? (modeBulan.value ? `${nilai}-01` : nilai) : '');
+
 const buka = ref(false);
 const wrapper = ref(null);
 const kolom = ref(null);
 const grid = ref(null);
 // Bulan yang sedang ditampilkan (y, m 0-11) dan tanggal yang difokuskan keyboard.
-const tampil = ref(dariPola(props.modelValue || hariIni()));
-const fokusPola = ref(props.modelValue || hariIni());
+const tampil = ref(dariPola(kePenuh(props.modelValue) || hariIni()));
+const fokusPola = ref(kePenuh(props.modelValue) || hariIni());
+
+const teksTampil = computed(() => {
+    if (!props.modelValue) return '';
+    if (!modeBulan.value) return tanggalSingkat(props.modelValue);
+    const { y, m } = dariPola(kePenuh(props.modelValue));
+
+    return `${NAMA_BULAN[m]} ${y}`;
+});
+
+// Daftar 12 bulan pada tahun yang ditampilkan (mode bulan).
+const daftarBulan = computed(() => NAMA_BULAN.map((nama, i) => {
+    const pola = `${String(tampil.value.y).padStart(4, '0')}-${String(i + 1).padStart(2, '0')}`;
+
+    return {
+        pola,
+        nama: nama.slice(0, 3),
+        dipilih: pola === props.modelValue,
+        bulanIni: pola === hariIni().slice(0, 7),
+        nonaktif: (props.min && pola < props.min.slice(0, 7)) || (props.max && pola > props.max.slice(0, 7)),
+    };
+}));
 
 const dalamRentang = (pola) => (!props.min || pola >= props.min) && (!props.max || pola <= props.max);
 
@@ -97,7 +125,7 @@ function gantiBulan(delta) {
 function bukaKalender() {
     if (props.disabled || buka.value) return;
 
-    const awal = props.modelValue || hariIni();
+    const awal = kePenuh(props.modelValue) || hariIni();
     tampilkanBulan(awal);
     fokusPola.value = awal;
     buka.value = true;
@@ -116,7 +144,19 @@ function pilih(pola) {
 }
 
 function pilihHariIni() {
-    pilih(hariIni());
+    if (modeBulan.value) pilihBulan(hariIni().slice(0, 7));
+    else pilih(hariIni());
+}
+
+function pilihBulan(pola) {
+    if ((props.min && pola < props.min.slice(0, 7)) || (props.max && pola > props.max.slice(0, 7))) return;
+
+    emit('update:modelValue', pola);
+    tutup(true);
+}
+
+function gantiTahun(delta) {
+    tampil.value = { y: tampil.value.y + delta, m: tampil.value.m };
 }
 
 function hapus() {
@@ -168,7 +208,7 @@ function tutupDenganEsc(e) {
 
 // Nilai berubah dari luar (mis. reset form) saat kalender terbuka: ikuti bulannya.
 watch(() => props.modelValue, (nilai) => {
-    if (nilai) tampilkanBulan(nilai);
+    if (nilai) tampilkanBulan(kePenuh(nilai));
 });
 
 onMounted(() => {
@@ -188,7 +228,7 @@ onBeforeUnmount(() => {
             type="text"
             readonly
             class="form-control form-control-sm datepicker-input"
-            :value="tanggalSingkat(modelValue)"
+            :value="teksTampil"
             :placeholder="placeholder"
             :disabled="disabled"
             aria-haspopup="dialog"
@@ -200,6 +240,30 @@ onBeforeUnmount(() => {
         <Icon name="calendar" class="datepicker-ikon" />
 
         <div v-if="buka" class="datepicker-menu" role="dialog" aria-label="Pilih tanggal">
+            <template v-if="modeBulan">
+                <div class="datepicker-header">
+                    <button type="button" class="datepicker-nav" aria-label="Tahun sebelumnya" @click="gantiTahun(-1)">
+                        <Icon name="chevron-left" class="w-4 h-4" />
+                    </button>
+                    <span class="datepicker-judul" aria-live="polite">{{ tampil.y }}</span>
+                    <button type="button" class="datepicker-nav" aria-label="Tahun berikutnya" @click="gantiTahun(1)">
+                        <Icon name="chevron-right" class="w-4 h-4" />
+                    </button>
+                </div>
+                <div class="datepicker-grid datepicker-grid-bulan">
+                    <button
+                        v-for="b in daftarBulan"
+                        :key="b.pola"
+                        type="button"
+                        class="datepicker-hari"
+                        :class="{ 'datepicker-hari-hariini': b.bulanIni, 'datepicker-hari-pilih': b.dipilih }"
+                        :disabled="b.nonaktif"
+                        :aria-selected="b.dipilih"
+                        @click="pilihBulan(b.pola)"
+                    >{{ b.nama }}</button>
+                </div>
+            </template>
+            <template v-else>
             <div class="datepicker-header">
                 <button type="button" class="datepicker-nav" aria-label="Bulan sebelumnya" @click="gantiBulan(-1)">
                     <Icon name="chevron-left" class="w-4 h-4" />
@@ -225,8 +289,9 @@ onBeforeUnmount(() => {
                     @click="pilih(s.pola)"
                 >{{ s.hari }}</button>
             </div>
+            </template>
             <div class="datepicker-footer">
-                <button type="button" class="datepicker-aksi" :disabled="!dalamRentang(hariIni())" @click="pilihHariIni">Hari ini</button>
+                <button type="button" class="datepicker-aksi" :disabled="!modeBulan && !dalamRentang(hariIni())" @click="pilihHariIni">{{ modeBulan ? 'Bulan ini' : 'Hari ini' }}</button>
                 <button v-if="clearable" type="button" class="datepicker-aksi" @click="hapus">Hapus</button>
             </div>
         </div>

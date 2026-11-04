@@ -130,7 +130,7 @@ describe('DataTable filter', () => {
         expect(wrapper.emitted('filter')).toEqual([[{ nilai: { kode: '' }, operator: { kode: '<' } }]]);
     });
 
-    it('uses a date input with an operator select for date columns', async () => {
+    it('uses a datepicker with an operator select for date columns', async () => {
         vi.useFakeTimers();
         const wrapper = mount(DataTable, {
             props: { columns, rows, filterable: ['dibuat'], filterAngka: [], filterTanggal: ['dibuat'] },
@@ -138,13 +138,17 @@ describe('DataTable filter', () => {
 
         await filterButton(wrapper, 'dibuat').trigger('click');
 
-        expect(wrapper.find('.filter-flyout input.col-filter').attributes('type')).toBe('date');
+        expect(wrapper.find('.filter-flyout .datepicker.col-filter').exists()).toBe(true);
         expect(wrapper.find('select.col-filter-op').exists()).toBe(true);
 
-        await wrapper.find('.filter-flyout input.col-filter').setValue('2026-10-23');
+        await wrapper.find('.filter-flyout .datepicker-input').trigger('click');
+        await wrapper.find('.datepicker-hari:not(.datepicker-hari-luar)').trigger('click');
+
         vi.advanceTimersByTime(700);
 
-        expect(wrapper.emitted('filter')).toEqual([[{ nilai: { dibuat: '2026-10-23' }, operator: { dibuat: '=' } }]]);
+        const [[filter]] = wrapper.emitted('filter');
+        expect(filter.nilai.dibuat).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(filter.operator).toEqual({ dibuat: '=' });
     });
 
     it('clears the column value and emits when the hapus button is clicked', async () => {
