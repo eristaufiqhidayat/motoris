@@ -19,6 +19,7 @@ defineProps({
                 <span>{{ kendala.tim ? 'Laporan Kendala' : 'Kendala Lapangan' }}</span>
                 <span class="flex items-center gap-2">
                     <Badge variant="warning">{{ angka(kendala.terbuka) }} Terbuka</Badge>
+                    <Badge v-if="kendala.ada_balasan" variant="primary">{{ angka(kendala.ada_balasan) }} Ada balasan baru</Badge>
                     <Badge v-if="!kendala.tim" :variant="kendala.belum_dibaca ? 'danger' : 'secondary'">{{ angka(kendala.belum_dibaca) }} Belum dibaca</Badge>
                 </span>
             </div>

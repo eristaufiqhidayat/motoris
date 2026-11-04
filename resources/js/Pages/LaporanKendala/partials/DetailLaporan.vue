@@ -7,6 +7,7 @@ import FieldError from '@/Components/ui/atoms/FieldError.vue';
 import Label from '@/Components/ui/atoms/Label.vue';
 import Textarea from '@/Components/ui/atoms/Textarea.vue';
 import Modal from '@/Components/ui/molecules/Modal.vue';
+import Diskusi from './Diskusi.vue';
 import { tanggalSingkat } from '@/Support/format.js';
 
 // Detail Laporan Kendala (spec 064). Pelapor dengan laporan Terbuka (`laporan.bisa_ubah`) mendapat tombol Ubah dan
@@ -15,23 +16,35 @@ const props = defineProps({
     laporan: { type: Object, default: null },
     // Pembaca laporan ini { nama, dibaca } (hanya diisi server untuk pelapor); null = belum dimuat.
     pembaca: { type: Array, default: null },
+    // Komentar laporan ini (spec 065); null = belum dimuat.
+    komentar: { type: Array, default: null },
 });
 
-const emit = defineEmits(['close', 'ubah']);
+const emit = defineEmits(['close', 'ubah', 'komentar']);
 
 const VARIAN_STATUS = { terbuka: 'warning', selesai: 'success' };
 const menutup = ref(false);
+const membuka = ref(false);
 const form = useForm({ catatan_selesai: '' });
+const formBuka = useForm({ alasan: '' });
 
 // Setiap laporan yang dibuka mulai dari tampilan baca, tanpa sisa isian catatan.
 watch(() => props.laporan?.id, () => {
     menutup.value = false;
+    membuka.value = false;
     form.reset();
     form.clearErrors();
+    formBuka.reset();
+    formBuka.clearErrors();
 });
 
 function tandaiSelesai() {
     form.patch(`/laporan_kendala/${props.laporan.id}/selesai`, { preserveScroll: true, onSuccess: () => emit('close') });
+}
+
+// Buka Kembali (spec 065): pelapor membuka lagi laporannya yang Selesai; alasan opsional masuk linimasa.
+function bukaKembali() {
+    formBuka.patch(`/laporan_kendala/${props.laporan.id}/buka-kembali`, { preserveScroll: true, onSuccess: () => emit('close') });
 }
 </script>
 
@@ -68,6 +81,14 @@ function tandaiSelesai() {
                 </dd>
             </div>
 
+            <Diskusi v-if="komentar" :laporan-id="laporan.id" :komentar="komentar" @diperbarui="emit('komentar', $event)" />
+
+            <form v-if="laporan.bisa_buka_kembali && membuka" id="form-buka-kendala" @submit.prevent="bukaKembali">
+                <Label for="lk_alasan_buka">Alasan (opsional)</Label>
+                <Textarea id="lk_alasan_buka" v-model="formBuka.alasan" rows="3" placeholder="Kenapa kendala ini muncul lagi?" />
+                <FieldError v-if="formBuka.errors.alasan">{{ formBuka.errors.alasan }}</FieldError>
+            </form>
+
             <form v-if="laporan.bisa_ubah && menutup" id="form-selesai-kendala" @submit.prevent="tandaiSelesai">
                 <Label for="lk_catatan_selesai">Catatan penyelesaian</Label>
                 <Textarea id="lk_catatan_selesai" v-model="form.catatan_selesai" rows="4" placeholder="Bagaimana kendala ini teratasi?" />
@@ -75,7 +96,14 @@ function tandaiSelesai() {
             </form>
         </dl>
 
-        <template v-if="laporan?.bisa_ubah" #footer>
+        <template v-if="laporan?.bisa_buka_kembali" #footer>
+            <template v-if="membuka">
+                <Button variant="outline-secondary" type="button" @click="membuka = false">Batal</Button>
+                <Button type="submit" form="form-buka-kendala" variant="success" :loading="formBuka.processing">Buka Kembali</Button>
+            </template>
+            <Button v-else variant="outline-secondary" type="button" @click="membuka = true">Buka Kembali</Button>
+        </template>
+        <template v-else-if="laporan?.bisa_ubah" #footer>
             <template v-if="menutup">
                 <Button variant="outline-secondary" type="button" @click="menutup = false">Batal</Button>
                 <Button type="submit" form="form-selesai-kendala" variant="success" :loading="form.processing">Simpan Selesai</Button>

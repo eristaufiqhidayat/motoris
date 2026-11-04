@@ -38,7 +38,7 @@ const KOLOM = {
     pelapor: 'Pelapor',
     depo: 'Depo',
     status: 'Status',
-    jumlah_pembaca: 'Dibaca',
+    jumlah_komentar: 'Diskusi',
     diperbarui: 'Diperbarui',
     aksi: '',
 };
@@ -62,11 +62,14 @@ onMounted(() => {
 const laporanDetail = ref(null);
 // Daftar pembaca (hanya terisi untuk pelapor); null = belum dimuat.
 const pembaca = ref(null);
+// Komentar laporan yang sedang dibuka (spec 065); null = belum dimuat.
+const komentar = ref(null);
 
 // Membuka detail mencatat akun ini sebagai pembaca (kecuali pelapor), lalu daftar dimuat ulang agar lencana ikut hilang.
 async function bukaDetail(laporan) {
     laporanDetail.value = laporan;
     pembaca.value = null;
+    komentar.value = null;
 
     try {
         const respons = await fetch(`/laporan_kendala/${laporan.id}/dibaca`, {
@@ -75,8 +78,12 @@ async function bukaDetail(laporan) {
         });
         if (!respons.ok) return;
 
-        pembaca.value = (await respons.json()).pembaca;
-        if (laporan.belum_dibaca || laporan.diperbarui_setelah_dibaca) router.reload({ only: ['baris'], preserveScroll: true });
+        const hasil = await respons.json();
+        // Respons laporan lain yang terlambat (detail sudah berganti) diabaikan.
+        if (laporanDetail.value?.id !== laporan.id) return;
+        pembaca.value = hasil.pembaca;
+        komentar.value = hasil.komentar;
+        if (laporan.belum_dibaca || laporan.ada_balasan_baru) router.reload({ only: ['baris', 'kendalaBelumDibaca'], preserveScroll: true });
     } catch {
         // Gagal mencatat dibaca tidak menghalangi membaca detail.
     }
@@ -90,7 +97,7 @@ function ubahDariDetail(laporan) {
 const cari = ref(formDari(props.filter));
 
 function formDari(f) {
-    return { belum_dibaca: Boolean(f.belum_dibaca), status: f.status, kategori: f.kategori ?? '', depo: f.depo ? String(f.depo) : '', dari: f.dari ?? '', sampai: f.sampai ?? '', q: f.q ?? '' };
+    return { belum_dibaca: Boolean(f.belum_dibaca), ada_balasan: Boolean(f.ada_balasan), status: f.status, kategori: f.kategori ?? '', depo: f.depo ? String(f.depo) : '', dari: f.dari ?? '', sampai: f.sampai ?? '', q: f.q ?? '' };
 }
 
 const { memuat, berubah, ambil } = useAmbilData({
@@ -152,6 +159,9 @@ function kirimCari() {
                     <label class="flex items-center gap-1 whitespace-nowrap">
                         <Checkbox v-model="cari.belum_dibaca" /> Belum dibaca
                     </label>
+                    <label class="flex items-center gap-1 whitespace-nowrap">
+                        <Checkbox v-model="cari.ada_balasan" /> Ada balasan baru
+                    </label>
                     <Button type="submit" :loading="memuat" :disabled="!berubah">Cari</Button>
                 </form>
             </template>
@@ -160,18 +170,18 @@ function kirimCari() {
             <template #cell-judul="{ row }">
                 {{ row.judul }}
                 <Badge v-if="row.belum_dibaca" variant="danger" class="ms-1">Belum dibaca</Badge>
-                <Badge v-else-if="row.diperbarui_setelah_dibaca" variant="primary" class="ms-1">Diperbarui</Badge>
+                <Badge v-if="row.ada_balasan_baru" variant="primary" class="ms-1">Ada balasan baru</Badge>
             </template>
             <template #cell-kategori="{ row }"><Badge variant="info">{{ row.kategori_label }}</Badge></template>
             <template #cell-status="{ row }"><Badge :variant="VARIAN_STATUS[row.status] ?? 'secondary'">{{ row.status_label }}</Badge></template>
             <template #cell-aksi="{ row }">
                 <Button v-if="row.bisa_ubah" variant="outline-secondary" size="sm" @click="bukaForm(row)">Ubah</Button>
             </template>
-            <template #cell-jumlah_pembaca="{ row }">{{ row.jumlah_pembaca }}</template>
+            <template #cell-jumlah_komentar="{ row }">{{ row.jumlah_komentar }}</template>
             <template #cell-diperbarui="{ row }"><span class="text-gray-500">{{ row.diperbarui ?? '-' }}</span></template>
         </DataTable>
 
-        <DetailLaporan :laporan="laporanDetail" :pembaca="pembaca" @close="laporanDetail = null" @ubah="ubahDariDetail" />
+        <DetailLaporan :laporan="laporanDetail" :pembaca="pembaca" :komentar="komentar" @close="laporanDetail = null" @ubah="ubahDariDetail" @komentar="komentar = $event" />
 
         <FormLaporan
             :show="formTerbuka"

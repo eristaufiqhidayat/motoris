@@ -36,11 +36,13 @@ class LaporanKendalaController extends Controller
         $sampai = $this->tanggal($request->query('sampai'));
         $q = trim((string) $request->query('q'));
         $belumDibaca = $request->boolean('belum_dibaca');
+        $adaBalasan = $request->boolean('ada_balasan');
 
         $baris = LaporanKendala::dalamCakupan($user)
             ->leftJoin('mk_depo as d', 'd.id', '=', 'l.depo_id')
             ->leftJoin('laporan_kendala_dibaca as b', fn ($j) => $j->on('b.laporan_kendala_id', '=', 'l.id')->where('b.user_id', $user->id))
             ->when($belumDibaca, fn ($w) => $w->where('l.status', LaporanKendala::STATUS_TERBUKA)->where('l.user_id', '!=', $user->id)->whereNull('b.id'))
+            ->when($adaBalasan, fn ($w) => $w->whereRaw(LaporanKendala::sqlAdaBalasanBaru($user->id)))
             ->when($status !== 'semua', fn ($w) => $w->where('l.status', $status))
             ->when($kategori, fn ($w) => $w->where('l.kategori', $kategori))
             ->when($depo, fn ($w) => $w->where('l.depo_id', $depo))
@@ -53,7 +55,8 @@ class LaporanKendalaController extends Controller
             }))
             ->orderByDesc('l.tanggal_kejadian')->orderByDesc('l.id')
             ->select('l.id', 'l.user_id', 'l.tanggal_kejadian', 'l.kategori', 'l.judul', 'l.uraian', 'l.pelapor_nama', 'l.status', 'l.catatan_selesai', 'l.selesai_at', 'l.updated_at', 'd.nama as depo', 'b.dibaca_at',
-                DB::raw('(select count(*) from laporan_kendala_dibaca as p where p.laporan_kendala_id = l.id) as jumlah_pembaca'))
+                DB::raw(LaporanKendala::sqlAdaBalasanBaru($user->id).' as ada_balasan_baru'),
+                DB::raw("(select count(*) from laporan_kendala_komentar as c where c.laporan_kendala_id = l.id and c.jenis = 'komentar') as jumlah_komentar"))
             ->paginate(self::PER_HALAMAN)->withQueryString()->onEachSide(1);
 
         $bolehUbah = Akses::bisa($user, LaporanKendala::MENU, 'ubah');
@@ -72,19 +75,22 @@ class LaporanKendalaController extends Controller
             'diperbarui' => JamLokal::format($l->updated_at),
             'catatan_selesai' => $l->catatan_selesai,
             'selesai' => JamLokal::format($l->selesai_at),
-            // Lencana untuk pembaca (bukan pelapor): Terbuka yang belum pernah dibuka akun ini, atau diubah pelapor setelah dibaca.
+            // Lencana: Terbuka yang belum pernah dibuka akun ini (bukan pelapor); Ada balasan baru = aktivitas orang lain
+            // (komentar, perubahan, selesai, dibuka kembali) setelah akun ini terakhir membuka laporan.
             'belum_dibaca' => (int) $l->user_id !== $user->id && $l->status === LaporanKendala::STATUS_TERBUKA && $l->dibaca_at === null,
-            'diperbarui_setelah_dibaca' => (int) $l->user_id !== $user->id && $l->dibaca_at !== null && $l->updated_at > $l->dibaca_at,
-            'jumlah_pembaca' => (int) $l->jumlah_pembaca,
+            'ada_balasan_baru' => (bool) $l->ada_balasan_baru,
+            'jumlah_komentar' => (int) $l->jumlah_komentar,
             // Hanya pelapor sendiri, selama Terbuka (supervisor/admin hanya membaca).
             'bisa_ubah' => $bolehUbah && (int) $l->user_id === $user->id && $l->status === LaporanKendala::STATUS_TERBUKA,
+            // Pelapor boleh membuka kembali laporannya yang Selesai (spec 065).
+            'bisa_buka_kembali' => $bolehUbah && (int) $l->user_id === $user->id && $l->status === LaporanKendala::STATUS_SELESAI,
         ]);
 
         return Inertia::render('LaporanKendala/Index', [
             'slug' => LaporanKendala::MENU,
             'judul' => config('marketama.pages.'.LaporanKendala::MENU.'.title') ?? 'Laporan Kendala',
             'baris' => $baris,
-            'filter' => ['belum_dibaca' => $belumDibaca, 'status' => $status, 'kategori' => $kategori, 'depo' => $depo, 'dari' => $dari, 'sampai' => $sampai, 'q' => $q],
+            'filter' => ['belum_dibaca' => $belumDibaca, 'ada_balasan' => $adaBalasan, 'status' => $status, 'kategori' => $kategori, 'depo' => $depo, 'dari' => $dari, 'sampai' => $sampai, 'q' => $q],
             'pilihanStatus' => LaporanKendala::STATUS,
             'pilihanKategori' => LaporanKendala::KATEGORI,
             // Pilihan depo hanya berguna bila cakupan lebih luas dari downline (satu tim biasanya satu depo).
@@ -97,8 +103,8 @@ class LaporanKendalaController extends Controller
     }
 
     /**
-     * Membuka detail: akun selain pelapor dicatat sebagai pembaca (satu baris per laporan-akun, waktu baca diperbarui).
-     * Pelapor mendapat daftar pembaca dengan waktunya; yang lain daftar kosong.
+     * Membuka detail: akun mana pun (termasuk pelapor) dicatat membuka laporan (satu baris per laporan-akun, waktu
+     * baca diperbarui) sebagai dasar lencana Ada balasan baru. Daftar pembaca (selain pelapor) hanya dikirim ke pelapor.
      */
     public function dibaca(Request $request, int $id): JsonResponse
     {
@@ -107,23 +113,95 @@ class LaporanKendalaController extends Controller
 
         abort_if($laporan === null, 404);
 
-        if ((int) $laporan->user_id !== $user->id) {
-            DB::table('laporan_kendala_dibaca')->updateOrInsert(
-                ['laporan_kendala_id' => $id, 'user_id' => $user->id],
-                ['dibaca_at' => now()],
-            );
+        DB::table('laporan_kendala_dibaca')->updateOrInsert(
+            ['laporan_kendala_id' => $id, 'user_id' => $user->id],
+            ['dibaca_at' => now()],
+        );
 
-            return response()->json(['pembaca' => []]);
+        if ((int) $laporan->user_id !== $user->id) {
+            return response()->json(['pembaca' => [], 'komentar' => $this->linimasa($id, $user->id)]);
         }
 
         $pembaca = DB::table('laporan_kendala_dibaca as b')
             ->join('users as u', 'u.id', '=', 'b.user_id')
-            ->where('b.laporan_kendala_id', $id)->orderByDesc('b.dibaca_at')
+            ->where('b.laporan_kendala_id', $id)->where('b.user_id', '!=', $laporan->user_id)->orderByDesc('b.dibaca_at')
             ->get(['u.name', 'u.username', 'b.dibaca_at'])
             ->map(fn ($r) => ['nama' => $r->name ?: $r->username, 'dibaca' => JamLokal::format($r->dibaca_at)])
             ->values();
 
-        return response()->json(['pembaca' => $pembaca]);
+        return response()->json(['pembaca' => $pembaca, 'komentar' => $this->linimasa($id, $user->id)]);
+    }
+
+    /** Kirim komentar (spec 065): akun yang boleh melihat laporan ini (cakupan role), termasuk pelapor; juga pada laporan Selesai. */
+    public function komentar(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        abort_if(LaporanKendala::dalamCakupan($user)->where('l.id', $id)->doesntExist(), 404);
+
+        $data = $request->validate(['isi' => ['required', 'string', 'max:2000']]);
+
+        DB::transaction(function () use ($id, $user, $data) {
+            DB::table('laporan_kendala_komentar')->insert([
+                'laporan_kendala_id' => $id,
+                'user_id' => $user->id,
+                'penulis_nama' => $user->name ?: $user->username,
+                'jenis' => 'komentar',
+                'isi' => $data['isi'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            DB::table('laporan_kendala')->where('id', $id)->update(['aktivitas_at' => now(), 'aktivitas_oleh' => $user->id]);
+        });
+
+        return response()->json(['komentar' => $this->linimasa($id, $request->user()->id)], 201);
+    }
+
+    /** Sunting komentar sendiri (spec 065); peristiwa otomatis dan komentar orang lain tidak bisa. */
+    public function suntingKomentar(Request $request, int $id, int $komentarId): JsonResponse
+    {
+        $this->komentarMilikSendiri($request, $id, $komentarId);
+
+        $data = $request->validate(['isi' => ['required', 'string', 'max:2000']]);
+
+        DB::table('laporan_kendala_komentar')->where('id', $komentarId)->update(['isi' => $data['isi'], 'disunting_at' => now(), 'updated_at' => now()]);
+
+        return response()->json(['komentar' => $this->linimasa($id, $request->user()->id)]);
+    }
+
+    /** Hapus permanen komentar sendiri (spec 065). */
+    public function hapusKomentar(Request $request, int $id, int $komentarId): JsonResponse
+    {
+        $this->komentarMilikSendiri($request, $id, $komentarId);
+
+        DB::table('laporan_kendala_komentar')->where('id', $komentarId)->delete();
+
+        return response()->json(['komentar' => $this->linimasa($id, $request->user()->id)]);
+    }
+
+    /** Laporan harus masuk cakupan (404 bila tidak) dan komentarnya jenis `komentar` milik akun login (403 bila bukan). */
+    private function komentarMilikSendiri(Request $request, int $id, int $komentarId): void
+    {
+        $user = $request->user();
+        abort_if(LaporanKendala::dalamCakupan($user)->where('l.id', $id)->doesntExist(), 404);
+
+        $komentar = DB::table('laporan_kendala_komentar')->where('id', $komentarId)->where('laporan_kendala_id', $id)->first();
+        abort_if($komentar === null, 404);
+        abort_unless($komentar->jenis === 'komentar' && (int) $komentar->user_id === $user->id, 403, 'Komentar hanya bisa diubah atau dihapus oleh penulisnya.');
+    }
+
+    /** @return list<array<string, mixed>> komentar dan peristiwa laporan, urut waktu naik. */
+    private function linimasa(int $id, int $idAkun): array
+    {
+        return DB::table('laporan_kendala_komentar')->where('laporan_kendala_id', $id)->orderBy('created_at')->orderBy('id')->get()
+            ->map(fn ($k) => [
+                'id' => $k->id,
+                'jenis' => $k->jenis,
+                'penulis' => $k->penulis_nama,
+                'milik_sendiri' => $k->jenis === 'komentar' && (int) $k->user_id === $idAkun,
+                'isi' => $k->isi,
+                'waktu' => JamLokal::format($k->created_at),
+                'disunting' => $k->disunting_at !== null,
+            ])->all();
     }
 
     /** Laporan baru: data pelapor (akun, karyawan, nama, depo) diambil dari akun login, bukan dari isian form. */
@@ -146,6 +224,7 @@ class LaporanKendalaController extends Controller
             'pelapor_nama' => $karyawan->nama,
             'depo_id' => $karyawan->depo_id,
             'status' => LaporanKendala::STATUS_TERBUKA,
+            'aktivitas_at' => now(), 'aktivitas_oleh' => $request->user()->id,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -162,7 +241,7 @@ class LaporanKendalaController extends Controller
         abort_unless((int) $laporan->user_id === $request->user()->id, 403, 'Laporan hanya bisa diubah oleh pelapornya.');
         abort_unless($laporan->status === LaporanKendala::STATUS_TERBUKA, 422, 'Laporan yang sudah Selesai tidak bisa diubah lagi.');
 
-        DB::table('laporan_kendala')->where('id', $id)->where('status', LaporanKendala::STATUS_TERBUKA)->update($request->validate($this->aturan()) + ['updated_at' => now()]);
+        DB::table('laporan_kendala')->where('id', $id)->where('status', LaporanKendala::STATUS_TERBUKA)->update($request->validate($this->aturan()) + ['updated_at' => now(), 'aktivitas_at' => now(), 'aktivitas_oleh' => $request->user()->id]);
 
         return back()->with('sukses', 'Laporan kendala diperbarui.');
     }
@@ -178,14 +257,63 @@ class LaporanKendalaController extends Controller
 
         $data = $request->validate(['catatan_selesai' => ['required', 'string', 'max:5000']]);
 
-        DB::table('laporan_kendala')->where('id', $id)->where('status', LaporanKendala::STATUS_TERBUKA)->update([
-            'status' => LaporanKendala::STATUS_SELESAI,
-            'catatan_selesai' => $data['catatan_selesai'],
-            'selesai_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::transaction(function () use ($id, $request, $data) {
+            $diubah = DB::table('laporan_kendala')->where('id', $id)->where('status', LaporanKendala::STATUS_TERBUKA)->update([
+                'status' => LaporanKendala::STATUS_SELESAI,
+                'catatan_selesai' => $data['catatan_selesai'],
+                'selesai_at' => now(),
+                'updated_at' => now(),
+                'aktivitas_at' => now(), 'aktivitas_oleh' => $request->user()->id,
+            ]);
+            // Permintaan ganda (klik dua kali): yang kedua tidak mengubah baris, jadi tidak boleh menambah peristiwa.
+            abort_if($diubah === 0, 422, 'Laporan ini sudah Selesai.');
+            $this->catatPeristiwa($id, $request->user(), 'selesai', $data['catatan_selesai']);
+        });
 
         return back()->with('sukses', 'Laporan kendala ditandai Selesai.');
+    }
+
+    /**
+     * Buka kembali laporan Selesai (spec 065): hanya pelapor, hanya dari Selesai. Catatan penyelesaian lama tetap
+     * di linimasa sebagai peristiwa Selesai; kolom di laporan dikosongkan agar hitungan Terbuka kembali benar.
+     */
+    public function bukaKembali(Request $request, int $id): RedirectResponse
+    {
+        $laporan = DB::table('laporan_kendala')->where('id', $id)->first();
+
+        abort_if($laporan === null, 404);
+        abort_unless((int) $laporan->user_id === $request->user()->id, 403, 'Laporan hanya bisa dibuka kembali oleh pelapornya.');
+        abort_unless($laporan->status === LaporanKendala::STATUS_SELESAI, 422, 'Hanya laporan yang Selesai yang bisa dibuka kembali.');
+
+        $data = $request->validate(['alasan' => ['nullable', 'string', 'max:2000']]);
+
+        DB::transaction(function () use ($id, $request, $data) {
+            $diubah = DB::table('laporan_kendala')->where('id', $id)->where('status', LaporanKendala::STATUS_SELESAI)->update([
+                'status' => LaporanKendala::STATUS_TERBUKA,
+                'catatan_selesai' => null,
+                'selesai_at' => null,
+                'updated_at' => now(),
+                'aktivitas_at' => now(), 'aktivitas_oleh' => $request->user()->id,
+            ]);
+            abort_if($diubah === 0, 422, 'Laporan ini sudah dibuka kembali.');
+            $this->catatPeristiwa($id, $request->user(), 'dibuka_kembali', filled($data['alasan'] ?? null) ? trim($data['alasan']) : null);
+        });
+
+        return back()->with('sukses', 'Laporan kendala dibuka kembali.');
+    }
+
+    /** Peristiwa otomatis di linimasa (jenis selesai / dibuka_kembali), ditulis atas nama akun yang bertindak. */
+    private function catatPeristiwa(int $id, $user, string $jenis, ?string $isi): void
+    {
+        DB::table('laporan_kendala_komentar')->insert([
+            'laporan_kendala_id' => $id,
+            'user_id' => $user->id,
+            'penulis_nama' => $user->name ?: $user->username,
+            'jenis' => $jenis,
+            'isi' => $isi,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /** @return array<string, mixed> */

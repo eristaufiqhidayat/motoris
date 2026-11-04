@@ -101,6 +101,15 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
         ->whereNumber('id')->middleware('hak:laporan_kendala,ubah')->name('laporan-kendala.update');
     Route::post('/laporan_kendala/{id}/dibaca', [LaporanKendalaController::class, 'dibaca'])
         ->whereNumber('id')->middleware('hak:laporan_kendala')->name('laporan-kendala.dibaca');
+    // Diskusi (spec 065): siapa pun yang boleh melihat laporan (hak Lihat + cakupan) boleh berkomentar.
+    Route::post('/laporan_kendala/{id}/komentar', [LaporanKendalaController::class, 'komentar'])
+        ->whereNumber('id')->middleware('hak:laporan_kendala')->name('laporan-kendala.komentar');
+    Route::patch('/laporan_kendala/{id}/buka-kembali', [LaporanKendalaController::class, 'bukaKembali'])
+        ->whereNumber('id')->middleware('hak:laporan_kendala,ubah')->name('laporan-kendala.buka-kembali');
+    Route::put('/laporan_kendala/{id}/komentar/{komentarId}', [LaporanKendalaController::class, 'suntingKomentar'])
+        ->whereNumber(['id', 'komentarId'])->middleware('hak:laporan_kendala')->name('laporan-kendala.komentar.sunting');
+    Route::delete('/laporan_kendala/{id}/komentar/{komentarId}', [LaporanKendalaController::class, 'hapusKomentar'])
+        ->whereNumber(['id', 'komentarId'])->middleware('hak:laporan_kendala')->name('laporan-kendala.komentar.hapus');
     Route::patch('/laporan_kendala/{id}/selesai', [LaporanKendalaController::class, 'selesai'])
         ->whereNumber('id')->middleware('hak:laporan_kendala,ubah')->name('laporan-kendala.selesai');
 
