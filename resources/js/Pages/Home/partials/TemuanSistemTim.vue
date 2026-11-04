@@ -141,7 +141,7 @@ function selesaiPeriksa() {
             <template #aksi="{ row }">
                 <span class="flex flex-wrap gap-3 whitespace-nowrap">
                     <a class="tautan-depo" :href="urlStreetView(row.acuan.latitude, row.acuan.longitude)" target="_blank" rel="noopener">Street View</a>
-                    <button type="button" class="tautan-depo" @click="petaTerpilih = row.acuan">Peta</button>
+                    <button type="button" class="tautan-depo" @click="petaTerpilih = row.acuan">Detail</button>
                     <button type="button" class="tautan-depo" @click="periksaTitik(row)">Periksa</button>
                 </span>
             </template>
@@ -153,7 +153,7 @@ function selesaiPeriksa() {
     </Modal>
 
     <!-- Outlet bertanda lain di sekitar titik (outlet sekelompok berkoordinat sama, jarak 0 m). -->
-    <Modal :show="petaTerpilih !== null" :title="petaTerpilih ? `Peta ${petaTerpilih.nama}` : ''" placement="kanan" @close="petaTerpilih = null">
+    <Modal :show="petaTerpilih !== null" :title="petaTerpilih ? `Detail ${petaTerpilih.nama}` : ''" placement="kanan" @close="petaTerpilih = null">
         <PetaOutletBertanda v-if="petaTerpilih" url="/tracking_sales/tanda/outlet-terdekat" :outlet="petaTerpilih" />
     </Modal>
 
