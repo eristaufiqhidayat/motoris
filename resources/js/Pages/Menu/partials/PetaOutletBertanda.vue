@@ -105,6 +105,14 @@ onMounted(muat);
 
         <p v-if="pesan" class="mb-0 text-xs text-red-600">{{ pesan }}</p>
 
+        <!-- Selama data outlet di titik ini dimuat: kerangka tab + baris outlet agar drawer tidak kosong. -->
+        <div v-if="memuat" class="peta-outlet-daftar animate-pulse" role="status" aria-label="Memuat outlet di titik ini">
+            <Skeleton class="h-4 w-1/2" />
+            <div class="mt-3 space-y-2">
+                <Skeleton v-for="n in 3" :key="n" class="h-14 w-full" />
+            </div>
+        </div>
+
         <!-- Dua daftar berbagi satu area lewat tab; tanpa outlet sekelompok (titik kosong) hanya "di sekitar" yang ada. -->
         <Tabs v-if="!memuat && !pesan && titik.length" v-model="tab" :tabs="daftarTab" rapat />
 
