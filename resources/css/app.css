@@ -148,7 +148,8 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
 .demo-login { margin-top: 1rem; padding: .75rem; border: 1px dashed #d4a537; border-radius: .375rem; background: #fdf6e9; }
 .demo-login-title { font-size: .75rem; color: #8a6d2b; margin-bottom: .5rem; }
 .demo-login-buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
-.auth-brand { color: #fff; font-weight: 700; font-size: 1.25rem; text-align: center; margin-bottom: 1rem; text-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+.auth-brand { display: flex; justify-content: center; margin-bottom: 1rem; }
+.auth-brand img { height: 3.5rem; width: auto; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }
 /* Breadcrumb di topbar: menunjukkan posisi menu aktif (grup > menu), derived dari config('marketama.menu'). */
 .breadcrumb { display: flex; align-items: center; gap: .4rem; font-size: .75rem; color: var(--color-ink-muted); }
 .breadcrumb-item { font-weight: 500; }

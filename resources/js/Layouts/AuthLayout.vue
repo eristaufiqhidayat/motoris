@@ -11,7 +11,9 @@ const appName = usePage().props.appName;
     <Head :title="`${title} · ${appName}`" />
     <div class="auth-page">
         <div class="auth-box">
-            <div class="auth-brand">{{ appName }}</div>
+            <div class="auth-brand">
+                <img src="/images/enesis-icon.png" :alt="appName" />
+            </div>
             <slot />
         </div>
     </div>
