@@ -22,6 +22,10 @@ const props = defineProps({
     // Tab yang terbuka saat halaman dimuat (dari ?tab=, sudah disaring controller).
     tab: { type: String, default: 'ringkasan' },
     target: { type: Object, required: true },
+    // Kehadiran hari ini: { hadir, total, tanggal } motoris aktif yang sudah absen datang.
+    absenHariIni: { type: Object, default: () => ({ hadir: 0, total: 0, tanggal: null }) },
+    // Checkin outlet pertama hari ini: { sudah, belum, total, batas, lewat }.
+    checkinPagi: { type: Object, default: () => ({ sudah: 0, belum: 0, total: 0, batas: '11:00', lewat: false }) },
     // Ringkasan Laporan Kendala (spec 064); null bila akun tanpa hak Lihat.
     kendala: { type: Object, default: null },
     // Tautan kartu ({ slug: url | null }); null = akun tidak boleh membuka menu itu.
@@ -43,7 +47,7 @@ const subtitle = computed(() => `${props.periode.dari} – ${props.periode.sampa
 
 // Semua prop data dikirim ke tab sebagai satu objek.
 const data = computed(() => ({
-    target: props.target, kendala: props.kendala, tautan: props.tautan, ringkasanDepo: props.ringkasanDepo, funnel: props.funnel,
+    target: props.target, absenHariIni: props.absenHariIni, checkinPagi: props.checkinPagi,kendala: props.kendala, tautan: props.tautan, ringkasanDepo: props.ringkasanDepo, funnel: props.funnel,
     tren: props.tren, outletDepo: props.outletDepo, tandaMotoris: props.tandaMotoris, perbandingan: props.perbandingan, koordinator: props.koordinator,
 }));
 

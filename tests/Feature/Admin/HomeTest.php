@@ -445,6 +445,43 @@ class HomeTest extends AdminTestCase
             );
     }
 
+    public function test_beranda_admin_menampilkan_motoris_sudah_absen_hari_ini_dibanding_motoris_aktif(): void
+    {
+        // Hanya absen datang hari ini (masuk_at terisi) yang dihitung: karyawan 1 hadir, karyawan 3 punya baris absen tanpa masuk_at.
+        DB::table('trx_absensi')->insert([
+            ['karyawan_id' => 1, 'depo_id' => 46, 'tanggal' => '2026-10-03', 'masuk_at' => '2026-10-03 06:00:00'],
+            ['karyawan_id' => 3, 'depo_id' => 46, 'tanggal' => '2026-10-03', 'masuk_at' => null],
+        ]);
+        $aktif = DB::table('mk_karyawan')->where('kategori', 'sales')->where('aktif', true)->count();
+
+        $this->get('/home')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Home/Dashboard')
+                ->where('absenHariIni.tanggal', '2026-10-03')
+                ->where('absenHariIni.hadir', 1)
+                ->where('absenHariIni.total', $aktif)
+            );
+    }
+
+    public function test_beranda_admin_menampilkan_motoris_sudah_dan_belum_checkin_pagi(): void
+    {
+        // Hanya karyawan 1 yang checkin hari ini (kunjungan dari setUp); karyawan 3 hanya checkin 1 Okt.
+        $aktif = DB::table('mk_karyawan')->where('kategori', 'sales')->where('aktif', true)->count();
+
+        // Jam 12:00 (lewat batas 11:00 waktu setempat).
+        $this->get('/home')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Home/Dashboard')
+                ->where('checkinPagi.sudah', 1)
+                ->where('checkinPagi.belum', $aktif - 1)
+                ->where('checkinPagi.total', $aktif)
+                ->where('checkinPagi.batas', '11:00')
+                ->where('checkinPagi.lewat', true)
+            );
+    }
+
     public function test_checkin_outlet_hari_ini_sudah_dan_belum_dengan_batas_jam_11_waktu_setempat(): void
     {
         // Fixture setUp: pada 2026-10-03 hanya Rudi (1) yang punya kunjungan; Tegar (3) belum. Waktu test 12:00 WIB,

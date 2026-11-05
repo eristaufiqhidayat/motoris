@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue';
 import { Deferred } from '@inertiajs/vue3';
 import StatCard from '@/Components/ui/molecules/StatCard.vue';
 import Card from '@/Components/ui/molecules/Card.vue';
@@ -16,9 +17,32 @@ const props = defineProps({
 defineEmits(['buka']);
 
 const { kini, lalu, jangkauan, roKini, roLalu, fiktifKini, fiktifLalu } = useMetrikBeranda(() => props.data);
+
+const persenCheckin = computed(() => (props.data.checkinPagi.total ? (props.data.checkinPagi.sudah / props.data.checkinPagi.total) * 100 : 0));
+const persenHadir =computed(() => (props.data.absenHariIni.total ? (props.data.absenHariIni.hadir / props.data.absenHariIni.total) * 100 : 0));
 </script>
 
 <template>
+    <section class="mb-4" aria-labelledby="judul-ringkas-hadir">
+        <h6 id="judul-ringkas-hadir" class="judul-bagian">Kehadiran Hari Ini</h6>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Motoris Sudah Absen" icon="user-check" :nada="nadaCapai(persenHadir)" :progres="data.absenHariIni.total ? persenHadir : null">
+                {{ angka(data.absenHariIni.hadir) }} <span class="stat-card-satuan">/ {{ angka(data.absenHariIni.total) }} motoris aktif</span>
+                <template #keterangan>
+                    {{ data.absenHariIni.total ? `${angka(data.absenHariIni.total - data.absenHariIni.hadir)} belum absen datang di depo` : 'Belum ada motoris aktif.' }}
+                </template>
+            </StatCard>
+            <StatCard label="Motoris Checkin Pagi" icon="store" :nada="data.checkinPagi.lewat ? nadaCapai(persenCheckin) : 'netral'" :progres="data.checkinPagi.total ? persenCheckin : null">
+                {{ angka(data.checkinPagi.sudah) }} <span class="stat-card-satuan">sudah / {{ angka(data.checkinPagi.belum) }} belum</span>
+                <template #keterangan>
+                    <template v-if="!data.checkinPagi.total">Belum ada motoris aktif.</template>
+                    <template v-else-if="data.checkinPagi.lewat">Batas jam {{ data.checkinPagi.batas }} lewat; yang belum tidak akan checkin hari ini.</template>
+                    <template v-else>Checkin outlet pertama paling lambat jam {{ data.checkinPagi.batas }} waktu setempat.</template>
+                </template>
+            </StatCard>
+        </div>
+    </section>
+
     <section class="mb-4" aria-labelledby="judul-ringkas-hasil">
         <h6 id="judul-ringkas-hasil" class="judul-bagian">Hasil · Penyebaran dan Kualitas Data</h6>
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

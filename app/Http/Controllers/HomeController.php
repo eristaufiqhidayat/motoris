@@ -62,6 +62,10 @@ class HomeController extends Controller
             'periode' => self::periode($summary),
             'tab' => in_array($request->query('tab'), self::TAB_BERANDA, true) ? $request->query('tab') : self::TAB_BERANDA[0],
             'target' => $summary->target,
+            // Kehadiran hari ini: motoris aktif yang sudah absen datang di depo dibanding seluruh motoris aktif (ringan, dua COUNT).
+            'absenHariIni' => self::absenHariIniAdmin($request),
+            // Checkin pagi: motoris aktif yang sudah/belum checkin outlet pertama (batas jam 11 waktu setempat).
+            'checkinPagi' => self::checkinPagiAdmin($request),
             // Kartu Laporan Kendala (spec 064): ringan, null bila akun tanpa hak Lihat laporan_kendala.
             'kendala' => LaporanKendala::ringkasan($request->user()),
             // Kartu Perlu Perhatian bertaut ke menu rinciannya hanya bila akun boleh membuka menu itu.
@@ -298,6 +302,24 @@ class HomeController extends Controller
     }
 
     /**
+     * Beranda admin: jumlah sales motoris aktif dalam cakupan akun (Akses::batasiKaryawan) yang sudah absen datang
+     * hari ini (trx_absensi.masuk_at terisi), dibanding seluruh motoris aktif. Aturan hadir sama dengan absenHariIni.
+     *
+     * @return array{hadir: int, total: int, tanggal: string}
+     */
+    private static function absenHariIniAdmin(Request $request): array
+    {
+        $hariIni = Pengaturan::sekarang()->toDateString();
+        $motoris = fn () => Akses::batasiKaryawan(DB::table('mk_karyawan as k'), $request->user())
+            ->where('k.kategori', 'sales')->where('k.aktif', true);
+
+        $hadir = (int) $motoris()->whereExists(fn ($e) => $e->selectRaw('1')->from('trx_absensi as a')
+            ->whereColumn('a.karyawan_id', 'k.id')->where('a.tanggal', $hariIni)->whereNotNull('a.masuk_at'))->count();
+
+        return ['hadir' => $hadir, 'total' => (int) $motoris()->count(), 'tanggal' => $hariIni];
+    }
+
+    /**
      * Jumlah sales motoris aktif di tim yang sudah/belum checkin outlet hari ini (ada trx_kunjungan hari ini).
      * Aturan bisnis (BUSINESS_RULES §5): checkin outlet paling lambat jam 11.00 waktu setempat (zona mobile.zona_waktu,
      * batas dari mobile.checkin_pagi_selesai, sama dengan menu Sales Checkin Outlet Pagi); lewat jam itu motoris tidak
@@ -309,8 +331,7 @@ class HomeController extends Controller
     {
         $sekarang = Pengaturan::sekarang();
         $ids = self::salesTim($request);
-        preg_match('/^(\d{1,2})[:.](\d{2})$/', trim((string) config('mobile.checkin_pagi_selesai')), $m);
-        $batas = isset($m[1]) ? sprintf('%02d:%s', $m[1], $m[2]) : '11:00';
+        $batas = self::batasCheckinPagi();
 
         $sudah = $ids->isEmpty() ? 0
             : DB::table('trx_kunjungan')->whereIn('karyawan_id', $ids)->where('tanggal', $sekarang->toDateString())
@@ -320,6 +341,34 @@ class HomeController extends Controller
             'sudah' => $sudah, 'belum' => $ids->count() - $sudah, 'total' => $ids->count(), 'batas' => $batas,
             'lewat' => $sekarang->format('H:i') >= $batas,
         ];
+    }
+
+    /** Batas checkin outlet pertama (HH:MM, waktu setempat) dari mobile.checkin_pagi_selesai; bawaan 11:00. */
+    private static function batasCheckinPagi(): string
+    {
+        preg_match('/^(\d{1,2})[:.](\d{2})$/', trim((string) config('mobile.checkin_pagi_selesai')), $m);
+
+        return isset($m[1]) ? sprintf('%02d:%s', $m[1], $m[2]) : '11:00';
+    }
+
+    /**
+     * Beranda admin: motoris aktif dalam cakupan akun yang sudah/belum checkin outlet hari ini (ada trx_kunjungan
+     * dengan checkin_at). Aturan batas jam sama dengan checkinOutletHariIni: lewat batas, yang belum = tidak akan checkin.
+     *
+     * @return array{sudah: int, belum: int, total: int, batas: string, lewat: bool}
+     */
+    private static function checkinPagiAdmin(Request $request): array
+    {
+        $sekarang = Pengaturan::sekarang();
+        $batas = self::batasCheckinPagi();
+        $motoris = fn () => Akses::batasiKaryawan(DB::table('mk_karyawan as k'), $request->user())
+            ->where('k.kategori', 'sales')->where('k.aktif', true);
+
+        $sudah = (int) $motoris()->whereExists(fn ($e) => $e->selectRaw('1')->from('trx_kunjungan as v')
+            ->whereColumn('v.karyawan_id', 'k.id')->where('v.tanggal', $sekarang->toDateString())->whereNotNull('v.checkin_at'))->count();
+        $total = (int) $motoris()->count();
+
+        return ['sudah' => $sudah, 'belum' => $total - $sudah, 'total' => $total, 'batas' => $batas, 'lewat' => $sekarang->format('H:i') >= $batas];
     }
 
     /** Id sales motoris aktif bawahan koordinator yang login (mk_karyawan.koordinator_id). */
