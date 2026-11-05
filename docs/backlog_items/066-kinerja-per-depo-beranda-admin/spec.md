@@ -1,86 +1,117 @@
-# Kinerja per Depo di Beranda Admin
+# Beranda Admin: Penyebaran Produk, 30 Hari vs 30 Hari Sebelumnya
+
+> Riwayat revisi:
+> 1. Versi awal: tabel kinerja per depo. Diganti karena yang dibutuhkan adalah angka nasional dengan pembanding.
+> 2. Kartu nasional total Call, total EC, IPT 30 hari vs 30 hari sebelumnya.
+> 3. Filter tanggal header dihapus; seluruh Beranda admin memakai 30 hari terakhir.
+> 4. (Versi ini) Tata letak disusun ulang mengikuti STYLE_GUIDE dan Beranda Koordinator, dan metrik dievaluasi ulang:
+>    tujuan tim motoris adalah **penyebaran produk ke sebanyak mungkin outlet**, bukan nilai penjualan.
 
 ## Masalah
 
-Beranda admin (cakupan `semua`/`depo`, `Home/Dashboard`) hanya menampilkan KPI nasional dan grafik **Depo Teratas**
-(8 depo dengan EC Achievement tertinggi, rentang bawaan 7 hari). Admin tidak bisa melihat kinerja **semua** depo
-sekaligus — terutama depo yang tertinggal — tanpa membuka Summary All Depo. Rentang 7 hari juga terlalu pendek untuk
-menilai kinerja depo; satu-dua hari libur atau gangguan sudah menggeser rata-rata.
+Beranda admin menampilkan kartu yang tidak memicu keputusan (jumlah depo/SK aktif), angka total tanpa normalisasi,
+dan ranking depo teratas, padahal admin perlu tahu (1) apakah produk makin tersebar, (2) apakah aktivitas motoris
+cukup, dan (3) di mana masalahnya. Nilai penjualan (Rp) bukan target utama tim motoris.
 
-## Solusi
+## Prinsip
 
-Tambah kartu **Kinerja per Depo** di Beranda admin: tabel semua depo dalam cakupan akun dengan **AVG Call**, **AVG EC**,
-dan **AVG IPT** (beserta achievement terhadap target nasional), mirip Summary All Depo. Kartu punya **rentang tanggal
-sendiri** dengan bawaan **30 hari terakhir**, terpisah dari filter tanggal halaman (KPI, funnel, tren, Depo Teratas
-tetap bawaan 7 hari).
+- **Penyebaran** adalah hasil yang diukur: outlet yang membeli, outlet baru, outlet yang membeli lagi, kedalaman SKU.
+- **Aktivitas** (call, EC, hari kerja) adalah cara mencapainya; ditampilkan sebagai rata-rata per hari kerja vs target,
+  dengan total dan perubahan sebagai keterangan (gabungan total + AVG dalam satu kartu).
+- **Perlu Perhatian** hanya berisi hal yang bisa langsung ditindaklanjuti, dan bertaut ke menu rinciannya.
+- Nilai penjualan (Rp) tidak jadi kartu; tetap terlihat sebagai garis di Tren Harian.
 
-## User stories
+## Periode
 
-1. Sebagai Admin, saya melihat AVG Call, AVG EC, dan AVG IPT setiap depo dalam 30 hari terakhir langsung di Beranda.
-2. Sebagai Admin, saya mengurutkan tabel per kolom untuk menemukan depo terbaik dan yang paling tertinggal.
-3. Sebagai Admin, saya mengganti rentang tabel ini tanpa mengubah rentang KPI dan grafik lain di Beranda.
-4. Sebagai Admin, saya mengklik nama depo untuk membuka detailnya di Summary All Depo.
+- 30 hari terakhir: hari ini − 29 hari s.d. hari ini (zona `Pengaturan::zona`); pembanding: hari ini − 59 s.d. hari
+  ini − 30. Tetap, tanpa filter tanggal; `date_from`/`date_to` di URL diabaikan. Rentang lain: Summary All Depo.
+- Subjudul PageHeader: periode, pembanding, dan sumber data (aturan PageHeader di STYLE_GUIDE).
+
+## Tata letak
+
+Mengikuti Beranda Koordinator: kelompok `StatCard` dengan judul `h6.judul-bagian`, lalu grafik dalam grid
+`lg:grid-cols-12` 7/5; header kartu `<h6 class="mb-0 font-semibold">`.
+
+### Penyebaran Produk (4 kartu)
+
+| Kartu | Nilai | Keterangan / progres | Nada |
+| --- | --- | --- | --- |
+| Outlet Terjangkau | outlet unik ber-EC (tidak dibatalkan) | ▲/▼ % · % dari outlet terdaftar (batang = % jangkauan) | arah perubahan |
+| Outlet Baru (NOO) | outlet didaftarkan lewat aplikasi | ▲/▼ % · nilai sebelumnya | arah perubahan |
+| Repeat Order | % outlet terjangkau yang ber-EC di ≥2 tanggal | ▲/▼ poin · jumlah outlet (batang = %) | arah perubahan |
+| IPT | SKU ÷ EC | ▲/▼ % · % dari target (batang = capaian) | capaian target |
+
+### Aktivitas Motoris (4 kartu)
+
+| Kartu | Nilai | Keterangan / progres |
+| --- | --- | --- |
+| Call | AVG per hari kerja | total ▲/▼ · target (batang = capaian) |
+| Effective Call | AVG per hari kerja | total ▲/▼ · strike rate EC ÷ Call (batang = capaian) |
+| Motoris Aktif | jumlah motoris | depo aktif · SK aktif |
+| Hari Kerja | hari kerja per motoris | total hari kerja ▲/▼ |
+
+### Perlu Perhatian (4 kartu, bertaut bila akun punya hak menu tujuan)
+
+| Kartu | Nilai | Tautan |
+| --- | --- | --- |
+| Laporan Kendala | Terbuka (+ ada balasan baru) | `/laporan_kendala` |
+| Outlet Stok Kosong | OSS dari funnel outlet | `/outlet_oss` |
+| Depo Tertinggal | depo aktif dengan EC Achievement < 75% | `/summary_all_depo` |
+| Motoris Ditandai | motoris dengan tanda Perlu dicek | `/motoris_ditandai` |
+
+### Grafik
+
+- Tren Harian (7/12) dan Funnel Outlet (5/12).
+- Depo · Outlet Terjangkau per Motoris, 10 terendah (bar chart): outlet unik ber-EC ÷ motoris yang menjual, per depo
+  motoris — supaya depo besar dan kecil sebanding.
 
 ## Sumber data
 
-Tidak ada query baru. Angka diambil dari `SummaryDepo::kartu()` — dipakai Summary All Depo dan sudah dipakai Beranda
-untuk KPI nasional & Depo Teratas — sehingga definisi dan angkanya **identik** dengan Summary All Depo:
-
-| Kolom | Rumus (`SummaryDepo::ringkas`) |
+| Data | Sumber |
 | --- | --- |
-| AVG Call | total call ÷ total hari kerja motoris depo |
-| AVG EC | total EC ÷ total hari kerja motoris depo |
-| AVG IPT | total SKU ÷ total EC |
-| Achievement | AVG ÷ target nasional (`pengaturan_admin` `target_nasional.*`) × 100 |
+| Call, EC, IPT, hari kerja, achievement, motoris/depo/SK aktif | `SummaryDepo::kartu()` + `HomeController::kpi()` |
+| Depo Tertinggal | `ringkasanDepo.depoTertinggal` dari kartu yang sama |
+| Outlet terjangkau, repeat order, NOO, outlet terdaftar | `Dashboard::penyebaran()` (baru) |
+| Outlet per depo | `Dashboard::outletPerDepo()` (baru) |
+| OSS | `Dashboard::funnelOutlet()` |
+| Motoris ditandai | `HomeController::tandaMotoris()` (sama dengan Beranda Koordinator) |
 
-Rata-rata berbobot (total digabung dulu, baru dibagi), bukan rata-rata dari rata-rata motoris.
+Outlet terjangkau/RO dihitung dari `trx_penjualan` EC tidak dibatalkan pada rentang, dibatasi cakupan lewat depo motoris
+penjual. Berbeda dengan EC/RO di funnel yang seumur hidup outlet.
 
-## Pertimbangan beban data
+## Beban data
 
-- **Baris yang dikirim kecil**: satu baris per depo dalam cakupan (± 30 depo). Agregasi `trx_kunjungan`,
-  `trx_penjualan`, `trx_absensi` dikerjakan database (`GROUP BY karyawan_id`), hasilnya satu baris per motoris
-  (± 1.500); PHP tidak pernah memuat baris transaksi mentah.
-- **Yang membesar hanya rentang**: 30 hari memindai ± 4× baris transaksi dibanding 7 hari. Kolom `tanggal` dan
-  `karyawan_id` di ketiga tabel sudah berindeks (`trx_penjualan` juga `(karyawan_id, tanggal)`).
-- **Tidak memperlambat halaman**: prop dikirim lewat `Inertia::defer` di grup sendiri (`kinerja`), terpisah dari grup
-  `ringkasan`, sehingga KPI/funnel/tren tidak menunggu query 30 hari, dan kartu menampilkan skeleton sendiri.
-- **Cache**: `Cache::remember` 5 menit (`HomeController::CACHE_TTL`) dengan kunci
-  `beranda:kinerja:{dari}:{sampai}:{cakupan}` — pola sama dengan `ringkasanDepo`. Bila rentang tabel sama dengan
-  rentang halaman, boleh memakai ulang hasil `ringkasanDepo` (opsional, bukan syarat).
-- **Batas rentang**: maksimal 62 hari (`RENTANG_MAKS_HARI`), sama dengan filter lain di Beranda.
-
-## Aturan
-
-- Hanya untuk Beranda admin (`Home/Dashboard`); Beranda koordinator (cakupan `downline`) tidak berubah.
-- Depo dibatasi cakupan akun (`Akses::batasiKaryawan`, sudah dilakukan `SummaryDepo`); depo aktif tanpa aktivitas
-  tetap muncul dengan angka 0.
-- Rentang lewat query `kinerja_dari` / `kinerja_sampai` (pola `rentangFilter`, yang perlu parameter panjang bawaan:
-  30 hari untuk kartu ini, 7 hari untuk pemakai lain). Bawaan: hari ini − 29 hari s.d. hari ini (zona
-  `Pengaturan::zona`).
-- Tombol Tampilkan di kartu memuat ulang hanya prop kartu (`only: ['kinerja', 'kinerjaFilter']`).
-- Urutan bawaan: EC Achievement tertinggi (sama dengan `kartu()`); kolom bisa diurutkan di sisi klien.
-- Warna achievement memakai `warnaCapai` (sama dengan Summary All Depo).
-- Nama depo menjadi tautan ke `/summary_all_depo/{id}?date_from=..&date_to=..` (rentang yang sama) bila akun punya hak
-  Lihat `summary_all_depo`; selain itu teks biasa.
-
-## Tampilan
-
-Kartu `Kinerja per Depo` di bawah kartu Achievement Nasional, header berisi judul + rentang (`DatePicker` dari/sampai +
-`Button` Tampilkan). Isi: organism `DataTable` (tanpa pagination) dengan kolom:
-
-| Depo | Motoris Aktif | Hari Kerja | AVG Call | Call Ach. | AVG EC | EC Ach. | AVG IPT | IPT Ach. |
-
-InfoPopover Beranda ditambah satu butir yang menjelaskan rentang 30 hari dan rumus rata-rata berbobot.
+- Prop tertunda dalam dua grup: `ringkasan` (kpi, funnel, tren, outletDepo, tandaMotoris) dan `perbandingan`.
+- Periode sekarang di `perbandingan` memakai ulang cache `ringkasanDepo` dan `penyebaran`; query tambahan hanya
+  30 hari sebelumnya (`beranda:perbandingan:{dari}:{sampai}:{cakupan}`).
+- Semua di-cache 5 menit per rentang & cakupan.
 
 ## Di luar cakupan
 
-- Ekspor tabel (sudah tersedia di Summary All Depo).
-- Grafik tren per depo.
-- Mengubah rentang bawaan bagian Beranda lain.
+- Kartu nilai penjualan (Rp).
+- % EC yang memenuhi Minimum SKU depo (`mk_depo.minimum_sku`): kandidat berikutnya bila kolom itu sudah terisi di
+  semua depo.
+- Filter tanggal di Beranda admin.
 
 ## Pengujian
 
-- Feature test `HomeTest`: prop `kinerja` berisi semua depo dalam cakupan (bukan dibatasi 8), rentang bawaan 30 hari,
-  `kinerja_dari`/`kinerja_sampai` dihormati dan dibatasi 62 hari, angka sama dengan `SummaryDepo::kartu()` pada
-  rentang yang sama, akun cakupan `depo` hanya melihat depo-nya.
-- Vitest: kartu menampilkan baris depo, pengurutan kolom, tautan depo hanya bila punya hak.
+- Feature test `HomeTest`: periode tetap 30 hari, `depoTertinggal`, `tandaMotoris`, `tautan`, outlet terjangkau / RO
+  per periode (EC dibatalkan dan non-EC tidak dihitung), outlet per depo, perbandingan dua periode, cakupan akun depo.
+- Vitest: `Selisih` (naik/turun/tetap, mode poin, tanpa pembanding) dan smoke test `Dashboard` (render lengkap, sebelum
+  prop tertunda tiba, tautan sesuai hak).
+
+## Revisi 5: tab di Beranda admin
+
+Beranda admin terlalu padat (±20 kartu), jadi isinya dibagi dalam tiga tab (komponen `Tabs`) dengan **Ringkasan** sebagai tab utama (Outlet dan Motoris digabung, begitu juga Koordinator dan Depo, atas keputusan pemilik produk):
+
+| Tab | Isi |
+| --- | --- |
+| Ringkasan | 8 kartu kunci (Outlet Terjangkau, Repeat Order, Rasio Fiktif, Tindak Lanjut Temuan, Call, Effective Call, Laporan Kendala, Depo Tertinggal) + Tren Harian; kartu menuju tab rincian |
+| Outlet & Motoris | Hasil dan aktivitas lapangan. Outlet: Outlet Terjangkau, Outlet Baru, Repeat Order, Outlet Stok Kosong; Kualitas Data Outlet (Terbukti Fiktif, Rasio Fiktif, NOO Ditolak, NOO Menunggu); Funnel Outlet. Motoris: Call, Effective Call, IPT, Motoris Aktif, Hari Kerja, Motoris Ditandai |
+| Koordinator & Depo | Depo Tertinggal dan Depo · Outlet per Motoris (10 terendah); Kinerja Koordinator (spec 067): kartu nasional dan tabel Koordinator Perlu Perhatian |
+
+- `?tab=` menentukan tab saat halaman dimuat (bawaan `ringkasan`, nilai tak dikenal diabaikan); pindah tab mengganti URL tanpa
+  permintaan baru. Semua data tetap dimuat sekali (tertunda, di-cache 5 menit); tab hanya mengatur tampilan.
+- Lencana merah pada nama tab = jumlah kartu bermasalah di tab itu (Outlet & Motoris: ada NOO menunggu verifikasi, motoris ditandai;
+  Koordinator & Depo: depo tertinggal, koordinator perlu audit, temuan menunggu lama, NOO menunggu lama).
+- Kode: `Dashboard.vue` (kerangka + tab), `partials/Tab*.vue` (TabRingkasan, TabOutlet, TabKoordinator), `partials/metrikBeranda.js` (angka turunan dan nada bersama).

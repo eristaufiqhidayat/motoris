@@ -9,7 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
-// Tombol Setujui / Tolak di menu All Outlet, tab "Outlet Baru dari HP".
+// Tombol Setujui / Tolak di menu All Outlet, tab "Outlet Baru dari HP". Yang memverifikasi adalah koordinator (untuk motoris
+// timnya), bukan Super Admin: admin hanya memantau hasil dan kecepatan verifikasi di Beranda (spec 067).
 class OutletBaruController extends Controller
 {
     public function __construct(private VerifikasiOutletBaru $verifikasi) {}
@@ -41,9 +42,11 @@ class OutletBaruController extends Controller
         return back()->with('sukses', 'Outlet baru ditolak.');
     }
 
-    /** Hanya outlet dari sales yang masuk cakupan role (depo / downline / diri) yang boleh diverifikasi. */
+    /** Hanya outlet dari sales yang masuk cakupan role (depo / downline / diri) yang boleh diverifikasi, dan bukan oleh Super Admin. */
     private function cekCakupan(Request $request, int $id): void
     {
+        abort_if(Akses::penuh($request->user()), 403, 'Outlet baru diverifikasi oleh koordinator, bukan admin.');
+
         $karyawanId = DB::table('trx_outlet_baru')->where('id', $id)->value('karyawan_id') ?? abort(404);
         $boleh = Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.id', $karyawanId), $request->user())->exists();
 

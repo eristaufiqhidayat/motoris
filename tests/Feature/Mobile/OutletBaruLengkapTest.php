@@ -31,6 +31,18 @@ class OutletBaruLengkapTest extends MobileApiTestCase
         ])]);
     }
 
+    /** Yang menyetujui outlet baru adalah koordinator motoris itu (spec 067), bukan admin. */
+    private function koordinator(string $method, string $uri, array $data = [])
+    {
+        $this->app['auth']->forgetGuards();
+        $koordinator = User::where('username', 'koor137')->first() ?? User::factory()->create([
+            'username' => 'koor137', 'kategori' => 'koordinator', 'karyawan_id' => 137, 'aktif' => true, 'wajib_ganti_password' => false,
+            'role_id' => DB::table('roles')->where('kode', 'koordinator')->value('id'),
+        ]);
+
+        return $this->actingAs($koordinator, 'web')->call($method, $uri, $data);
+    }
+
     private function web(string $method, string $uri, array $data = [])
     {
         $this->app['auth']->forgetGuards();
@@ -75,7 +87,7 @@ class OutletBaruLengkapTest extends MobileApiTestCase
             'type' => 'Warung', 'photo_store_id' => $foto, 'lat' => -6.25, 'lng' => 106.85, 'accuracy_m' => 10,
         ])->assertCreated()->json('data.new_outlet_id');
 
-        $this->web('POST', "/outlet_all/baru/{$id}/setujui")->assertSessionHas('sukses');
+        $this->koordinator('POST', "/outlet_all/baru/{$id}/setujui")->assertSessionHas('sukses');
 
         $o = DB::table('mk_outlet')->find(VerifikasiOutletBaru::ID_AWAL);
         $this->assertSame(['Sri', 'Joko', '081234567890', '081311112222', 'Warung', $foto, 1],

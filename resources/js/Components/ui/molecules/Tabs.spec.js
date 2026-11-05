@@ -31,4 +31,12 @@ describe('Tabs', () => {
 
         expect(wrapper.emitted('update:modelValue')).toEqual([['sales_tidak_absen']]);
     });
+
+    it('shows a badge only for tabs with a positive badge value', () => {
+        const wrapper = mount(Tabs, { props: { tabs: [{ key: 'a', label: 'A', badge: 2 }, { key: 'b', label: 'B', badge: 0 }], modelValue: 'a' } });
+        const buttons = wrapper.findAll('[role="tab"]');
+
+        expect(buttons[0].find('.badge').text()).toBe('2');
+        expect(buttons[1].find('.badge').exists()).toBe(false);
+    });
 });

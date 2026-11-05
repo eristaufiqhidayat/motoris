@@ -1,5 +1,6 @@
 <script setup>
 // Navigasi tab generik. Pemilihan tab dikirim lewat v-model (update:modelValue); pindah halaman diatur pemanggil.
+// Item boleh punya `badge` (angka > 0 tampil sebagai lencana merah), mis. jumlah hal yang perlu perhatian di tab itu.
 defineProps({
     tabs: { type: Array, required: true },
     modelValue: { type: String, default: null },
@@ -24,6 +25,7 @@ defineEmits(['update:modelValue']);
                 @click="$emit('update:modelValue', tab.key)"
             >
                 {{ tab.label }}
+                <span v-if="tab.badge" class="badge badge-danger ms-1" :title="`${tab.badge} perlu perhatian`">{{ tab.badge }}</span>
             </button>
         </nav>
     </div>

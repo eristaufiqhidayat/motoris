@@ -220,6 +220,7 @@ class MenuController extends Controller
                 // Aksi per baris (mis. 'verifikasi_outlet_baru'), hanya untuk akun yang punya hak 'aksi_hak'
                 // (bawaan: ubah) di menu ini.
                 'aksi' => Akses::bisa($request->user(), $slug, config("marketama.tables.{$table}.aksi_hak", 'ubah'))
+                    && ! (config("marketama.tables.{$table}.aksi") === 'verifikasi_outlet_baru' && Akses::penuh($request->user())) // spec 067: admin tidak memverifikasi NOO
                     ? config("marketama.tables.{$table}.aksi") : null,
             ];
         }
