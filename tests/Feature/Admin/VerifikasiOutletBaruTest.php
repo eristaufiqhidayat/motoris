@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\User;
 use App\Support\Outlet\VerifikasiOutletBaru;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -17,6 +18,15 @@ class VerifikasiOutletBaruTest extends AdminTestCase
         DB::table('mk_outlet')->insert(['id' => 554000, 'nama' => 'Outlet Marketama', 'area_id' => 70, 'latitude' => -7.4, 'longitude' => 112.7]);
     }
 
+    /** Yang memverifikasi adalah koordinator (spec 067): koordinator 137 memegang motoris 1 (Rudi) dan 3 (Tegar). */
+    private function sebagaiKoordinator(): User
+    {
+        $koordinator = $this->akun('koor_v', 'koordinator', 137);
+        $this->actingAs($koordinator);
+
+        return $koordinator;
+    }
+
     private function outletBaru(int $id, int $sales = 1, string $status = 'menunggu'): void
     {
         DB::table('trx_outlet_baru')->insert([
@@ -27,6 +37,7 @@ class VerifikasiOutletBaruTest extends AdminTestCase
 
     public function test_setujui_membuat_master_outlet_dan_menyambung_kunjungan_penjualan(): void
     {
+        $koordinator = $this->sebagaiKoordinator();
         $this->outletBaru(5);
         $kunjungan = DB::table('trx_kunjungan')->insertGetId([
             'karyawan_id' => 1, 'outlet_baru_id' => 5, 'tanggal' => '2026-10-24', 'checkin_at' => '2026-10-24 09:20:00',
@@ -51,7 +62,7 @@ class VerifikasiOutletBaruTest extends AdminTestCase
         $baru = DB::table('trx_outlet_baru')->where('id', 5)->first();
         $this->assertSame('disetujui', $baru->status);
         $this->assertSame($id, (int) $baru->outlet_id);
-        $this->assertSame($this->admin->id, (int) $baru->diverifikasi_oleh);
+        $this->assertSame($koordinator->id, (int) $baru->diverifikasi_oleh);
 
         $this->assertSame($id, (int) DB::table('trx_kunjungan')->where('id', $kunjungan)->value('outlet_id'));
         $this->assertSame($id, (int) DB::table('trx_penjualan')->where('kode', 'PJ-1')->value('outlet_id'));
@@ -60,6 +71,7 @@ class VerifikasiOutletBaruTest extends AdminTestCase
 
     public function test_id_master_berikutnya_berurutan_dan_tidak_bentrok_dengan_id_marketama(): void
     {
+        $this->sebagaiKoordinator();
         $this->outletBaru(5);
         $this->outletBaru(6);
 
@@ -72,6 +84,7 @@ class VerifikasiOutletBaruTest extends AdminTestCase
 
     public function test_outlet_yang_sudah_diverifikasi_tidak_bisa_diverifikasi_lagi(): void
     {
+        $this->sebagaiKoordinator();
         $this->outletBaru(5);
         $this->post('/outlet_all/baru/5/setujui');
 
@@ -84,6 +97,7 @@ class VerifikasiOutletBaruTest extends AdminTestCase
 
     public function test_tolak_wajib_alasan_dan_tidak_membuat_master(): void
     {
+        $this->sebagaiKoordinator();
         $this->outletBaru(5);
 
         $this->post('/outlet_all/baru/5/tolak', ['alasan' => ''])->assertSessionHasErrors('alasan');
@@ -126,6 +140,34 @@ class VerifikasiOutletBaruTest extends AdminTestCase
                     ->where('tables.0.rows.data.0.id', 5)
                 )
             );
+
+        $this->post('/outlet_all/baru/6/setujui')->assertForbidden();
+        $this->post('/outlet_all/baru/5/setujui')->assertSessionHas('sukses');
+    }
+
+    public function test_super_admin_tidak_memverifikasi_dan_tidak_melihat_tombol(): void
+    {
+        $this->outletBaru(5);
+
+        $this->post('/outlet_all/baru/5/setujui')->assertForbidden();
+        $this->post('/outlet_all/baru/5/tolak', ['alasan' => 'Coba'])->assertForbidden();
+        $this->get('/outlet_all?tab=baru')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $page) => $page->where('tables.0.aksi', null)));
+
+        $this->assertSame('menunggu', DB::table('trx_outlet_baru')->where('id', 5)->value('status'));
+    }
+
+    public function test_koordinator_hanya_memverifikasi_outlet_motoris_timnya(): void
+    {
+        $this->outletBaru(5, sales: 1); // tim koordinator 137
+        $this->outletBaru(6, sales: 2); // Sinta, bukan tim koordinator 137
+        $this->sebagaiKoordinator();
+
+        $this->get('/outlet_all?tab=baru')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $page) => $page
+                ->where('tables.0.aksi', 'verifikasi_outlet_baru')
+                ->where('tables.0.rows.total', 1)
+                ->where('tables.0.rows.data.0.id', 5)));
 
         $this->post('/outlet_all/baru/6/setujui')->assertForbidden();
         $this->post('/outlet_all/baru/5/setujui')->assertSessionHas('sukses');

@@ -138,6 +138,17 @@ return [
     // master sama (dibulatkan 6 desimal). Titik masuk bila berisi >= min_outlet outlet, ada yang bertransaksi, dan ada yang
     // dikunjungi motoris tim; antrean Perlu dicek per tim dibatasi antrean_titik titik (urut skor). Transaksi "kecil":
     // rata-rata nilai < kecil_rupiah atau <= kecil_sku jenis barang.
+    // Kinerja koordinator di Beranda admin (spec 067). audit_*: koordinator ditandai Perlu audit bila minimal audit_min_diperiksa
+    // temuan sudah diperiksa dan rasio Terbukti-nya kurang dari audit_rasio × rasio nasional (indikasi menutup semuanya sebagai
+    // Wajar). noo_menunggu_hari: pendaftaran NOO yang belum diverifikasi koordinator lebih dari ini dianggap menunggu lama. Join visit dianggap sah bila tanpa mock location, sudah selesai, dan jarak ke outlet <= join_visit_jarak_m.
+    'kinerja_koordinator' => [
+        'audit_min_diperiksa' => 5,
+        'audit_rasio' => 0.5,
+        'menunggu_hari' => 7,
+        'noo_menunggu_hari' => 3,
+        'join_visit_jarak_m' => 200,
+    ],
+
     'tanda_outlet_sistem' => [
         'min_outlet' => 3,
         'antrean_titik' => 10,
@@ -3254,7 +3265,7 @@ return [
         'trx_outlet_baru' => [
             'title' => 'Outlet Baru dari HP',
             'sumber' => SumberOutletBaru::class,
-            // Tombol Setujui / Tolak + tautan foto (Menu/Show.vue), untuk akun dengan hak ubah outlet_all.
+            // Tombol Setujui / Tolak + tautan foto (Menu/Show.vue), untuk akun dengan hak ubah outlet_all (koordinator; tidak untuk Super Admin).
             'aksi' => 'verifikasi_outlet_baru',
             'columns' => [
                 'id' => 'ID',

@@ -7,6 +7,7 @@ use App\Support\Kendala\LaporanKendala;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Motoris\Dashboard;
+use App\Support\Motoris\KinerjaKoordinator;
 use App\Support\Motoris\SummaryDepo;
 use App\Support\Tracking\SinkronTemuan;
 use Illuminate\Database\Query\Builder;
@@ -35,11 +36,15 @@ class HomeController extends Controller
 
     private const RENTANG_MAKS_HARI = 62;
 
-    // Kartu Kinerja per Depo (spec 066): rentang sendiri, bawaan 30 hari agar rata-rata depo tidak bergeser oleh satu-dua hari.
-    private const RENTANG_KINERJA_HARI = 30;
+    // Beranda admin (spec 066): seluruh isi memakai periode tetap 30 hari terakhir, dibanding 30 hari sebelumnya.
+    private const RENTANG_BERANDA_HARI = 30;
 
     // Sinkronisasi Data menjalankan deteksi per motoris per tanggal dalam satu permintaan, jadi rentangnya dibatasi pendek.
     private const RENTANG_TEMUAN_MAKS_HARI = 7;
+
+    // Tab Beranda admin (spec 066/067): Ringkasan sebagai tab utama. Semua data tetap dimuat (tertunda dan di-cache), pergantian tab
+    // dilakukan di browser; ?tab= hanya menentukan tab yang terbuka saat halaman dimuat.
+    public const TAB_BERANDA = ['ringkasan', 'outlet', 'motoris', 'koordinator'];
 
     public function index(Request $request): Response
     {
@@ -47,29 +52,34 @@ class HomeController extends Controller
             return self::koordinator($request);
         }
 
-        [$dari, $sampai] = self::rentang($request);
+        [$dari, $sampai] = self::periodeBeranda();
         $summary = new SummaryDepo($dari, $sampai, $request->user());
-        $dashboard = new Dashboard($dari, $sampai, $request->user());
-        [$kinerjaDari, $kinerjaSampai] = self::rentangFilter($request, 'kinerja_dari', 'kinerja_sampai', bawaanHari: self::RENTANG_KINERJA_HARI);
+        $dashboard = new Dashboard($dari, $sampai, $request->user(), nooTerverifikasi: true);
 
         return Inertia::render('Home/Dashboard', [
             'slug' => self::MENU,
             'judul' => config('marketama.pages.'.self::MENU.'.title') ?? 'Beranda',
             'periode' => self::periode($summary),
-            'filter' => ['date_from' => $dari, 'date_to' => $sampai],
+            'tab' => in_array($request->query('tab'), self::TAB_BERANDA, true) ? $request->query('tab') : self::TAB_BERANDA[0],
             'target' => $summary->target,
-            // Kartu Kendala Lapangan (spec 064): ringan, null bila akun tanpa hak Lihat laporan_kendala.
+            // Kartu Laporan Kendala (spec 064): ringan, null bila akun tanpa hak Lihat laporan_kendala.
             'kendala' => LaporanKendala::ringkasan($request->user()),
+            // Kartu Perlu Perhatian bertaut ke menu rinciannya hanya bila akun boleh membuka menu itu.
+            'tautan' => collect(['laporan_kendala', 'outlet_oss', 'summary_all_depo', 'motoris_ditandai', 'outlet_all', 'outlet_ditandai'])
+                ->mapWithKeys(fn ($slug) => [$slug => Akses::bisa($request->user(), $slug) ? "/{$slug}" : null])->all(),
             // Berat (query semua depo/outlet/tren); ditunda supaya halaman tampil dulu (lihat Home/Dashboard.vue).
-            // kpi & topDepo digabung jadi satu prop (ringkasanDepo) supaya SummaryDepo::kartu() — yang query
+            // kpi & depoTertinggal digabung jadi satu prop (ringkasanDepo) supaya SummaryDepo::kartu() — yang query
             // semua depo/sales — cuma dihitung sekali, bukan sekali per prop.
             'ringkasanDepo' => Inertia::defer(fn () => self::ringkasanDepo($summary, $request), 'ringkasan'),
             'funnel' => Inertia::defer(fn () => $dashboard->funnelOutlet(), 'ringkasan'),
             'tren' => Inertia::defer(fn () => $dashboard->trenHarian(), 'ringkasan'),
-            // Kinerja per Depo (spec 066): grup defer sendiri supaya query 30 hari tidak menahan KPI/funnel/tren.
-            'kinerjaFilter' => ['dari' => $kinerjaDari, 'sampai' => $kinerjaSampai],
-            'kinerja' => Inertia::defer(fn () => self::kinerjaDepo(new SummaryDepo($kinerjaDari, $kinerjaSampai, $request->user()), $request), 'kinerja'),
-            'tautanSummaryDepo' => Akses::bisa($request->user(), 'summary_all_depo'),
+            'outletDepo' => Inertia::defer(fn () => $dashboard->outletPerDepo(), 'ringkasan'),
+            'tandaMotoris' => Inertia::defer(fn () => self::tandaMotoris($request), 'ringkasan'),
+            // Penyebaran & aktivitas (spec 066): 30 hari terakhir vs 30 hari sebelumnya, grup defer sendiri. Periode ini
+            // memakai ulang cache ringkasanDepo dan Dashboard, jadi query tambahannya hanya untuk 30 hari sebelumnya.
+            'perbandingan' => Inertia::defer(fn () => self::perbandinganNasional($summary, $dashboard, $request), 'perbandingan'),
+            // Kinerja Koordinator (spec 067): grup defer sendiri; tindak lanjut temuan sistem, hasil tim, dan join visit.
+            'koordinator' => Inertia::defer(fn () => self::kinerjaKoordinator($request), 'koordinator'),
         ]);
     }
 
@@ -492,23 +502,78 @@ class HomeController extends Controller
             // serialize() apa pun cache driver-nya, dan Inertia men-JSON-kan array persis sama dengan Collection.
             return [
                 'kpi' => self::kpi($kartu, $summary->target),
-                'topDepo' => $kartu->take(8)->values()->map(fn ($d) => (array) $d)->all(),
+                // Depo aktif dengan EC Achievement di bawah 75% (batas kuning/merah warnaCapai, sama dengan Summary All Depo).
+                'depoTertinggal' => $kartu->where('total_motoris', '>', 0)->where('ec_achievement', '<', 75)->count(),
             ];
         });
     }
 
     /**
-     * Kinerja per depo (spec 066): semua baris SummaryDepo::kartu() (angka sama dengan Summary All Depo), di-cache
-     * sebagai array murni per rentang & cakupan.
+     * Perbandingan Beranda admin (spec 066): 30 hari terakhir vs 30 hari sebelumnya. Aktivitas (call, EC, IPT, AVG per
+     * hari kerja) dari kpi() — rumus sama dengan Summary All Depo; penyebaran (outlet terjangkau, repeat order, outlet
+     * baru) dari Dashboard::penyebaran(). Periode ini memakai ulang cache ringkasanDepo/penyebaran yang sama.
      *
-     * @return list<array<string, mixed>>
+     * @return array{sekarang: array<string, mixed>, sebelumnya: array<string, mixed>, outlet_terdaftar: int, menunggu_total: int, menunggu_umur: ?int}
      */
-    private static function kinerjaDepo(SummaryDepo $summary, Request $request): array
+    private static function perbandinganNasional(SummaryDepo $summary, Dashboard $dashboard, Request $request): array
     {
+        $hariIni = Pengaturan::sekarang();
+        $sampaiLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI)->toDateString();
+        $dariLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI * 2 - 1)->toDateString();
         $cakupan = Akses::cakupan($request->user()) === 'semua' ? 'semua' : 'user_'.($request->user()?->id ?? 0);
 
-        return Cache::remember("beranda:kinerja:{$summary->dari}:{$summary->sampai}:{$cakupan}", self::CACHE_TTL,
-            fn () => $summary->kartu()->map(fn ($d) => (array) $d)->values()->all());
+        // IPT = SKU ÷ EC periode itu (rasio, bukan jumlah).
+        $ringkas = fn (string $d, string $s, array $kpi, array $sebar): array => [
+            'dari' => $d, 'sampai' => $s,
+            'call' => $kpi['call'], 'ec' => $kpi['ec'], 'ipt' => $kpi['avg_ipt'], 'hari_kerja' => $kpi['hari_kerja'],
+            'avg_call' => $kpi['avg_call'], 'avg_ec' => $kpi['avg_ec'],
+            'call_achievement' => $kpi['call_achievement'], 'ec_achievement' => $kpi['ec_achievement'], 'ipt_achievement' => $kpi['ipt_achievement'],
+            'outlet' => $sebar['outlet'], 'ro' => $sebar['ro'], 'noo' => $sebar['noo'], 'noo_menunggu' => $sebar['noo_menunggu'],
+            'fiktif_terbukti' => $sebar['fiktif_terbukti'], 'fiktif_wajar' => $sebar['fiktif_wajar'],
+            'noo_disetujui' => $sebar['noo_disetujui'], 'noo_ditolak' => $sebar['noo_ditolak'],
+        ];
+
+        $sebelumnya = Cache::remember("beranda:perbandingan:{$dariLalu}:{$sampaiLalu}:{$cakupan}", self::CACHE_TTL, function () use ($request, $dariLalu, $sampaiLalu, $ringkas) {
+            $lalu = new SummaryDepo($dariLalu, $sampaiLalu, $request->user());
+
+            return $ringkas($dariLalu, $sampaiLalu, self::kpi($lalu->kartu(), $lalu->target), (new Dashboard($dariLalu, $sampaiLalu, $request->user(), nooTerverifikasi: true))->penyebaran());
+        });
+
+        $sebar = $dashboard->penyebaran();
+
+        return [
+            'sekarang' => $ringkas($summary->dari, $summary->sampai, self::ringkasanDepo($summary, $request)['kpi'], $sebar),
+            'sebelumnya' => $sebelumnya,
+            'outlet_terdaftar' => $sebar['outlet_terdaftar'],
+            // Antrean verifikasi NOO saat ini (bukan per periode).
+            'menunggu_total' => $sebar['menunggu_total'],
+            'menunggu_umur' => $sebar['menunggu_umur'],
+        ];
+    }
+
+    /**
+     * Kinerja Koordinator (spec 067) 30 hari terakhir: ringkasan nasional (dengan pembanding 30 hari sebelumnya) dan 10
+     * koordinator yang paling perlu perhatian. Array murni supaya aman di-cache.
+     *
+     * @return array{nasional: array<string, mixed>, sebelumnya: array<string, mixed>, perhatian: list<array<string, mixed>>}
+     */
+    private static function kinerjaKoordinator(Request $request): array
+    {
+        [$dari, $sampai] = self::periodeBeranda();
+        $hariIni = Pengaturan::sekarang();
+        $sampaiLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI)->toDateString();
+        $dariLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI * 2 - 1)->toDateString();
+        $cakupan = Akses::cakupan($request->user()) === 'semua' ? 'semua' : 'user_'.($request->user()?->id ?? 0);
+
+        return Cache::remember("beranda:koordinator:{$dari}:{$sampai}:{$cakupan}", self::CACHE_TTL, function () use ($request, $dari, $sampai, $dariLalu, $sampaiLalu) {
+            $kini = new KinerjaKoordinator($dari, $sampai, $request->user());
+
+            return [
+                'nasional' => $kini->nasional(),
+                'sebelumnya' => (new KinerjaKoordinator($dariLalu, $sampaiLalu, $request->user()))->nasional(),
+                'perhatian' => $kini->perhatian(10),
+            ];
+        });
     }
 
     /**
@@ -563,15 +628,11 @@ class HomeController extends Controller
         ];
     }
 
-    /** Bawaan 7 hari terakhir (beda dengan SummaryDepoController::rentang yang bawaannya hari ini saja), supaya tren harian punya isi tanpa filter. */
-    public static function rentang(Request $request): array
+    /** Periode Beranda admin (spec 066): tetap 30 hari terakhir sampai hari ini, tidak bisa diubah dari halaman. */
+    private static function periodeBeranda(): array
     {
-        $hariIni = Pengaturan::sekarang()->toDateString();
-        $bawaanDari = Carbon::parse($hariIni)->subDays(6)->toDateString();
-        $valid = fn (?string $v): bool => (bool) $v && (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
-        $dari = $valid($request->query('date_from')) ? $request->query('date_from') : $bawaanDari;
-        $sampai = $valid($request->query('date_to')) ? $request->query('date_to') : $hariIni;
+        $hariIni = Pengaturan::sekarang();
 
-        return $sampai < $dari ? [$sampai, $dari] : [$dari, $sampai];
+        return [$hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI - 1)->toDateString(), $hariIni->toDateString()];
     }
 }

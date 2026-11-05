@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Admin;
 
-use App\Support\Mobile\Pengaturan;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -43,14 +42,16 @@ class HomeTest extends AdminTestCase
         ]);
     }
 
-    public function test_beranda_dirender_dengan_filter_bawaan_7_hari_dan_ringkasan_ditunda(): void
+    public function test_beranda_memakai_periode_tetap_30_hari_dan_ringkasan_ditunda(): void
     {
-        $this->get('/home')
+        // date_from/date_to di URL diabaikan: Beranda admin tidak punya filter tanggal (spec 066).
+        $this->get('/home?date_from=2026-10-01&date_to=2026-10-01')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Home/Dashboard')
-                ->where('filter.date_from', now()->subDays(6)->toDateString())
-                ->where('filter.date_to', now()->toDateString())
+                ->missing('filter')
+                ->where('periode.dari', '04 Sep 2026')
+                ->where('periode.sampai', '03 Okt 2026')
                 // Berat (ringkasanDepo/funnel/tren); belum ada di payload awal, lihat <Deferred> di Home/Dashboard.vue.
                 ->missing('ringkasanDepo')->missing('funnel')->missing('tren')
             );
@@ -58,7 +59,8 @@ class HomeTest extends AdminTestCase
 
     public function test_kpi_nasional_funnel_dan_tren_dihitung_dari_tabel_motoris(): void
     {
-        $this->get('/home?date_from=2026-10-01&date_to=2026-10-03')
+        // Periode 30 hari terakhir (4 Sep–3 Okt) memuat seluruh fixture 1–3 Okt.
+        $this->get('/home')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Home/Dashboard')
@@ -77,49 +79,190 @@ class HomeTest extends AdminTestCase
                     ->where('ringkasanDepo.kpi.avg_ipt', 3)
                     ->where('ringkasanDepo.kpi.ec_achievement', 1.4) // 0.5 × 100 ÷ 35
                     ->where('ringkasanDepo.kpi.ipt_achievement', 100) // 3.0 × 100 ÷ 3
-                    ->has('ringkasanDepo.topDepo', 2)
+                    // Sidoarjo (EC Ach. 1,4%) dan Balaraja (0%, Sinta aktif tanpa transaksi) sama-sama di bawah 75%.
+                    ->where('ringkasanDepo.depoTertinggal', 2)
+                    ->has('tandaMotoris')
                     // Tidak ada data mk_outlet/trx_outlet_baru/trx_stok_outlet pada fixture ini.
                     ->where('funnel', fn ($funnel) => collect($funnel)->pluck('jumlah')->every(fn ($n) => $n === 0))
-                    ->has('tren', 3)
-                    ->where('tren.0', ['tanggal' => '2026-10-01', 'sales' => 50000, 'ec' => 1, 'noo' => 0]) // S3 (S4 dibatalkan)
-                    ->where('tren.1', ['tanggal' => '2026-10-02', 'sales' => 100000, 'ec' => 1, 'noo' => 0]) // S1
-                    ->where('tren.2', ['tanggal' => '2026-10-03', 'sales' => 20000, 'ec' => 0, 'noo' => 0]) // S2, bukan EC
+                    ->has('tren', 30)
+                    ->where('tren.0', ['tanggal' => '2026-09-04', 'sales' => 0, 'ec' => 0, 'noo' => 0])
+                    ->where('tren.27', ['tanggal' => '2026-10-01', 'sales' => 50000, 'ec' => 1, 'noo' => 0]) // S3 (S4 dibatalkan)
+                    ->where('tren.28', ['tanggal' => '2026-10-02', 'sales' => 100000, 'ec' => 1, 'noo' => 0]) // S1
+                    ->where('tren.29', ['tanggal' => '2026-10-03', 'sales' => 20000, 'ec' => 0, 'noo' => 0]) // S2, bukan EC
                 )
             );
     }
 
-    public function test_kinerja_per_depo_memuat_semua_depo_dengan_rentang_bawaan_30_hari(): void
+    public function test_perbandingan_nasional_30_hari_terakhir_vs_30_hari_sebelumnya(): void
     {
-        $hariIni = now(Pengaturan::zona())->toDateString();
+        // Waktu diset 3 Okt 2026: 30 hari terakhir = 4 Sep–3 Okt (memuat fixture 1–3 Okt), sebelumnya = 5 Agu–3 Sep (kosong).
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->loadDeferredProps(fn (Assert $page) => $page
+                    ->where('perbandingan.sekarang.dari', '2026-09-04')
+                    ->where('perbandingan.sekarang.sampai', '2026-10-03')
+                    ->where('perbandingan.sebelumnya.dari', '2026-08-05')
+                    ->where('perbandingan.sebelumnya.sampai', '2026-09-03')
+                    // Total fixture sama dengan KPI nasional di test lain: call 4, EC 2, SKU 6 → IPT 3.
+                    ->where('perbandingan.sekarang.call', 4)
+                    ->where('perbandingan.sekarang.ec', 2)
+                    ->where('perbandingan.sekarang.ipt', 3)
+                    ->where('perbandingan.sebelumnya.call', 0)
+                    ->where('perbandingan.sebelumnya.ec', 0)
+                    ->where('perbandingan.sebelumnya.ipt', 0)));
+    }
+
+    public function test_penyebaran_outlet_terjangkau_repeat_order_dan_per_depo(): void
+    {
+        $kunj = DB::table('trx_kunjungan')->insertGetId(['karyawan_id' => 1, 'tanggal' => '2026-10-02', 'checkin_at' => '2026-10-02 02:00:00']);
+        $jual = fn (string $kode, int $outlet, string $tgl, bool $ec = true, ?string $batal = null) => [
+            'kode' => $kode, 'kunjungan_id' => $kunj, 'karyawan_id' => 1, 'outlet_id' => $outlet, 'tanggal' => $tgl, 'jumlah_sku' => 1,
+            'total_qty' => 1, 'total' => 1000, 'poin' => 0, 'is_effective_call' => $ec, 'dibatalkan_at' => $batal,
+        ];
+        DB::table('trx_penjualan')->insert([
+            $jual('P1', 501, '2026-10-01'),
+            $jual('P2', 501, '2026-10-02'), // outlet 501 membeli di 2 tanggal → repeat order
+            $jual('P3', 502, '2026-10-02'),
+            $jual('P4', 503, '2026-10-02', true, '2026-10-02 05:00:00'), // dibatalkan
+            $jual('P5', 504, '2026-10-02', false), // bukan EC
+            $jual('P6', 505, '2026-09-01'), // 30 hari sebelumnya
+        ]);
 
         $this->get('/home')->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('kinerjaFilter', ['dari' => now(Pengaturan::zona())->subDays(29)->toDateString(), 'sampai' => $hariIni])
-                // Rentang KPI halaman tetap 7 hari.
-                ->where('filter.date_from', now(Pengaturan::zona())->subDays(6)->toDateString())
-                ->loadDeferredProps(fn (Assert $page) => $page->has('kinerja', 2)));
-    }
-
-    public function test_kinerja_per_depo_sama_dengan_kartu_summary_depo_dan_menghormati_rentang(): void
-    {
-        $this->get('/home?kinerja_dari=2026-10-01&kinerja_sampai=2026-10-03')->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->where('kinerjaFilter', ['dari' => '2026-10-01', 'sampai' => '2026-10-03'])
+                ->where('tautan.outlet_oss', '/outlet_oss')
+                ->where('tautan.summary_all_depo', '/summary_all_depo')
                 ->loadDeferredProps(fn (Assert $page) => $page
-                    ->has('kinerja', 2)
-                    // Sidoarjo (urutan pertama: EC Achievement tertinggi): hari kerja 4, call 4, EC 2, SKU 6.
-                    ->where('kinerja.0.nama', fn ($n) => is_string($n))
-                    ->where('kinerja.0.avg_call', 1)
-                    ->where('kinerja.0.avg_ec', 0.5)
-                    ->where('kinerja.0.avg_ipt', 3)
-                    ->where('kinerja.0.ipt_achievement', 100)
-                    ->etc()));
+                    ->where('perbandingan.sekarang.outlet', 2)
+                    ->where('perbandingan.sekarang.ro', 1)
+                    ->where('perbandingan.sebelumnya.outlet', 1)
+                    ->where('perbandingan.sebelumnya.ro', 0)
+                    ->where('perbandingan.outlet_terdaftar', DB::table('mk_outlet')->count())
+                    // Rudi (depo 46) menjangkau 501 dan 502 → 2 outlet per motoris.
+                    ->has('outletDepo', 1)
+                    ->where('outletDepo.0.id', 46)
+                    ->where('outletDepo.0.outlet', 2)
+                    ->where('outletDepo.0.motoris', 1)
+                    ->where('outletDepo.0.per_motoris', 2)));
     }
 
-    public function test_rentang_kinerja_dibatasi_62_hari(): void
+    public function test_tab_beranda_admin_dari_query_dan_bawaan_ringkasan(): void
     {
-        $this->get('/home?kinerja_dari=2025-01-01&kinerja_sampai=2026-10-03')->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('kinerjaFilter', ['dari' => '2026-08-03', 'sampai' => '2026-10-03']));
+        $this->get('/home')->assertInertia(fn (Assert $page) => $page->where('tab', 'ringkasan'));
+        $this->get('/home?tab=koordinator')->assertInertia(fn (Assert $page) => $page->where('tab', 'koordinator'));
+        $this->get('/home?tab=ngawur')->assertInertia(fn (Assert $page) => $page->where('tab', 'ringkasan')); // tab tidak dikenal
+    }
+
+    public function test_noo_hanya_disetujui_dan_outlet_terbukti_fiktif_tidak_dihitung(): void
+    {
+        $kunj = DB::table('trx_kunjungan')->insertGetId(['karyawan_id' => 1, 'tanggal' => '2026-10-02', 'checkin_at' => '2026-10-02 02:00:00']);
+        foreach ([601 => 'P1', 602 => 'P2', 603 => 'P3'] as $outlet => $kode) {
+            DB::table('trx_penjualan')->insert([
+                'kode' => $kode, 'kunjungan_id' => $kunj, 'karyawan_id' => 1, 'outlet_id' => $outlet, 'tanggal' => '2026-10-02', 'jumlah_sku' => 1,
+                'total_qty' => 1, 'total' => 1000, 'poin' => 0, 'is_effective_call' => true,
+            ]);
+        }
+        $tanda = fn (int $outlet, string $status, ?string $dicabut = null) => [
+            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'status' => $status, 'dibuat_nama' => 'Sistem', 'dicabut_at' => $dicabut,
+            'created_at' => now(), 'updated_at' => now(),
+        ];
+        DB::table('tanda_outlet')->insert([
+            $tanda(601, 'terbukti'), // fiktif terbukti → tidak dihitung
+            $tanda(602, 'wajar', '2026-10-02 06:00:00'), // wajar → tetap dihitung
+            // 603 tanpa tanda → dihitung
+        ]);
+        $baru = fn (string $nama, string $status) => [
+            'karyawan_id' => 1, 'nama' => $nama, 'lat' => -7.4, 'lng' => 112.7, 'status' => $status, 'recorded_at' => '2026-10-02 03:00:00',
+        ];
+        DB::table('trx_outlet_baru')->insert([$baru('A', 'disetujui'), $baru('B', 'disetujui'), $baru('C', 'menunggu'), $baru('D', 'ditolak')]);
+
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $page) => $page
+                ->where('perbandingan.sekarang.outlet', 2) // 602 + 603 (601 terbukti fiktif)
+                ->where('perbandingan.sekarang.noo', 2)
+                ->where('perbandingan.sekarang.noo_menunggu', 1)
+                ->where('outletDepo.0.outlet', 2)));
+    }
+
+    public function test_kualitas_data_outlet_fiktif_noo_ditolak_dan_antrean_verifikasi(): void
+    {
+        $tanda = fn (int $outlet, string $status, string $dicek) => [
+            'outlet_id' => $outlet, 'kategori' => 'outlet_fiktif', 'status' => $status, 'dibuat_nama' => 'Sistem', 'dicek_at' => $dicek,
+            'created_at' => '2026-09-01 08:00:00', 'updated_at' => '2026-09-01 08:00:00',
+        ];
+        DB::table('tanda_outlet')->insert([
+            $tanda(901, 'terbukti', '2026-10-01 08:00:00'), $tanda(902, 'terbukti', '2026-10-02 08:00:00'),
+            $tanda(903, 'wajar', '2026-10-02 08:00:00'),
+            $tanda(904, 'terbukti', '2026-08-10 08:00:00'), // 30 hari sebelumnya
+        ]);
+        $baru = fn (string $nama, string $status, ?string $verifikasi, string $daftar = '2026-09-30 03:00:00') => [
+            'karyawan_id' => 1, 'nama' => $nama, 'lat' => -7.4, 'lng' => 112.7, 'status' => $status, 'recorded_at' => $daftar, 'diverifikasi_pada' => $verifikasi,
+        ];
+        DB::table('trx_outlet_baru')->insert([
+            $baru('A', 'disetujui', '2026-10-01 08:00:00'), $baru('B', 'disetujui', '2026-10-01 09:00:00'), $baru('C', 'disetujui', '2026-10-02 09:00:00'),
+            $baru('D', 'ditolak', '2026-10-02 10:00:00'),
+            $baru('E', 'menunggu', null, '2026-09-28 03:00:00'), // menunggu sejak 5 hari lalu
+            $baru('F', 'menunggu', null, '2026-10-02 03:00:00'),
+        ]);
+
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tautan.outlet_all', '/outlet_all')
+                ->loadDeferredProps(fn (Assert $page) => $page
+                    ->where('perbandingan.sekarang.fiktif_terbukti', 2)
+                    ->where('perbandingan.sekarang.fiktif_wajar', 1)
+                    ->where('perbandingan.sekarang.noo_disetujui', 3)
+                    ->where('perbandingan.sekarang.noo_ditolak', 1)
+                    ->where('perbandingan.sebelumnya.fiktif_terbukti', 1)
+                    ->where('perbandingan.menunggu_total', 2)
+                    ->where('perbandingan.menunggu_umur', 5)));
+    }
+
+    public function test_kinerja_koordinator_ringkasan_pembanding_dan_perhatian(): void
+    {
+        DB::table('tanda_motoris')->insert([
+            ['karyawan_id' => 1, 'tanggal' => '2026-10-01', 'kategori' => 'lokasi_palsu', 'dibuat_nama' => 'Sistem', 'status' => 'terbukti', 'dicek_at' => '2026-10-02 08:00:00', 'created_at' => '2026-10-01 08:00:00', 'updated_at' => '2026-10-01 08:00:00'],
+            ['karyawan_id' => 3, 'tanggal' => '2026-10-02', 'kategori' => 'lokasi_palsu', 'dibuat_nama' => 'Sistem', 'status' => 'perlu_dicek', 'dicek_at' => null, 'created_at' => '2026-09-20 08:00:00', 'updated_at' => '2026-09-20 08:00:00'],
+            ['karyawan_id' => 1, 'tanggal' => '2026-08-10', 'kategori' => 'lokasi_palsu', 'dibuat_nama' => 'Sistem', 'status' => 'wajar', 'dicek_at' => '2026-08-11 08:00:00', 'created_at' => '2026-08-10 08:00:00', 'updated_at' => '2026-08-10 08:00:00'], // 30 hari sebelumnya
+        ]);
+
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $page) => $page
+                ->where('koordinator.nasional.koordinator', 1)
+                ->where('koordinator.nasional.temuan', 2)
+                ->where('koordinator.nasional.diperiksa', 1)
+                ->where('koordinator.nasional.tindak_lanjut', 50)
+                ->where('koordinator.nasional.menunggu_lama', 1)
+                ->where('koordinator.sebelumnya.temuan', 1)
+                ->where('koordinator.sebelumnya.tindak_lanjut', 100)
+                ->has('koordinator.perhatian', 1)
+                ->where('koordinator.perhatian.0.id', 137)
+                ->where('koordinator.perhatian.0.nama', 'Koor Satu')));
+    }
+
+    public function test_perbandingan_nasional_membandingkan_dua_periode_berbeda(): void
+    {
+        // Geser waktu ke 2 Nov 2026: 30 hari terakhir = 4 Okt–2 Nov (kosong), sebelumnya = 4 Sep–3 Okt (fixture).
+        $this->travelTo(now()->setTimezone('Asia/Jakarta')->setDate(2026, 11, 2)->setTime(12, 0));
+
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->loadDeferredProps(fn (Assert $page) => $page
+                    ->where('perbandingan.sekarang.call', 0)
+                    ->where('perbandingan.sebelumnya.call', 4)
+                    ->where('perbandingan.sebelumnya.ec', 2)));
+    }
+
+    public function test_perbandingan_nasional_akun_cakupan_depo_hanya_menghitung_depo_sendiri(): void
+    {
+        // Staf Balaraja (karyawan 2) tidak melihat transaksi Sidoarjo; staf Sidoarjo (karyawan 3) melihat total 4 call.
+        $this->actingAs($this->akun('stafbalaraja', 'lainnya', 2));
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $page) => $page->where('perbandingan.sekarang.call', 0)));
+
+        $this->actingAs($this->akun('stafsidoarjo', 'lainnya', 3));
+        $this->get('/home')->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $page) => $page->where('perbandingan.sekarang.call', 4)));
     }
 
     public function test_kunjungan_kedua_lewat_cache_tidak_korup(): void
@@ -133,7 +276,7 @@ class HomeTest extends AdminTestCase
             $props = null;
             // "use (&$props)" di fn() arrow luar tidak berlaku sampai ke sini (arrow function menangkap by
             // value), jadi dua lapis closure biasa supaya referensinya sama-sama sampai ke $props di atas.
-            $this->get('/home?date_from=2026-10-01&date_to=2026-10-03')->assertOk()
+            $this->get('/home')->assertOk()
                 ->assertInertia(function (Assert $page) use (&$props) {
                     $page->loadDeferredProps(function (Assert $page) use (&$props) {
                         $props = $page->toArray()['props'];

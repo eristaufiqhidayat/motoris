@@ -1,72 +1,67 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Deferred, Head, usePage } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import Button from '@/Components/ui/atoms/Button.vue';
-import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
-import Icon from '@/Components/ui/atoms/Icon.vue';
-import Card from '@/Components/ui/molecules/Card.vue';
 import InfoPopover from '@/Components/ui/molecules/InfoPopover.vue';
 import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
-import StatLabel from '@/Components/ui/atoms/StatLabel.vue';
-import StatRow from '@/Components/ui/molecules/StatRow.vue';
-import BarChart from '@/Components/ui/molecules/BarChart.vue';
-import DashboardSkeleton from './partials/DashboardSkeleton.vue';
-import KartuKendala from './partials/KartuKendala.vue';
-import KinerjaDepo from './partials/KinerjaDepo.vue';
-import FunnelOutletChart from './partials/FunnelOutletChart.vue';
-import TrenHarianChart from './partials/TrenHarianChart.vue';
-import { angka, angkaRingkas } from '@/Support/format.js';
-import { bersihkanQuery } from '@/Support/query.js';
-import { warnaCapai } from '@/Support/summaryDepo.js';
-import { useAmbilData } from '@/Support/ambilData.js';
+import Tabs from '@/Components/ui/molecules/Tabs.vue';
+import { lencanaTab } from './partials/metrikBeranda.js';
+import TabKoordinator from './partials/TabKoordinator.vue';
+import TabOutlet from './partials/TabOutlet.vue';
+import TabRingkasan from './partials/TabRingkasan.vue';
 
+// Beranda admin (spec 066/067): tujuan tim motoris adalah penyebaran produk ke sebanyak mungkin outlet. Isi dibagi dalam tab agar
+// tidak membanjiri: Ringkasan (tab utama, satu kartu kunci per aspek) lalu rincian Outlet & Motoris serta Koordinator & Depo.
+// Semua angka 30 hari terakhir dibanding 30 hari sebelumnya. Data semua tab dimuat sekali (tertunda, di-cache); pindah tab
+// dilakukan di browser tanpa permintaan baru, dan ?tab= di URL menjaga tab yang terbuka saat halaman dimuat ulang.
 const props = defineProps({
     slug: { type: String, required: true },
     judul: { type: String, required: true },
+    // Periode tetap 30 hari terakhir; tidak ada filter tanggal di Beranda admin.
     periode: { type: Object, required: true },
-    filter: { type: Object, required: true },
+    // Tab yang terbuka saat halaman dimuat (dari ?tab=, sudah disaring controller).
+    tab: { type: String, default: 'ringkasan' },
     target: { type: Object, required: true },
     // Ringkasan Laporan Kendala (spec 064); null bila akun tanpa hak Lihat.
     kendala: { type: Object, default: null },
-    // Kosong saat masih ditunda (lihat <Deferred> di bawah); semuanya tiba bersamaan (satu grup "ringkasan").
-    // kpi & topDepo digabung jadi satu prop di backend (ringkasanDepo) supaya SummaryDepo::kartu() cuma
-    // dihitung sekali (lihat HomeController::ringkasanDepo).
+    // Tautan kartu ({ slug: url | null }); null = akun tidak boleh membuka menu itu.
+    tautan: { type: Object, required: true },
+    // Ditunda (grup "ringkasan"): kpi + depoTertinggal, funnel outlet, tren harian, outlet per depo, tanda motoris.
     ringkasanDepo: { type: Object, default: null },
     funnel: { type: Array, default: null },
     tren: { type: Array, default: null },
-    // Kinerja per Depo (spec 066): grup tunda sendiri, rentang sendiri (bawaan 30 hari).
-    kinerja: { type: Array, default: null },
-    kinerjaFilter: { type: Object, required: true },
-    tautanSummaryDepo: { type: Boolean, default: false },
+    outletDepo: { type: Array, default: null },
+    tandaMotoris: { type: Object, default: null },
+    // Ditunda (grup "perbandingan"): { sekarang, sebelumnya, outlet_terdaftar, menunggu_total, menunggu_umur }.
+    perbandingan: { type: Object, default: null },
+    // Ditunda (grup "koordinator", spec 067): { nasional, sebelumnya, perhatian }.
+    koordinator: { type: Object, default: null },
 });
-
-const kpi = computed(() => props.ringkasanDepo?.kpi ?? null);
-const topDepo = computed(() => props.ringkasanDepo?.topDepo ?? null);
 
 const appName = usePage().props.appName;
-const subtitle = computed(() => (props.periode.sama ? props.periode.dari : `${props.periode.dari} – ${props.periode.sampai}`));
+const subtitle = computed(() => `${props.periode.dari} – ${props.periode.sampai} (30 hari terakhir) dibanding 30 hari sebelumnya · data aplikasi motoris`);
 
-const filterDari = ref(props.filter.date_from);
-const filterSampai = ref(props.filter.date_to);
+// Semua prop data dikirim ke tab sebagai satu objek.
+const data = computed(() => ({
+    target: props.target, kendala: props.kendala, tautan: props.tautan, ringkasanDepo: props.ringkasanDepo, funnel: props.funnel,
+    tren: props.tren, outletDepo: props.outletDepo, tandaMotoris: props.tandaMotoris, perbandingan: props.perbandingan, koordinator: props.koordinator,
+}));
 
-// Tanggal baru dimuat saat tombol Tampilkan diklik, sama dengan pola di Motoris/SummaryDepo.vue.
-const { memuat, berubah, ambil } = useAmbilData({
-    form: () => ({ date_from: filterDari.value, date_to: filterSampai.value }),
-    diterapkan: () => ({ date_from: props.filter.date_from, date_to: props.filter.date_to }),
-});
+const aktif = ref(props.tab);
+const lencana = computed(() => lencanaTab(data.value));
+const tabs = computed(() => [
+    { key: 'ringkasan', label: 'Ringkasan' },
+    { key: 'outlet', label: 'Outlet & Motoris', badge: lencana.value.outlet },
+    { key: 'koordinator', label: 'Koordinator & Depo', badge: lencana.value.koordinator },
+]);
 
-function tampilkan() {
-    ambil('/home', bersihkanQuery({ date_from: filterDari.value, date_to: filterSampai.value }), {
-        only: ['ringkasanDepo', 'funnel', 'tren', 'periode', 'filter'],
-    });
+function pilih(kunci) {
+    aktif.value = kunci;
+    // Hanya mengganti URL (state riwayat Inertia dipertahankan), supaya muat ulang dan tautan bersama membuka tab yang sama.
+    const url = new URL(window.location.href);
+    if (kunci === 'ringkasan') url.searchParams.delete('tab'); else url.searchParams.set('tab', kunci);
+    window.history.replaceState(window.history.state, '', url);
 }
-
-const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
-    label: d.nama,
-    value: d.ec_achievement,
-    barClass: d.ec_achievement >= 100 ? 'fill-green-400 stroke-green-500' : (d.ec_achievement >= 75 ? 'fill-yellow-400 stroke-yellow-500' : 'fill-rose-400 stroke-rose-500'),
-})));
 </script>
 
 <template>
@@ -76,87 +71,28 @@ const topDepoChart = computed(() => (topDepo.value ?? []).map((d) => ({
             <template #info>
                 <InfoPopover title="Tentang Beranda" class="ms-1 align-middle">
                     <ul class="list-disc ps-4 space-y-1">
-                        <li>KPI nasional dihitung dari tabel motoris yang sama dengan Summary All Depo — total digabung dulu, baru dihitung AVG per hari kerja (rata-rata berbobot, bukan rata-rata dari rata-rata).</li>
-                        <li><b>Funnel Outlet:</b> NOO (outlet baru pada rentang ini) → AC (dikunjungi, belum pernah EC) → EC (effective call) → RO (EC di ≥2 tanggal berbeda), sama dengan definisi Lap. Outlet. NOO hanya menghitung outlet yang didaftarkan lewat aplikasi HP motoris (belum termasuk riwayat outlet dari Marketama sebelum aplikasi ini dipakai).</li>
-                        <li><b>OSS</b> bukan tahap funnel: ini outlet AC yang kunjungan terakhirnya tidak tercatat stok sendiri — peringatan kualitas kunjungan.</li>
-                        <li><b>Kinerja per Depo</b> memakai rentang sendiri (bawaan 30 hari terakhir) dan angka yang sama dengan Summary All Depo: AVG Call/EC per hari kerja motoris, AVG IPT = SKU ÷ EC, dihitung dari total depo (rata-rata berbobot).</li>
-                        <li><b>Depo Teratas</b> diurutkan dari EC Achievement tertinggi (8 besar), sama seperti Summary All Depo.</li>
+                        <li>Semua angka memakai periode tetap <b>30 hari terakhir</b>, dibanding 30 hari sebelumnya (▲ naik, ▼ turun). Untuk rentang lain, buka Summary All Depo.</li>
+                        <li><b>Ringkasan</b> memuat satu kartu kunci per aspek; klik kartu untuk membuka rinciannya. Lencana merah pada nama tab = jumlah hal yang perlu perhatian di tab itu.</li>
+                        <li><b>Outlet Terjangkau:</b> outlet berbeda yang membeli (effective call, tidak dibatalkan) dalam 30 hari, tidak termasuk outlet yang sudah terbukti fiktif; persen terhadap seluruh outlet terdaftar.</li>
+                        <li><b>Repeat Order:</b> persen outlet terjangkau yang membeli di ≥2 tanggal berbeda dalam 30 hari. Selisihnya dalam poin persen.</li>
+                        <li><b>Outlet Baru:</b> pendaftaran outlet lewat aplikasi HP motoris yang sudah <b>disetujui</b> (belum termasuk riwayat outlet dari Marketama); yang menunggu verifikasi dihitung terpisah.</li>
+                        <li><b>IPT</b> = SKU ÷ EC; <b>Call</b> dan <b>Effective Call</b> = rata-rata per hari kerja motoris, dihitung dari total (rata-rata berbobot) dengan rumus yang sama seperti Summary All Depo. Batang = capaian terhadap target nasional.</li>
+                        <li><b>Kualitas Data Outlet:</b> <i>Outlet Terbukti Fiktif</i> = tanda outlet yang ditutup Terbukti dalam 30 hari; <i>Rasio Fiktif</i> = Terbukti ÷ (Terbukti + Wajar), indikator yang lebih adil daripada jumlah karena ikut naik saat koordinator makin rajin memeriksa. <i>NOO Ditolak</i> = ditolak ÷ pendaftaran yang diverifikasi dalam 30 hari. Untuk metrik ini <b>turun berarti membaik</b> (hijau).</li>
+                        <li><b>Kinerja Koordinator:</b> membandingkan temuan sistem (lokasi palsu, outlet fiktif; dibuat otomatis tiap malam) dengan tindak lanjut koordinator: persen temuan yang sudah diperiksa, median waktu, dan yang menunggu lebih dari 7 hari. Rincian cara hitung ada pada popover di judul tabel.</li>
+                        <li><b>Outlet Stok Kosong:</b> outlet yang sudah dikunjungi tapi belum pernah membeli, dan kunjungan terakhirnya tidak mencatat stok produk kita — celah penyebaran.</li>
+                        <li><b>Depo Tertinggal:</b> depo dengan EC Achievement di bawah 75%. <b>Depo · Outlet per Motoris</b> (tab Koordinator &amp; Depo) menampilkan 10 depo dengan jangkauan per motoris terendah.</li>
+                        <li><b>Funnel Outlet:</b> NOO (outlet baru 30 hari ini) → AC (dikunjungi, belum pernah EC) → EC → RO, seumur hidup outlet, sama dengan definisi Lap. Outlet.</li>
                     </ul>
                 </InfoPopover>
             </template>
-            <template #actions>
-                <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="tampilkan">
-                    <DatePicker id="date_from" v-model="filterDari" aria-label="Dari tanggal" class="w-36" />
-                    <DatePicker id="date_to" v-model="filterSampai" aria-label="Sampai tanggal" class="w-36" />
-                    <Button type="submit" :loading="memuat" :disabled="!berubah"><Icon name="search" class="me-1 w-3.5 h-3.5" />Tampilkan</Button>
-                </form>
-            </template>
         </PageHeader>
 
-        <Deferred :data="['ringkasanDepo', 'funnel', 'tren']">
-            <template #fallback>
-                <DashboardSkeleton />
-            </template>
+        <Tabs :tabs="tabs" :model-value="aktif" @update:model-value="pilih" />
 
-            <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 mb-4">
-                <KartuKendala v-if="kendala" :kendala="kendala" ringkas />
-                <Card class="shadow-sm" body-class="py-3 text-center">
-                    <StatLabel>Total EC</StatLabel>
-                    <div class="text-lg font-bold text-sky-600">{{ angka(kpi.ec) }}</div>
-                </Card>
-                <Card class="shadow-sm" body-class="py-3 text-center">
-                    <StatLabel>Total Call</StatLabel>
-                    <div class="text-lg font-bold text-sky-600">{{ angka(kpi.call) }}</div>
-                </Card>
-                <Card class="shadow-sm" body-class="py-3 text-center">
-                    <StatLabel>Sales Motoris Aktif</StatLabel>
-                    <div class="text-lg font-bold text-gray-800"><Icon name="bike" class="w-4 h-4 inline -mt-1" /> {{ angka(kpi.motoris_aktif) }}</div>
-                </Card>
-                <Card class="shadow-sm" body-class="py-3 text-center">
-                    <StatLabel>Depo Aktif</StatLabel>
-                    <div class="text-lg font-bold text-gray-800"><Icon name="warehouse" class="w-4 h-4 inline -mt-1" /> {{ angka(kpi.depo_aktif) }}</div>
-                </Card>
-                <Card class="shadow-sm" body-class="py-3 text-center">
-                    <StatLabel>SK Aktif</StatLabel>
-                    <div class="text-lg font-bold text-gray-800"><Icon name="users" class="w-4 h-4 inline -mt-1" /> {{ angka(kpi.sk_aktif) }}</div>
-                </Card>
-            </div>
-
-            <Card class="shadow-sm mb-4">
-                <template #header>Achievement Nasional (vs Target: Call {{ angkaRingkas(target.call, 1) }}, EC {{ angkaRingkas(target.ec, 1) }}, IPT {{ angkaRingkas(target.ipt, 1) }})</template>
-                <div class="grid gap-2 sm:grid-cols-3">
-                    <StatRow label="AVG Call / Hari Kerja" :value-class="warnaCapai(kpi.call_achievement)">{{ angkaRingkas(kpi.avg_call, 1) }} ({{ angkaRingkas(kpi.call_achievement, 1) }}%)</StatRow>
-                    <StatRow label="AVG EC / Hari Kerja" :value-class="warnaCapai(kpi.ec_achievement)">{{ angkaRingkas(kpi.avg_ec, 1) }} ({{ angkaRingkas(kpi.ec_achievement, 1) }}%)</StatRow>
-                    <StatRow label="AVG IPT" :value-class="warnaCapai(kpi.ipt_achievement)">{{ angkaRingkas(kpi.avg_ipt, 1) }} ({{ angkaRingkas(kpi.ipt_achievement, 1) }}%)</StatRow>
-                </div>
-            </Card>
-
-            <div class="grid gap-3 lg:grid-cols-2 mb-4">
-                <Card class="shadow-sm">
-                    <template #header>Funnel Outlet</template>
-                    <FunnelOutletChart :funnel="funnel" />
-                </Card>
-                <Card class="shadow-sm">
-                    <template #header>Tren Harian</template>
-                    <TrenHarianChart :data="tren" />
-                </Card>
-            </div>
-
-            <Card class="shadow-sm mb-4">
-                <template #header>Depo Teratas · EC Achievement</template>
-                <BarChart :items="topDepoChart" suffix="%" :desimal="1" />
-            </Card>
-        </Deferred>
-
-        <Deferred data="kinerja">
-            <template #fallback>
-                <Card class="shadow-sm" body-class="p-4 animate-pulse" aria-busy="true">
-                    <div class="h-4 w-1/4 rounded bg-gray-300 mb-3"></div>
-                    <div class="h-40 rounded bg-gray-200"></div>
-                </Card>
-            </template>
-
-            <KinerjaDepo :kinerja="kinerja" :filter="kinerjaFilter" :tautan="tautanSummaryDepo" />
-        </Deferred>
+        <div role="tabpanel" :aria-label="tabs.find((t) => t.key === aktif)?.label">
+            <TabRingkasan v-if="aktif === 'ringkasan'" :data="data" @buka="pilih" />
+            <TabOutlet v-else-if="aktif === 'outlet'" :data="data" />
+            <TabKoordinator v-else :data="data" />
+        </div>
     </AppLayout>
 </template>
