@@ -43,15 +43,17 @@ abstract class MobileController extends Controller
         return new HariKerja((int) $this->karyawan($request)->id, $tanggal ?? $this->hariIni());
     }
 
-    /** Jarak ke depo (meter); lewat radius => outside_depot_radius. Depo tanpa koordinat tidak diperiksa. */
-    protected function cekRadiusDepo(?array $depo, float $lat, float $lng): ?int
+    /** Jarak ke depo (meter); lewat radius => outside_depot_radius. Depo tanpa koordinat tidak diperiksa.
+     *  $radius null = pakai mobile.radius_depo_m (checkin/checkout depo); AbsensiController mengirim
+     *  mobile.absen_radius_depo_m sendiri (lihat docs/BUSINESS_RULES.md §3). */
+    protected function cekRadiusDepo(?array $depo, float $lat, float $lng, ?int $radius = null): ?int
     {
         if (! $depo || $depo['lat'] === null) {
             return null;
         }
 
         $jarak = Lokasi::jarak($lat, $lng, $depo['lat'], $depo['lng']);
-        $batas = (int) config('mobile.radius_depo_m');
+        $batas = $radius ?? (int) config('mobile.radius_depo_m');
 
         if ($jarak > $batas) {
             throw new ApiError('outside_depot_radius', "Anda $jarak m dari depo, batas $batas m.", 422, ['distance_m' => $jarak, 'radius_m' => $batas]);

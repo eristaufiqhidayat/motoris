@@ -141,10 +141,14 @@ class ProfilController extends MobileController
                 'name' => $depo['nama'],
                 'lat' => $depo['lat'],
                 'lng' => $depo['lng'],
+                // radius_m: dipakai /depot-visits/* (loading barang canvassing, bawaan 100 m).
+                // absen_radius_m: dipakai /attendances/* (Absen Datang/Pulang, bawaan 15 m) —
+                // lihat docs/BUSINESS_RULES.md §3.
                 'radius_m' => config('mobile.radius_depo_m'),
+                'absen_radius_m' => config('mobile.absen_radius_depo_m'),
             ] : null,
-            // Area kerja untuk absen (Master Area, bukan radius depo): sales → areanya sendiri;
-            // koordinator → gabungan area aktif tim. Kosong = belum punya area kerja (absen ditolak).
+            // Area kerja (Master Area): tidak lagi dipakai untuk absen (lihat docs/BUSINESS_RULES.md
+            // §3, dibatalkan 30 Okt 2026) — tetap relevan untuk batas rute/kunjungan outlet (§2).
             'work_areas' => WilayahKerja::untukAkun($request->user()->kategori, (int) $karyawan->id),
             'outlet_radius_m' => config('mobile.radius_outlet_m'),
             'duplicate_outlet_radius_m' => config('mobile.radius_duplikat_m'),

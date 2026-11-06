@@ -25,7 +25,7 @@ class KoordinatorMobileTest extends MobileApiTestCase
     {
         $this->koordinator();
         $this->login('koor', 'HP-K');
-        $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $this->foto()])->assertCreated();
+        $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()])->assertCreated();
     }
 
     public function test_koordinator_bisa_login_dengan_menu_koordinator_saja(): void
@@ -95,7 +95,7 @@ class KoordinatorMobileTest extends MobileApiTestCase
         $mulai = ['sales_id' => 1, 'outlet_id' => 11] + $this->diOutlet(11);
 
         $this->assertError($this->api('POST', 'join-visits', $mulai), 409, 'not_checked_in');
-        $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $this->foto()])->assertCreated();
+        $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()])->assertCreated();
 
         // Outlet terdekat untuk memilih outlet.
         $this->assertSame(11, $this->api('GET', 'coordinator/outlets/nearby?lat=-6.201&lng=106.801&radius=100')->assertOk()->json('data.0.id'));
@@ -122,7 +122,7 @@ class KoordinatorMobileTest extends MobileApiTestCase
             ->assertJsonPath('data.0.note', 'Display rak rapi, stok minuman tinggal 2.');
 
         // Setelah join visit selesai, absen pulang boleh.
-        $this->api('POST', 'attendances/check-out', $this->diDepo())->assertOk();
+        $this->api('POST', 'attendances/check-out', $this->diDepoDekat())->assertOk();
     }
 
     public function test_koordinator_tanpa_tim_tidak_bisa_join_visit_sales_siapa_pun(): void
