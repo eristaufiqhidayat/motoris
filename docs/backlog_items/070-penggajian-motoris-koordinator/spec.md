@@ -19,7 +19,7 @@ menghitung draf dari data dasar. Admin meninjau, menambah komponen manual sepert
 final, rincian tiap orang tersimpan dan terkunci, sehingga perubahan gaji karyawan, rumus, atau absensi tidak mengubah
 angka yang sudah final.
 
-Tanggal cut off gaji dan tanggal bayar insentif bisa diubah admin dengan tanggal mulai berlaku. Penggajian yang sudah
+Tanggal cut off gaji, tanggal bayar gaji, dan tanggal bayar insentif bisa diubah admin dengan tanggal mulai berlaku. Penggajian yang sudah
 dibuat tidak ikut berubah.
 
 ## User stories
@@ -38,7 +38,7 @@ dibuat tidak ikut berubah.
 10. Sebagai admin, saya ditolak bila membuat penggajian dengan kategori sama yang periodenya tumpang tindih untuk orang
     yang sama, supaya tidak ada pembayaran ganda.
 11. Sebagai admin, saya mencari riwayat gaji dan insentif satu motoris per periode.
-12. Sebagai admin, saya mengubah tanggal cut off gaji dan tanggal bayar insentif dengan tanggal mulai berlaku, dan melihat
+12. Sebagai admin, saya mengubah tanggal cut off gaji, tanggal bayar gaji, dan tanggal bayar insentif dengan tanggal mulai berlaku, dan melihat
     riwayat perubahannya.
 13. Sebagai admin, saya membatalkan draf yang salah.
 14. Sebagai admin, saya mengisi tunjangan jabatan di data karyawan, supaya masuk ke draf gaji.
@@ -60,6 +60,8 @@ Marketama/Enesis. Statusnya dipantau di [docs/BUSINESS_RULES.md](../../BUSINESS_
 - **Komponen disimpan sebagai baris**, bukan kolom tetap, karena komponen bisa berbeda per jenis dan kategori.
 - **Periode hanya ada di header.** Detail mengambilnya lewat `penggajian_id`. Larangan pembayaran ganda dan periode
   tumpang tindih dijaga validasi di dalam transaksi, per kategori, karena constraint unik tidak menangkap tumpang tindih.
+- **Hanya motoris dengan status aktif eksplisit yang digaji.** Karyawan dengan status kosong (banyak hasil impor Marketama)
+  atau nonaktif tidak masuk draf. Karyawan yang seharusnya digaji perlu ditandai aktif di data karyawan.
 - **Satu penggajian mencakup satu depo.** Koordinator ikut menjadi filter opsional, sama seperti kolom di data lama.
 - **Periode gaji mengikuti cut off** *(menunggu konfirmasi)*. Dengan cut off `C`, periode berjalan dari tanggal `C` sampai
   tanggal `C - 1` bulan berikutnya, awalnya 20–19. Header menyimpan tanggal nyata, jadi perubahan pengaturan tidak
@@ -67,7 +69,11 @@ Marketama/Enesis. Statusnya dipantau di [docs/BUSINESS_RULES.md](../../BUSINESS_
 - **Label periode mengikuti bulan tanggal akhir** *(menunggu konfirmasi)*: 20 Oktober–19 November adalah periode November.
 - **Periode insentif adalah bulan kalender** *(menunggu konfirmasi)*, sama dengan Lap. Insentif Sales.
 - **Tanggal bayar insentif awalnya tanggal 15 bulan berikutnya, dan bisa diubah admin** *(menunggu konfirmasi)*. Tanggal ini
-  disalin ke header `tanggal_bayar`. Insentif November dibayar 15 Desember. Tanggal bayar gaji tidak dicatat.
+  disalin ke header `tanggal_bayar`. Insentif November dibayar 15 Desember. Cut off insentif tetap akhir bulan kalender dan tidak ada di pengaturan.
+- **Tanggal bayar gaji awalnya tanggal 25 pada bulan label periode, dan bisa diubah admin** *(menunggu konfirmasi)*. Periode
+  20 Oktober–19 November (November) dibayar 25 November. Tanggal ini juga disalin ke header `tanggal_bayar`.
+  Tanggal bayar gaji tidak boleh lebih awal dari tanggal cut off gaji (gaji dibayar setelah periode berakhir), diperiksa
+  juga terhadap pengaturan yang sudah terjadwal. Karena periode cut off 1 berakhir di akhir bulan, cut off 1 ditolak.
 - **Pengaturan tanggal bersifat global** *(menunggu konfirmasi)*, bernilai 1–28, dan punya `berlaku_mulai`. Tanggal 29–31 tidak
   ada di setiap bulan. Tanggal berlaku tidak boleh di masa lalu, dan riwayat tidak ditimpa, pola yang sama dengan
   `master_produk_distribusi`.
@@ -79,14 +85,21 @@ Marketama/Enesis. Statusnya dipantau di [docs/BUSINESS_RULES.md](../../BUSINESS_
   (hari hadir + hari izin) ÷ hari kerja, dibulatkan ke rupiah terdekat.
 - **Hari izin diisi manual di draf** *(menunggu konfirmasi)*, dan dihitung sebagai hadir untuk prorata. `permintaan_izin` tidak
   dipakai karena hanya berisi nama dan tanggal teks.
-- **Potongan diisi manual di draf untuk saat ini** *(menunggu konfirmasi, tarif dibahas lain waktu)*. Pilihan jenisnya dari
-  `parameter_pemotong_gaji`. Detail menampilkan hari hadir dan terlambat sebagai dasar isian. Tabel `potongan_gaji` tidak
-  dipakai karena nama karyawan, tanggal, dan nominalnya berupa string tanpa `karyawan_id`.
-- **Aturan terlambat tetap berlaku.** `docs/BUSINESS_RULES.md` §10 menetapkan toleransi 3 kali per bulan dan denda mulai
-  keterlambatan ke-4. Selama tarifnya belum ada, admin menerapkannya secara manual dari jumlah hari terlambat di detail.
+- **Potongan selain keterlambatan diisi manual di draf** *(menunggu konfirmasi, tarif Potongan Absen dibahas lain waktu)*.
+  Pilihan jenisnya dari `parameter_pemotong_gaji`. Detail menampilkan hari hadir, tidak hadir, dan terlambat sebagai dasar
+  isian. Tabel `potongan_gaji` tidak dipakai karena nama karyawan, tanggal, dan nominalnya berupa string tanpa `karyawan_id`.
+- **Potongan terlambat dihitung otomatis untuk motoris.** `docs/BUSINESS_RULES.md` §10: toleransi 3 kali per bulan, dan
+  mulai keterlambatan ke-4 dalam bulan yang sama tunjangan BBM & makan dan sewa motor dipotong per hari. Potongan per hari
+  = nilai bulanan ÷ hari kerja *(menunggu konfirmasi)*, dua komponen potongan `otomatis` (`potongan_terlambat_bbm_makan`,
+  `potongan_terlambat_sewa_motor`) yang menyimpan asal angkanya (terlambat per bulan, toleransi, hari dipotong), dibatasi
+  sebesar tunjangan prorata yang dibayar. Toleransi dihitung per bulan kalender di dalam periode gaji *(menunggu
+  konfirmasi)*. Koordinator tidak dikenai potongan ini. Komponen otomatis ikut diganti saat Hitung Ulang dan saat hari
+  izin disimpan (orang itu dihitung ulang dari absensi terbaru).
 - **Tunjangan jabatan memakai kolom baru** `mk_karyawan.tunjangan_jabatan` *(menunggu konfirmasi)*, diisi di form karyawan.
 - **Insentif absensi tidak dipakai** *(menunggu konfirmasi)*.
-- **Penggajian koordinator menyusul** *(menunggu konfirmasi)*. Skema sudah siap, dan pengerjaannya menunggu aturan rumus.
+- **Penggajian koordinator: gaji sudah tersedia, insentif menunggu aturan rumus** *(menunggu konfirmasi)*. Gaji koordinator memakai
+  komponen dan alur yang sama dengan sales di `/penggajian_koordinator` (satu controller, jenis dari slug URL). Insentif
+  koordinator ditolak dengan pesan jelas sampai aturan untuk tim bukan 10 sales dijawab (issue #100, pertanyaan 21).
 - **Hanya Super Admin**, mengikuti `Akses::MENU_ADMIN` yang sudah memuat dua slug ini. Akun dengan cakupan sebagian depo
   dibatasi `Cakupan::untuk($user)->depoIds()`.
 
@@ -99,7 +112,8 @@ Marketama/Enesis. Statusnya dipantau di [docs/BUSINESS_RULES.md](../../BUSINESS_
 | Gaji | Tunjangan jabatan | `mk_karyawan.tunjangan_jabatan` (baru) | Penuh |
 | Gaji | Tunjangan BBM dan makan | `mk_karyawan.tunjangan_bbm_makan` | Prorata |
 | Gaji | Sewa motor | `mk_karyawan.sewa_motor` | Prorata |
-| Gaji | Potongan | `parameter_pemotong_gaji` (nama) | Manual |
+| Gaji | Potongan terlambat (motoris) | `trx_absensi.terlambat` per bulan kalender | Otomatis, hari ke-4 dst × nilai bulanan ÷ hari kerja |
+| Gaji | Potongan lain | `parameter_pemotong_gaji` (nama) | Manual |
 | Insentif | Insentif EC sales | `Insentif::ec()` + `trx_penjualan` | Otomatis, total EC sebulan |
 | Insentif | Nilai poin sales | `Insentif::nilaiPoin()` | Otomatis |
 | Insentif | Insentif koordinator | `rumus_insentif_koordinator` | Tiket koordinator |
@@ -119,11 +133,11 @@ Hari hadir dan terlambat diambil dari `trx_absensi` (`masuk_at`, `terlambat`).
    - `penggajian_komponen`: `id`, `detail_id`, `tipe` (`pendapatan`, `potongan`), `kode`, `nama`, `nominal`, `keterangan`,
      `parameter_pemotong_id` (nullable), `sumber` (`otomatis`, `manual`), `rincian` (JSON: EC, tingkat rumus, nilai
      bulanan, jumlah hari), timestamps.
-   - `pengaturan_tanggal_penggajian`: `id`, `kunci` (`cutoff_gaji`, `bayar_insentif`), `tanggal`, `berlaku_mulai`,
+   - `pengaturan_tanggal_penggajian`: `id`, `kunci` (`cutoff_gaji`, `bayar_gaji`, `bayar_insentif`), `tanggal`, `berlaku_mulai`,
      `diubah_oleh`, timestamps. Unik `(kunci, berlaku_mulai)`. Baris awal 20 dan 15.
    - `mk_karyawan`: tambah `tunjangan_jabatan` (decimal 18, 2, nullable).
 2. **Modul periode** `App\Support\Penggajian\PeriodeGaji`, satu-satunya tempat aturan tanggal:
-   - `gaji(string $tanggal)`: periode gaji yang memuat tanggal itu.
+   - `gaji(string $tanggal)`: periode gaji yang memuat tanggal itu, beserta tanggal bayarnya.
    - `insentif(string $tanggal)`: bulan kalender dan tanggal bayarnya.
    - `label(string $periodeSelesai)`: nama periode.
    - `hariKerja(string $dari, string $sampai)`: Senin–Sabtu dikurangi libur.
@@ -167,7 +181,7 @@ dikembalikan response. `PeriodeGaji` dan `HitungGaji` diuji langsung karena komb
 
 ## Di luar cakupan
 
-- Tarif dan perhitungan otomatis Potongan Absen dan Potongan Terlambat.
+- Tarif dan perhitungan otomatis Potongan Absen (Potongan Terlambat motoris sudah otomatis).
 - Slip gaji PDF dan pembayaran atau transfer ke bank.
 - Tampilan gaji di aplikasi HP.
 - Pajak PPh 21.
@@ -194,7 +208,7 @@ Daftar lengkap untuk pihak Marketama/Enesis ada di
 1. **Tarif Potongan Absen dan Terlambat**: dibahas lain waktu. Sampai itu, potongan diisi manual dan hitungan otomatisnya
    di luar cakupan.
 2. **Rumus insentif koordinator**: batas EC di rumus ditulis untuk tim 10 sales, dan aturan untuk jumlah lain dibahas lain
-   waktu. Tiket 06 menunggu jawaban ini.
+   waktu. Gaji koordinator (tiket 06) sudah berjalan; hanya insentif koordinator yang menunggu jawaban ini.
 3. **Karyawan masuk atau keluar di tengah periode**: apakah gaji pokok tetap penuh? Asumsi: tetap penuh, dan admin
    menyesuaikan lewat komponen manual.
 4. **Tunjangan jabatan**: asumsi dibayar penuh karena kolomnya baru diputuskan dan belum ditanyakan prorata atau tidak.

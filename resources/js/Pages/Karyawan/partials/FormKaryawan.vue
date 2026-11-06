@@ -41,6 +41,7 @@ const GAJI = [
     ['tunjangan_bbm_makan', 'Tunjangan BBM & makan'],
     ['sewa_motor', 'Sewa motor'],
     ['tunjangan_internet', 'Tunjangan kuota internet'],
+    ['tunjangan_jabatan', 'Tunjangan jabatan'],
 ];
 
 const form = useForm({ ...props.nilai, foto: null });

@@ -34,7 +34,7 @@ class KaryawanTest extends AdminTestCase
         return $ubah + [
             'nama' => 'Bayu Saputra', 'depo_id' => '46', 'koordinator_id' => '137', 'area_ids' => ['71', '72'], 'area_aktif_ids' => ['72'],
             'no_hp' => '0812 3456 7890', 'email' => 'bayu@contoh.id', 'tanggal_mulai' => '2026-10-01', 'aktif' => '1',
-            'gaji_pokok' => '3.500.000', 'tunjangan_bbm_makan' => '750000',
+            'gaji_pokok' => '3.500.000', 'tunjangan_bbm_makan' => '750000', 'tunjangan_jabatan' => '1.250.000',
         ];
     }
 
@@ -92,7 +92,7 @@ class KaryawanTest extends AdminTestCase
         $id = KaryawanController::ID_AWAL;
         $k = DB::table('mk_karyawan')->find($id);
         $this->assertSame(['sales', 'Bayu Saputra', 46, 137, 72], [$k->kategori, $k->nama, (int) $k->depo_id, (int) $k->koordinator_id, (int) $k->area_aktif_id]);
-        $this->assertSame([3500000.0, 750000.0], [(float) $k->gaji_pokok, (float) $k->tunjangan_bbm_makan]);
+        $this->assertSame([3500000.0, 750000.0, 1250000.0], [(float) $k->gaji_pokok, (float) $k->tunjangan_bbm_makan, (float) $k->tunjangan_jabatan]);
         $this->assertSame('2026-10-01', $k->tanggal_mulai);
         $this->assertTrue((bool) $k->aktif);
         Storage::disk('local')->assertExists($k->foto);

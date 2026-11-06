@@ -7,18 +7,18 @@ yang sudah final.
 
 ## Acceptance criteria
 
-- [ ] Pencarian nama menampilkan semua periode orang itu, dengan kategori, total pendapatan, total potongan, dan total
+- [x] Pencarian nama menampilkan semua periode orang itu, dengan kategori, total pendapatan, total potongan, dan total
       bersih.
-- [ ] Baris bisa dibuka untuk melihat rincian komponen.
-- [ ] Draf dan penggajian batal tidak ikut tampil.
-- [ ] Hanya depo dalam cakupan akun yang tampil.
+- [x] Baris bisa dibuka untuk melihat rincian komponen.
+- [x] Draf dan penggajian batal tidak ikut tampil.
+- [x] Hanya depo dalam cakupan akun yang tampil.
 
 ## Implementation steps
 
-- [ ] Tambah query riwayat dari `penggajian_detail` yang join ke header.
-- [ ] Tambah tab atau tampilan riwayat di `Pages/Penggajian/`, memakai `DataTable`.
-- [ ] Pakai ulang drawer rincian dari halaman detail.
-- [ ] Tambah feature test, lalu jalankan `php artisan test --filter=Penggajian` dan `vendor/bin/pint`.
+- [x] Tambah query riwayat dari `penggajian_detail` yang join ke header.
+- [x] Tambah tab atau tampilan riwayat di `Pages/Penggajian/`, memakai `DataTable`.
+- [x] Pakai ulang drawer rincian dari halaman detail.
+- [x] Tambah feature test, lalu jalankan `php artisan test --filter=Penggajian` dan `vendor/bin/pint`. (suite penuh: 4 test SSR di AutoGridTest/GenerateKelurahanTest gagal karena dev server, tidak terkait tiket ini)
 
 ## Blocked by
 

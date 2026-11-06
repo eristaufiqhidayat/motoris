@@ -484,6 +484,11 @@ return [
                             'title' => 'Penggajian Koordinator',
                             'icon' => null,
                         ],
+                        [
+                            'slug' => 'pengaturan_penggajian',
+                            'title' => 'Pengaturan Penggajian',
+                            'icon' => null,
+                        ],
                     ],
                 ],
                 [
@@ -1339,18 +1344,24 @@ return [
             ],
             'same_as' => null,
         ],
+        // Halaman sendiri (PenggajianController): penggajian gaji sales dari tabel penggajian. Tabel impor Marketama
+        // penggajian_sales dibiarkan sebagai arsip dan tidak lagi dibaca menu.
         'penggajian_sales' => [
             'title' => 'Penggajian Sales',
-            'tables' => [
-                'penggajian_sales',
-            ],
+            'tables' => [],
             'same_as' => null,
         ],
+        // Halaman sendiri (PengaturanPenggajianController): tanggal cut off gaji dan tanggal bayar insentif.
+        'pengaturan_penggajian' => [
+            'title' => 'Pengaturan Penggajian',
+            'tables' => [],
+            'same_as' => null,
+        ],
+        // Halaman sendiri (PenggajianController, jenis koordinator): tabel impor Marketama penggajian_koordinator dibiarkan
+        // sebagai arsip dan tidak lagi dibaca menu.
         'penggajian_koordinator' => [
             'title' => 'Penggajian Koordinator',
-            'tables' => [
-                'penggajian_koordinator',
-            ],
+            'tables' => [],
             'same_as' => null,
         ],
         'lap_absensi_sales' => [

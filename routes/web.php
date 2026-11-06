@@ -8,6 +8,8 @@ use App\Http\Controllers\Admin\KuotaMotorisController;
 use App\Http\Controllers\Admin\MasterDepoController;
 use App\Http\Controllers\Admin\MasterProdukController;
 use App\Http\Controllers\Admin\MotorisReportController;
+use App\Http\Controllers\Admin\PengaturanPenggajianController;
+use App\Http\Controllers\Admin\PenggajianController;
 use App\Http\Controllers\Admin\RekapPencapaianSkuController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SummaryDepoController;
@@ -228,6 +230,33 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
     Route::get('/motoris_report', [MotorisReportController::class, 'index'])->middleware('hak:motoris_report')->name('motoris-report');
     Route::get('/kuota_motoris', [KuotaMotorisController::class, 'index'])->middleware('hak:kuota_motoris')->name('kuota-motoris.index');
     Route::post('/kuota_motoris', [KuotaMotorisController::class, 'simpan'])->middleware('hak:kuota_motoris,ubah')->name('kuota-motoris.simpan');
+
+    // Penggajian: tanggal cut off gaji dan tanggal bayar insentif (hanya Super Admin lewat Akses::MENU_ADMIN).
+    Route::get('/pengaturan_penggajian', [PengaturanPenggajianController::class, 'index'])->middleware('hak:pengaturan_penggajian')->name('pengaturan-penggajian.index');
+    Route::post('/pengaturan_penggajian', [PengaturanPenggajianController::class, 'simpan'])->middleware('hak:pengaturan_penggajian,ubah')->name('pengaturan-penggajian.simpan');
+
+    // Penggajian Sales dan Penggajian Koordinator: daftar (tab Gaji, Insentif, Riwayat), Tambah, detail, dan aksi draf.
+    // Satu controller; jenis diturunkan dari slug di URL (penggajian_sales / penggajian_koordinator), sama dengan slug hak.
+    // Menggantikan tabel impor di catch-all.
+    foreach (['sales', 'koordinator'] as $jenis) {
+        $slug = "penggajian_{$jenis}";
+
+        Route::controller(PenggajianController::class)->name("penggajian-{$jenis}.")->group(function () use ($slug) {
+            Route::get("/{$slug}", 'index')->middleware("hak:{$slug}")->name('index');
+            Route::get("/{$slug}/tambah", 'tambah')->middleware("hak:{$slug},tambah")->name('tambah');
+            Route::post("/{$slug}", 'simpan')->middleware("hak:{$slug},tambah")->name('simpan');
+            Route::get("/{$slug}/{id}", 'tampil')->whereNumber('id')->middleware("hak:{$slug}")->name('tampil');
+            Route::prefix("{$slug}/{id}")->whereNumber(['id', 'detail', 'komponen'])->middleware("hak:{$slug},ubah")->group(function () {
+                Route::post('/hitung-ulang', 'hitungUlang')->name('hitung-ulang');
+                Route::post('/finalkan', 'finalkan')->name('finalkan');
+                Route::post('/batalkan', 'batalkan')->name('batalkan');
+                Route::put('/detail/{detail}/izin', 'isiIzin')->name('izin');
+                Route::post('/detail/{detail}/komponen', 'tambahKomponen')->name('komponen.tambah');
+                Route::put('/detail/{detail}/komponen/{komponen}', 'ubahKomponen')->name('komponen.ubah');
+                Route::delete('/detail/{detail}/komponen/{komponen}', 'hapusKomponen')->name('komponen.hapus');
+            });
+        });
+    }
 
     // Backup data per tabel (CSV / SQL); buat & unduh butuh hak ekspor.
     Route::prefix('backup_data')->name('backup-data.')->controller(BackupDataController::class)->group(function () {

@@ -54,7 +54,7 @@ class KaryawanController extends Controller
         'lainnya' => ['Karyawan Lainnya', 'karyawan'],
     ];
 
-    private const GAJI = ['gaji_pokok' => 'Gaji pokok', 'tunjangan_bbm_makan' => 'Tunjangan BBM & makan', 'sewa_motor' => 'Sewa motor', 'tunjangan_internet' => 'Tunjangan kuota internet'];
+    private const GAJI = ['gaji_pokok' => 'Gaji pokok', 'tunjangan_bbm_makan' => 'Tunjangan BBM & makan', 'sewa_motor' => 'Sewa motor', 'tunjangan_internet' => 'Tunjangan kuota internet', 'tunjangan_jabatan' => 'Tunjangan jabatan'];
 
     public function index(Request $request): Response
     {
