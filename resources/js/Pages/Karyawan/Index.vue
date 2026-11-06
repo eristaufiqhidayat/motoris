@@ -5,22 +5,18 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Badge from '@/Components/ui/atoms/Badge.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
 import Icon from '@/Components/ui/atoms/Icon.vue';
-import Input from '@/Components/ui/atoms/Input.vue';
-import Label from '@/Components/ui/atoms/Label.vue';
 import Alert from '@/Components/ui/molecules/Alert.vue';
-import Combobox from '@/Components/ui/molecules/Combobox.vue';
 import Modal from '@/Components/ui/molecules/Modal.vue';
 import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
 import DataTable from '@/Components/ui/organisms/DataTable.vue';
-import FormKaryawan from './partials/FormKaryawan.vue';
 import FormSkeleton from '@/Components/ui/molecules/FormSkeleton.vue';
 import ReviewKaryawan from './partials/ReviewKaryawan.vue';
-import { useAmbilData } from '@/Support/ambilData.js';
 import { angka } from '@/Support/format.js';
 import { filterTabelTeks, urutkanTabel } from '@/Support/sortFilterTabel.js';
 
 // Daftar karyawan per kategori (Sales, Koordinator, Supervisor, Lainnya) — satu halaman untuk 4 menu.
-// Tambah & edit dibuka di modal kanan; datanya JSON dari /{menu}/tambah atau /{menu}/{id}/edit.
+// Pencarian dan saringan lewat sort & filter per kolom DataTable. Klik baris membuka drawer detail (JSON dari
+// /{menu}/{id}/edit); tambah dan edit di halaman Form.
 const props = defineProps({
     slug: { type: String, required: true },
     kategori: { type: String, required: true },
@@ -28,11 +24,8 @@ const props = defineProps({
     nama: { type: String, required: true },
     kolom: { type: Object, required: true },
     baris: { type: Object, required: true },
-    q: { type: String, default: '' },
     status: { type: String, default: 'aktif' },
-    depo: { type: Number, default: null },
     jumlah: { type: Object, required: true },
-    daftarDepo: { type: Array, default: () => [] },
     bisa: { type: Object, required: true },
     sortableColumns: { type: Array, default: () => [] },
     sort: { type: Object, default: null },
@@ -42,53 +35,49 @@ const props = defineProps({
 
 const appName = usePage().props.appName;
 const base = `/${props.slug}`;
-const STATUS = { semua: 'Semua', aktif: 'Aktif', tidak_aktif: 'Tidak aktif' };
-const cari = ref({ q: props.q, depo: props.depo ? String(props.depo) : '' });
+const STATUS = { aktif: 'Aktif', tidak_aktif: 'Tidak aktif' };
+const adaFilter = computed(() => Object.keys(props.filterValues).length > 0);
 
-const bersih = (d) => Object.fromEntries(Object.entries(d).filter(([, v]) => v !== null && v !== undefined && v !== ''));
-const { memuat, berubah, ambil } = useAmbilData({
-    form: () => ({ q: cari.value.q.trim(), depo: cari.value.depo }),
-    diterapkan: () => ({ q: props.q, depo: props.depo ? String(props.depo) : '' }),
-});
-
-function kirimCari() {
-    ambil(base, bersih({ status: props.status !== 'aktif' ? props.status : null, q: cari.value.q.trim(), depo: cari.value.depo }),
-        { preserveState: true, replace: true });
-}
-
+// Ganti status mempertahankan sort & filter kolom yang sedang aktif.
 function tautanStatus(kode) {
-    const query = new URLSearchParams(bersih({ status: kode === 'aktif' ? null : kode, q: props.q, depo: props.depo })).toString();
-    return query ? `${base}?${query}` : base;
+    const query = new URLSearchParams();
+
+    if (kode !== 'aktif') query.set('status', kode);
+    if (props.sort) {
+        query.set('sort', props.sort.kolom);
+        query.set('arah', props.sort.arah);
+    }
+
+    Object.entries(props.filterValues).forEach(([kolom, nilai]) => query.set(`filter[${kolom}]`, nilai));
+
+    const teks = query.toString();
+
+    return teks ? `${base}?${teks}` : base;
 }
 
-const formUrl = ref(null);
-const formData = ref(null);
-const formGagal = ref(false);
-const formSedangSimpan = ref(false);
-// 'review' (baca saja, dibuka saat klik nama) atau 'edit' (form, dibuka dari tombol Ubah di review atau Tambah).
-const mode = ref('edit');
-const bolehSimpan = computed(() => (formData.value?.item ? props.bisa.ubah : props.bisa.tambah));
+const detailUrl = ref(null);
+const detail = ref(null);
+const detailGagal = ref(false);
 
-async function bukaForm(url, modeAwal = 'edit') {
-    formUrl.value = url;
-    formData.value = null;
-    formGagal.value = false;
-    mode.value = modeAwal;
+// Drawer hanya detail baca saja (klik baris). Tambah dan edit ada di halaman khusus (Form.vue).
+async function bukaDetail(url) {
+    detailUrl.value = url;
+    detail.value = null;
+    detailGagal.value = false;
 
     try {
         const respons = await fetch(url, { headers: { Accept: 'application/json' } });
         if (!respons.ok) throw new Error(`HTTP ${respons.status}`);
-        formData.value = await respons.json();
+        detail.value = await respons.json();
     } catch {
-        formGagal.value = true;
+        detailGagal.value = true;
     }
 }
 
-function tutupForm() {
-    formUrl.value = null;
-    formData.value = null;
-    formGagal.value = false;
-    formSedangSimpan.value = false;
+function tutupDetail() {
+    detailUrl.value = null;
+    detail.value = null;
+    detailGagal.value = false;
 }
 </script>
 
@@ -98,7 +87,7 @@ function tutupForm() {
         <PageHeader :title="judul" :subtitle="`${angka(jumlah.semua)} ${nama} · ${angka(jumlah.aktif)} aktif · dipakai aplikasi HP, akun login, dan laporan motoris`">
             <template #actions>
                 <Button v-if="bisa.ekspor" tag="a" variant="outline-secondary" :href="`${base}/ekspor`"><Icon name="download" class="me-1" /> Ekspor CSV</Button>
-                <Button v-if="bisa.tambah" variant="success" @click="bukaForm(`${base}/tambah`)"><Icon name="plus" class="me-1" /> Tambah {{ nama }}</Button>
+                <Button v-if="bisa.tambah" :tag="Link" variant="success" :href="`${base}/tambah`"><Icon name="plus" class="me-1" /> Tambah {{ nama }}</Button>
             </template>
         </PageHeader>
 
@@ -120,39 +109,23 @@ function tutupForm() {
             :sticky-columns="['foto', 'nama']"
             tinggi-penuh
             :rows="baris.data"
-            :memuat="memuat"
             :total="baris.total"
             :links="baris.links"
-            :empty-text="q ? `Tidak ada ${nama} yang cocok dengan “${q}”.` : `Belum ada ${nama}.`"
+            :empty-text="adaFilter ? `Tidak ada ${nama} yang cocok dengan filter.` : `Belum ada ${nama}.`"
             :sortable="sortableColumns"
             :sort="sort"
             @sort="urutkanTabel"
             :filterable="filterableColumns"
             :filter-values="filterValues"
             @filter="filterTabelTeks"
+            baris-bisa-diklik
+            @klik-baris="bukaDetail(`${base}/${$event.id}/edit`)"
         >
-            <template #header>
-                <form class="flex flex-wrap items-end gap-2" role="search" @submit.prevent="kirimCari">
-                    <div class="grow min-w-56">
-                        <Label for="q" class="sr-only">Cari {{ nama }}</Label>
-                        <Input id="q" v-model="cari.q" type="search" placeholder="Cari nama, no HP, email, koordinator…" />
-                    </div>
-                    <div v-if="daftarDepo.length" class="min-w-48">
-                        <Label for="filter_depo" class="sr-only">Depo</Label>
-                        <Combobox id="filter_depo" v-model="cari.depo" :options="daftarDepo" placeholder="Semua depo" />
-                    </div>
-                    <Button type="submit" :loading="memuat" :disabled="!berubah">Cari</Button>
-                </form>
-            </template>
-
             <template #cell-foto="{ row }">
                 <span class="foto-produk-kecil">
                     <img v-if="row.foto" :src="row.foto" :alt="`Foto ${row.nama}`" loading="lazy">
                     <Icon v-else name="camera" />
                 </span>
-            </template>
-            <template #cell-nama="{ row }">
-                <button type="button" class="cursor-pointer font-semibold text-blue-600 hover:underline" @click="bukaForm(`${base}/${row.id}/edit`, 'review')">{{ row.nama }}</button>
             </template>
             <template #cell-aktif="{ row }">
                 <Badge :variant="row.aktif === 'Aktif' ? 'success' : 'secondary'">{{ row.aktif }}</Badge>
@@ -163,46 +136,29 @@ function tutupForm() {
         </DataTable>
 
         <Modal
-            :show="formUrl !== null"
-            :title="formData ? (formData.item ? `${mode === 'review' ? 'Detail' : 'Edit'} ${nama}: ${formData.item.nama}` : `Tambah ${nama}`) : judul"
+            :show="detailUrl !== null"
+            :title="detail ? `Detail ${nama}: ${detail.item.nama}` : judul"
             placement="kanan"
-            @close="tutupForm"
+            @close="tutupDetail"
         >
-            <Alert v-if="formGagal" variant="danger" role="alert">Form {{ nama }} tidak bisa dimuat. Coba lagi.</Alert>
-            <FormSkeleton v-else-if="!formData" :harga="true" :foto="true" :jumlah-field="6" />
+            <Alert v-if="detailGagal" variant="danger" role="alert">Detail {{ nama }} tidak bisa dimuat. Coba lagi.</Alert>
+            <FormSkeleton v-else-if="!detail" :harga="true" :satu-kolom="true" :jumlah-field="6" />
             <template v-else>
-                <p v-if="formData.item" class="mb-2 text-gray-500">
-                    ID {{ formData.item.id }}<template v-if="formData.item.akun.length"> · akun login: {{ formData.item.akun.join(', ') }}</template>
-                    · <Link :href="`${base}/${formData.item.id}/edit`">buka halaman lengkap</Link>
+                <p class="mb-3 text-gray-500">
+                    ID {{ detail.item.id }}<template v-if="detail.item.akun.length"> · akun login: {{ detail.item.akun.join(', ') }}</template>
                 </p>
                 <ReviewKaryawan
-                    v-if="mode === 'review'"
                     :kategori="kategori"
                     :nama="nama"
-                    :item="formData.item"
-                    :nilai="formData.nilai"
-                    :opsi="formData.opsi"
-                />
-                <FormKaryawan
-                    v-else
-                    id="form-karyawan"
-                    :slug="slug"
-                    :kategori="kategori"
-                    :nama="nama"
-                    :item="formData.item"
-                    :nilai="formData.nilai"
-                    :opsi="formData.opsi"
-                    :bisa="bisa"
-                    :aksi-bawah="false"
-                    @tersimpan="tutupForm"
-                    @proses="formSedangSimpan = $event"
+                    :item="detail.item"
+                    :nilai="detail.nilai"
+                    :opsi="detail.opsi"
                 />
             </template>
 
-            <template v-if="formData" #footer>
-                <Button variant="light" @click="mode === 'edit' && formData.item ? (mode = 'review') : tutupForm()">{{ mode === 'review' ? 'Tutup' : 'Batal' }}</Button>
-                <Button v-if="mode === 'review' && bisa.ubah" @click="mode = 'edit'">{{ kategori === 'sales' ? 'Update Motoris' : `Ubah ${nama}` }}</Button>
-                <Button v-if="mode === 'edit' && bolehSimpan" type="submit" form="form-karyawan" :loading="formSedangSimpan">Simpan</Button>
+            <template v-if="detail" #footer>
+                <Button variant="light" @click="tutupDetail">Tutup</Button>
+                <Button v-if="bisa.ubah" :tag="Link" :href="`${base}/${detail.item.id}/edit`">{{ kategori === 'sales' ? 'Update Motoris' : `Ubah ${nama}` }}</Button>
             </template>
         </Modal>
     </AppLayout>

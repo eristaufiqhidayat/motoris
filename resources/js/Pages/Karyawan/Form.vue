@@ -11,8 +11,8 @@ import PageHeader from '@/Components/ui/molecules/PageHeader.vue';
 import FormKaryawan from './partials/FormKaryawan.vue';
 import PindahArea from './partials/PindahArea.vue';
 
-// Halaman tambah/edit karyawan (dibuka lewat URL). Dari daftar, edit memakai modal (Index.vue).
-// Di halaman ini juga ada pindah area (sales), hapus, dan riwayat perubahan.
+// Halaman tambah/edit karyawan, satu-satunya tempat mengisi form; drawer di Index.vue hanya detail.
+// Pindah area (sales) dan riwayat perubahan masuk ke tab form; hapus di bawah, terpisah dari tab.
 const props = defineProps({
     slug: { type: String, required: true },
     kategori: { type: String, required: true },
@@ -57,24 +57,25 @@ function hapus() {
 
         <Alert v-if="errorHapus" variant="danger" class="mb-3" role="alert">{{ errorHapus }}</Alert>
 
-        <FormKaryawan :slug="slug" :kategori="kategori" :nama="nama" :item="item" :nilai="nilai" :opsi="opsi" :bisa="bisa" />
+        <FormKaryawan :slug="slug" :kategori="kategori" :nama="nama" :item="item" :nilai="nilai" :opsi="opsi" :bisa="bisa">
+            <template v-if="item && kategori === 'sales' && bisa.ubah" #penempatan>
+                <PindahArea :slug="slug" :item="item" :sales="salesSeDepo" :jumlah-area="nilai.area_ids.length" />
+            </template>
+            <template v-if="item" #riwayat>
+                <Card>
+                    <ul v-if="riwayat.length" class="flex flex-col gap-1 mb-0">
+                        <li v-for="(r, i) in riwayat" :key="i">
+                            <Badge variant="light">{{ r.aksi }}</Badge>
+                            {{ r.keterangan }}
+                            <span class="text-gray-500">· {{ r.oleh ?? '-' }} · {{ r.pada }}</span>
+                        </li>
+                    </ul>
+                    <p v-else class="mb-0 text-gray-500">Belum ada riwayat perubahan.</p>
+                </Card>
+            </template>
+        </FormKaryawan>
 
-        <div v-if="item" class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <PindahArea v-if="kategori === 'sales' && bisa.ubah" :slug="slug" :item="item" :sales="salesSeDepo" :jumlah-area="nilai.area_ids.length" />
-
-            <Card v-if="riwayat.length">
-                <template #header>Riwayat perubahan</template>
-                <ul class="flex flex-col gap-1 mb-0">
-                    <li v-for="(r, i) in riwayat" :key="i">
-                        <Badge variant="light">{{ r.aksi }}</Badge>
-                        {{ r.keterangan }}
-                        <span class="text-gray-500">· {{ r.oleh ?? '-' }} · {{ r.pada }}</span>
-                    </li>
-                </ul>
-            </Card>
-        </div>
-
-        <div v-if="item && bisa.hapus" class="mb-3">
+        <div v-if="item && bisa.hapus" class="mt-6 mb-3 max-w-4xl border-t border-gray-200 pt-3">
             <Button variant="outline-danger" @click="modalHapus = true">Hapus {{ nama }}</Button>
         </div>
 

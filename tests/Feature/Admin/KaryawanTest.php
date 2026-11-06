@@ -33,7 +33,7 @@ class KaryawanTest extends AdminTestCase
     {
         return $ubah + [
             'nama' => 'Bayu Saputra', 'depo_id' => '46', 'koordinator_id' => '137', 'area_ids' => ['71', '72'], 'area_aktif_ids' => ['72'],
-            'no_hp' => '0812 3456 7890', 'email' => 'bayu@contoh.id', 'tanggal_mulai' => '2026-10-01', 'aktif' => '1',
+            'no_hp' => '081234567890', 'email' => 'bayu@contoh.id', 'tanggal_mulai' => '2026-10-01', 'aktif' => '1',
             'gaji_pokok' => '3.500.000', 'tunjangan_bbm_makan' => '750000', 'tunjangan_jabatan' => '1.250.000',
         ];
     }
@@ -49,9 +49,16 @@ class KaryawanTest extends AdminTestCase
             ->where('baris.data.0.area_aktif', 'Sidoarjo-01')->where('baris.data.0.total_area', 2));
 
         $this->get('/karyawan_sales?status=tidak_aktif')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1)->where('baris.data.0.nama', 'Joko Lama'));
-        $this->get('/karyawan_sales?status=semua')->assertInertia(fn (Assert $page) => $page->where('baris.total', 4));
-        $this->get('/karyawan_sales?q=sinta')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1));
-        $this->get('/karyawan_sales?depo=22')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1)->where('baris.data.0.nama', 'Sinta Wulandari'));
+        // Opsi Semua sudah tidak ada: nilai lama kembali ke bawaan (aktif).
+        $this->get('/karyawan_sales?status=semua')->assertInertia(fn (Assert $page) => $page->where('status', 'aktif')->where('baris.total', 3));
+
+        // Status kosong (hasil tarikan lama) masuk tab Tidak aktif, cocok dengan jumlahnya.
+        DB::table('mk_karyawan')->where('id', 3)->update(['aktif' => null]);
+        $this->get('/karyawan_sales?status=tidak_aktif')->assertInertia(fn (Assert $page) => $page->where('baris.total', 2)->where('jumlah.tidak_aktif', 2));
+        DB::table('mk_karyawan')->where('id', 3)->update(['aktif' => true]);
+
+        $this->get('/karyawan_sales?filter[nama]=sinta')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1));
+        $this->get('/karyawan_sales?filter[depo]=balaraja')->assertInertia(fn (Assert $page) => $page->where('baris.total', 1)->where('baris.data.0.nama', 'Sinta Wulandari'));
 
         $this->get('/karyawan_koordinator')->assertInertia(fn (Assert $page) => $page
             ->where('baris.data.0.nama', 'Koor Satu')->where('baris.data.0.jumlah_sales', 2));
@@ -62,10 +69,10 @@ class KaryawanTest extends AdminTestCase
 
     public function test_sort_filter_per_kolom_daftar_karyawan(): void
     {
-        // Sort nama Z->A mengabaikan urutan bawaan (aktif dulu); status=semua supaya Joko Lama (tidak aktif) ikut tersortir.
-        $this->get('/karyawan_sales?status=semua&sort=nama&arah=desc')->assertInertia(fn (Assert $page) => $page
+        // Sort nama Z->A mengganti urutan bawaan; Joko Lama (tidak aktif) tidak ikut karena tab bawaan Aktif.
+        $this->get('/karyawan_sales?sort=nama&arah=desc')->assertInertia(fn (Assert $page) => $page
             ->where('sort', ['kolom' => 'nama', 'arah' => 'desc'])
-            ->where('baris.data', fn ($b) => collect($b)->pluck('nama')->all() === ['Tegar Mahendra', 'Sinta Wulandari', 'Rudi Hartono', 'Joko Lama']));
+            ->where('baris.data', fn ($b) => collect($b)->pluck('nama')->all() === ['Tegar Mahendra', 'Sinta Wulandari', 'Rudi Hartono']));
 
         // Kolom di luar whitelist diabaikan.
         $this->get('/karyawan_sales?sort=foto&arah=desc')->assertInertia(fn (Assert $page) => $page->where('sort', null));
@@ -112,7 +119,7 @@ class KaryawanTest extends AdminTestCase
             ->assertRedirect('/karyawan_sales');
 
         $this->assertSame(3, DB::table('mk_karyawan_area')->where('karyawan_id', 1)->count());
-        $this->assertDatabaseHas('riwayat_admin', ['objek' => 'karyawan', 'objek_id' => 1, 'keterangan' => 'No HP: - → 0812 3456 7890']);
+        $this->assertDatabaseHas('riwayat_admin', ['objek' => 'karyawan', 'objek_id' => 1, 'keterangan' => 'No HP: - → 081234567890']);
         $this->assertDatabaseHas('riwayat_admin', ['objek' => 'karyawan', 'objek_id' => 1, 'keterangan' => 'Area: 2 → 3 area']);
         $this->assertNotNull(DB::table('mk_karyawan')->where('id', 1)->value('diubah_pada'));
     }
@@ -128,8 +135,8 @@ class KaryawanTest extends AdminTestCase
         // Pilihan kategori dari tabel Kategori Karyawan (kolom "kategori"), tanpa kategori bawaan sales/koordinator.
         DB::table('kategori_karyawan')->insert([['source_id' => 1, 'kategori' => 'Koordinator Default'], ['source_id' => 3, 'kategori' => 'Supervisor Nasional Default'],
             ['source_id' => 38, 'kategori' => 'Auditor'], ['source_id' => 40, 'kategori' => 'Merchandiser']]);
-        $this->getJson('/karyawan_lainnya/tambah')->assertOk()
-            ->assertJsonPath('opsi.jabatan', collect(['Auditor', 'Merchandiser', 'Principal', 'Supervisor'])->map(fn ($j) => ['value' => $j, 'label' => $j])->all());
+        $this->get('/karyawan_lainnya/tambah')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Karyawan/Form')
+            ->where('opsi.jabatan', collect(['Auditor', 'Merchandiser', 'Principal', 'Supervisor'])->map(fn ($j) => ['value' => $j, 'label' => $j])->all()));
 
         $this->post('/karyawan_lainnya', ['nama' => 'Agung', 'jabatan' => 'Direktur', 'aktif' => '1'])->assertSessionHasErrors('jabatan');
         $this->post('/karyawan_lainnya', ['nama' => 'Agung', 'jabatan' => 'Principal', 'aktif' => '1'])->assertRedirect('/karyawan_lainnya');
@@ -176,6 +183,34 @@ class KaryawanTest extends AdminTestCase
 
         $this->assertStringContainsString('ID,"Nama Lengkap",Kategori,"No HP",Email,Status,Diubah,"Tanggal Mulai"', $csv);
         $this->assertStringContainsString('600,Rinto,Auditor', $csv);
+    }
+
+    public function test_no_hp_motoris_hanya_angka_tanpa_spasi(): void
+    {
+        foreach (['0812 3456 7890', '0812-3456', '+628123456', '0812a3456'] as $hp) {
+            $this->post('/karyawan_sales', $this->dataSales(['no_hp' => $hp]))
+                ->assertSessionHasErrors(['no_hp' => 'No HP hanya boleh angka tanpa spasi, minimal 5 digit.']);
+        }
+
+        $this->assertDatabaseMissing('mk_karyawan', ['nama' => 'Bayu Saputra']);
+        $this->post('/karyawan_sales', $this->dataSales())->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('mk_karyawan', ['nama' => 'Bayu Saputra', 'no_hp' => '081234567890']);
+
+        // Nomor lama berspasi boleh tetap saat form disimpan, tapi tidak boleh diganti dengan nomor berspasi baru.
+        DB::table('mk_karyawan')->where('id', 1)->update(['no_hp' => '0812 9439 6457']);
+        $this->put('/karyawan_sales/1', $this->dataSales(['no_hp' => '0812 9439 6457']))->assertSessionDoesntHaveErrors('no_hp');
+        $this->put('/karyawan_sales/1', $this->dataSales(['no_hp' => '0812 9439 6458']))->assertSessionHasErrors('no_hp');
+    }
+
+    public function test_pesan_wajib_isi_berbahasa_indonesia(): void
+    {
+        $this->post('/karyawan_sales', ['aktif' => '1', 'email' => 'bukan-email'])->assertSessionHasErrors([
+            'nama' => 'Nama lengkap wajib diisi.',
+            'no_hp' => 'No HP wajib diisi.',
+            'depo_id' => 'Depo wajib diisi.',
+            'email' => 'Format email tidak valid.',
+            'area_ids' => 'Pilih minimal satu area.',
+        ]);
     }
 
     public function test_status_keluarga_ptkp_disimpan_boleh_kosong_dan_hanya_kode_yang_dikenal(): void

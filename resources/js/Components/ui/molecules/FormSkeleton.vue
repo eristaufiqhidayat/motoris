@@ -8,16 +8,19 @@ const props = defineProps({
     harga: { type: Boolean, default: false },
     foto: { type: Boolean, default: false },
     jumlahField: { type: Number, default: 4 },
+    // Semua kartu ditumpuk satu kolom, mengikuti form yang sempit di drawer (mis. karyawan).
+    satuKolom: { type: Boolean, default: false },
 });
 
 const JUMLAH_HARGA = 5;
 const adaSisiKanan = computed(() => props.harga || props.foto);
+const duaKolom = computed(() => adaSisiKanan.value && !props.satuKolom);
 </script>
 
 <template>
     <div class="animate-pulse" aria-busy="true" aria-live="polite" role="status" aria-label="Memuat">
-        <div class="grid grid-cols-1 gap-3 mb-3" :class="{ 'lg:grid-cols-3': adaSisiKanan }">
-            <Card :class="{ 'lg:col-span-2': adaSisiKanan }">
+        <div class="grid grid-cols-1 gap-3 mb-3" :class="{ 'lg:grid-cols-3': duaKolom }">
+            <Card :class="{ 'lg:col-span-2': duaKolom }">
                 <template #header><div class="h-3 w-24 rounded bg-gray-200"></div></template>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div v-for="field in jumlahField" :key="field" class="space-y-1">

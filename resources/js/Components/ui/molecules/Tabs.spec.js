@@ -39,4 +39,13 @@ describe('Tabs', () => {
         expect(buttons[0].find('.badge').text()).toBe('2');
         expect(buttons[1].find('.badge').exists()).toBe(false);
     });
+
+    it('uses badgeVarian and badgeJudul when given, danger otherwise', () => {
+        const wrapper = mount(Tabs, { props: { tabs: [{ key: 'a', label: 'A', badge: 1, badgeVarian: 'warning', badgeJudul: '1 isian wajib' }, { key: 'b', label: 'B', badge: 1 }], modelValue: 'a' } });
+        const [a, b] = wrapper.findAll('.badge');
+
+        expect(a.classes()).toContain('badge-warning');
+        expect(a.attributes('title')).toBe('1 isian wajib');
+        expect(b.classes()).toContain('badge-danger');
+    });
 });
