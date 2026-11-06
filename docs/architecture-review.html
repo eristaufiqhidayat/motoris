@@ -1,300 +1,513 @@
-<title>Architecture Review — Marketama Clone</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<script src="https://cdn.tailwindcss.com/3.4.17"></script>
-<script type="module">
-  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
-  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", fontFamily: "ui-monospace, monospace" });
-</script>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture Review Enesis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <style>
-  /* layout: editorial single column, cards as articles, mermaid + hand-built diagrams mixed */
+  /* Tata letak: satu kolom, kandidat diurutkan menurut risiko; diagram memikul isi, prosa dipadatkan. */
   :root {
-    --bg: #faf7f2;
-    --fg: #1c1a17;
-    --muted: #6b6459;
+    --bg: #f3f5f7;
+    --fg: #17212b;
+    --muted: #586674;
     --card: #ffffff;
-    --line: #e4ddd2;
-    --accent: #6d5a3c;
-    --strong: #0f7a51;
-    --worth: #b5790a;
-    --spec: #6b6459;
-    --leak: #b42318;
+    --line: #d5dce3;
+    --accent: #1f5f8b;
+    --strong: #0b7a55;
+    --worth: #a76a00;
+    --spec: #586674;
+    --leak: #c0281c;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #17140f;
-      --fg: #ece6da;
-      --muted: #a79d8b;
-      --card: #211d16;
-      --line: #3a3326;
-      --accent: #cbb28a;
-      --strong: #3ecf8e;
-      --worth: #e0a73a;
-      --spec: #a79d8b;
-      --leak: #ff6b5e;
+      --bg: #10161c;
+      --fg: #e4eaf0;
+      --muted: #9aa8b5;
+      --card: #182029;
+      --line: #2d3945;
+      --accent: #74b7e3;
+      --strong: #45cf9b;
+      --worth: #e7b04c;
+      --spec: #9aa8b5;
+      --leak: #ff7a6e;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #17140f;
-    --fg: #ece6da;
-    --muted: #a79d8b;
-    --card: #211d16;
-    --line: #3a3326;
-    --accent: #cbb28a;
-    --strong: #3ecf8e;
-    --worth: #e0a73a;
-    --spec: #a79d8b;
-    --leak: #ff6b5e;
+    --bg: #10161c;
+    --fg: #e4eaf0;
+    --muted: #9aa8b5;
+    --card: #182029;
+    --line: #2d3945;
+    --accent: #74b7e3;
+    --strong: #45cf9b;
+    --worth: #e7b04c;
+    --spec: #9aa8b5;
+    --leak: #ff7a6e;
     color-scheme: dark;
   }
-  body { background: var(--bg); color: var(--fg); padding-left: max(16px, env(safe-area-inset-left,0px)); padding-right: max(16px, env(safe-area-inset-right,0px)); }
-  .serif { font-family: "Source Serif 4", Georgia, "Noto Serif", serif; }
-  .mono { font-family: ui-monospace, "SF Mono", Consolas, monospace; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 0.5rem; }
-  .badge { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.2rem 0.55rem; border-radius: 999px; font-weight: 600; }
-  .badge-strong { background: color-mix(in srgb, var(--strong) 18%, transparent); color: var(--strong); }
-  .badge-worth { background: color-mix(in srgb, var(--worth) 18%, transparent); color: var(--worth); }
-  .badge-spec { background: color-mix(in srgb, var(--spec) 22%, transparent); color: var(--spec); }
-  .tag { font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
-  .label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
-  .seam-line { stroke: var(--muted); stroke-dasharray: 4 4; fill: none; }
-  .leak-line { stroke: var(--leak); stroke-width: 2; fill: none; }
-  .mod-box { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
-  .deep-box { fill: var(--accent); fill-opacity: 0.15; stroke: var(--accent); stroke-width: 2; }
-  .mermaid { font-size: 13px; }
-  h1, h2, h3 { text-wrap: balance; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 400 15px/1.55 var(--sans); }
+  main { max-width: 900px; margin: 0 auto; padding: 40px 16px 64px; display: grid; gap: 28px; }
+  h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.25; }
+  h1 { font-size: 28px; font-weight: 700; }
+  h2 { font-size: 20px; font-weight: 600; }
+  p { margin: 0; }
   a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .muted { color: var(--muted); }
+
+  header { display: grid; gap: 10px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font: 12px var(--mono); color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  th, td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  .scroll { overflow-x: auto; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 22px; display: grid; gap: 16px; min-width: 0; }
+  .card-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .badge, .tag { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .badge { color: var(--c); border: 1px solid var(--c); }
+  .strong { --c: var(--strong); }
+  .worth { --c: var(--worth); }
+  .spec { --c: var(--spec); }
+  .tag { color: var(--muted); border: 1px dashed var(--line); font-weight: 500; }
+  .files { font: 13px/1.6 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+
+  .ba { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 680px) { .ba { grid-template-columns: minmax(0, 1fr); } }
+  figure { margin: 0; display: grid; gap: 8px; align-content: start; min-width: 0; }
+  figcaption { font-size: 13px; color: var(--muted); }
+  svg { display: block; max-width: 100%; height: auto; }
+  svg text { font-family: var(--mono); font-size: 11px; fill: var(--fg); }
+  svg text.dim { fill: var(--muted); }
+  svg text.red { fill: var(--leak); }
+  svg text.acc { fill: var(--accent); font-weight: 500; }
+  .m { fill: var(--card); stroke: var(--muted); stroke-width: 1; }
+  .m-leak { fill: var(--card); stroke: var(--leak); stroke-width: 1.5; }
+  .m-deep { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-width: 3; }
+  .ln { stroke: var(--muted); stroke-width: 1.2; fill: none; }
+  .ln-leak { stroke: var(--leak); stroke-width: 2; fill: none; }
+  .ln-seam { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+  .band-leak { fill: var(--leak); fill-opacity: 0.12; }
+
+  .bands { display: grid; gap: 5px; }
+  .b { font: 12.5px/1.4 var(--mono); padding: 7px 10px; border-left: 3px solid var(--line); background: color-mix(in srgb, var(--muted) 8%, transparent); overflow-wrap: anywhere; }
+  .b.leak { border-left-color: var(--leak); background: color-mix(in srgb, var(--leak) 9%, transparent); }
+  .deep { font: 12.5px/1.5 var(--mono); padding: 14px; border: 3px solid var(--accent); border-radius: 3px; background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  .deep strong { display: block; color: var(--accent); font-weight: 500; margin-bottom: 4px; }
+  .deep .in { color: var(--muted); }
+  .callers { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .callers span { font: 12px var(--mono); padding: 3px 7px; border: 1px solid var(--muted); border-radius: 2px; }
+  .bar { display: grid; gap: 3px; }
+  .bar-track { display: flex; height: 20px; }
+  .bar-shared { background: var(--leak); opacity: 0.75; }
+  .bar-own { background: var(--muted); opacity: 0.35; }
+
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 680px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  ul { margin: 0; padding-left: 18px; }
+  .note { font-size: 14px; padding: 10px 12px; border-left: 3px solid var(--worth); background: color-mix(in srgb, var(--worth) 10%, transparent); }
+  .note.alarm { border-left-color: var(--leak); background: color-mix(in srgb, var(--leak) 9%, transparent); }
+  .top { border: 3px solid var(--accent); }
+  .stack { display: grid; gap: 4px; }
 </style>
+</head>
+<body>
 
-<main class="max-w-4xl mx-auto py-10 space-y-14" style="padding-block: 2.5rem;">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="pa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="var(--muted)"/></marker>
+    <marker id="pr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="var(--leak)"/></marker>
+  </defs>
+</svg>
 
-  <header class="space-y-3 border-b pb-6" style="border-color: var(--line);">
-    <p class="label">Architecture review</p>
-    <h1 class="serif text-3xl font-semibold">Marketama Motorist System — clone admin</h1>
-    <p class="mono text-sm" style="color: var(--muted);">31 Okt 2026 · hot spot dari 150 commit terakhir</p>
-    <div class="flex flex-wrap gap-4 pt-2 text-xs mono" style="color: var(--muted);">
-      <span class="flex items-center gap-1.5"><svg width="18" height="12"><rect x="1" y="1" width="16" height="10" class="mod-box"/></svg> module</span>
-      <span class="flex items-center gap-1.5"><svg width="18" height="12"><line x1="1" y1="6" x2="17" y2="6" class="seam-line"/></svg> seam</span>
-      <span class="flex items-center gap-1.5"><svg width="18" height="12"><line x1="1" y1="6" x2="17" y2="6" class="leak-line"/></svg> leakage</span>
-      <span class="flex items-center gap-1.5"><svg width="18" height="12"><rect x="1" y="1" width="16" height="10" class="deep-box"/></svg> deep module</span>
+<main>
+
+<header>
+  <p class="label">Architecture review</p>
+  <h1>Enesis: Marketama Motorist System</h1>
+  <p class="mono muted">6 Nov 2026 · hot spot dari 150 commit terakhir · menggantikan review 31 Okt 2026</p>
+  <div class="legend">
+    <span><svg width="18" height="12"><rect x="1" y="1" width="16" height="10" class="m"/></svg>module</span>
+    <span><svg width="18" height="12"><line x1="1" y1="6" x2="17" y2="6" class="ln-seam"/></svg>seam</span>
+    <span><svg width="18" height="12"><line x1="1" y1="6" x2="17" y2="6" class="ln-leak"/></svg>kebocoran</span>
+    <span><svg width="18" height="12"><rect x="2" y="2" width="14" height="8" class="m-deep"/></svg>deep module</span>
+  </div>
+</header>
+
+<section class="scroll" aria-label="Daftar kandidat">
+  <table>
+    <thead><tr><th>#</th><th>Kandidat</th><th>Kekuatan</th><th>Dibanding 31 Okt</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td><a href="#c1">Cakupan akun harus diingat di tiap query</a></td><td><span class="badge strong">Strong</span></td><td>Baru</td></tr>
+      <tr><td class="num">2</td><td><a href="#c2">Rumus KPI ditulis per layar dan sudah berbeda</a></td><td><span class="badge strong">Strong</span></td><td>Baru</td></tr>
+      <tr><td class="num">3</td><td><a href="#c3">Tanda aktif dan milik tim punya banyak arti</a></td><td><span class="badge strong">Strong</span></td><td>Baru</td></tr>
+      <tr><td class="num">4</td><td><a href="#c4">Menu/Show.vue menyimpan perilaku per tabel</a></td><td><span class="badge strong">Strong</span></td><td>Kandidat lama #1, membesar</td></tr>
+      <tr><td class="num">5</td><td><a href="#c5">Tanggal lokal dibaca dari kolom UTC</a></td><td><span class="badge worth">Worth exploring</span></td><td>Baru</td></tr>
+      <tr><td class="num">6</td><td><a href="#c6">Generate Kelurahan dan Auto Grid kembar</a></td><td><span class="badge worth">Worth exploring</span></td><td>Menggabungkan lama #2 dan #4</td></tr>
+      <tr><td class="num">7</td><td><a href="#c7">Tiga pembersihan kecil</a></td><td><span class="badge spec">Speculative</span></td><td>Memuat lama #3</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="candidates" style="display:grid;gap:28px">
+
+  <!-- 1 -->
+  <article class="card" id="c1">
+    <div class="card-top">
+      <h2>1. Cakupan akun harus diingat di tiap query</h2>
+      <div class="badges"><span class="badge strong">Strong</span><span class="tag">local-substitutable</span></div>
     </div>
-  </header>
+    <div class="files">app/Support/Akses/Akses.php · app/Support/Menu/SumberTabel.php<br>app/Http/Controllers/TrackingSalesController.php · TrackingKoordinatorController.php<br>app/Http/Controllers/LapLoadingBarangController.php · MenuController.php</div>
+    <div class="ba">
+      <figure>
+        <p class="label">Before: opt-in, 56 pemakaian di 35 berkas</p>
+        <svg viewBox="0 0 420 290" role="img" aria-label="Tiga kelompok module melewati batasiKaryawan, empat module langsung membaca data tanpa cakupan">
+          <rect class="m" x="1" y="10" width="150" height="30"/><text x="10" y="29">Sumber* menu</text>
+          <rect class="m" x="1" y="50" width="150" height="30"/><text x="10" y="69">Summary, Dashboard</text>
+          <rect class="m" x="1" y="90" width="150" height="30"/><text x="10" y="109">Beranda</text>
+          <rect class="m-leak" x="1" y="130" width="150" height="30"/><text x="10" y="149">Rute GPS motoris</text>
+          <rect class="m-leak" x="1" y="170" width="150" height="30"/><text x="10" y="189">Tracking koordinator</text>
+          <rect class="m-leak" x="1" y="210" width="150" height="30"/><text x="10" y="229">Riwayat distributor</text>
+          <rect class="m-leak" x="1" y="250" width="150" height="30"/><text x="10" y="269">Tabel tanpa sumber</text>
+          <rect class="m" x="190" y="10" width="100" height="110"/><text x="240" y="55" text-anchor="middle">batasi</text><text x="240" y="70" text-anchor="middle">Karyawan</text><text class="dim" x="240" y="88" text-anchor="middle">+ 4 depoCakupan</text>
+          <rect class="m" x="340" y="10" width="79" height="270"/><text x="380" y="140" text-anchor="middle">mk_*</text><text x="380" y="155" text-anchor="middle">trx_*</text><text x="380" y="170" text-anchor="middle">lap_*</text>
+          <path class="ln" d="M151 25H189" marker-end="url(#pa)"/><path class="ln" d="M151 65H189" marker-end="url(#pa)"/><path class="ln" d="M151 105H189" marker-end="url(#pa)"/>
+          <path class="ln" d="M290 65H339" marker-end="url(#pa)"/>
+          <path class="ln-leak" d="M151 145H338" marker-end="url(#pr)"/><path class="ln-leak" d="M151 185H338" marker-end="url(#pr)"/><path class="ln-leak" d="M151 225H338" marker-end="url(#pr)"/><path class="ln-leak" d="M151 265H338" marker-end="url(#pr)"/>
+        </svg>
+      </figure>
+      <figure>
+        <p class="label">After: tertutup kecuali dinyatakan</p>
+        <svg viewBox="0 0 420 290" role="img" aria-label="Semua module pembaca melewati satu deep module cakupan sebelum menyentuh data">
+          <rect class="m" x="1" y="10" width="130" height="30"/><text x="10" y="29">Sumber* menu</text>
+          <rect class="m" x="1" y="50" width="130" height="30"/><text x="10" y="69">Summary, Dashboard</text>
+          <rect class="m" x="1" y="90" width="130" height="30"/><text x="10" y="109">Beranda</text>
+          <rect class="m" x="1" y="130" width="130" height="30"/><text x="10" y="149">Rute GPS motoris</text>
+          <rect class="m" x="1" y="170" width="130" height="30"/><text x="10" y="189">Tracking koordinator</text>
+          <rect class="m" x="1" y="210" width="130" height="30"/><text x="10" y="229">Riwayat distributor</text>
+          <rect class="m" x="1" y="250" width="130" height="30"/><text x="10" y="269">Tabel tanpa sumber</text>
+          <line class="ln-seam" x1="168" y1="6" x2="168" y2="284"/>
+          <rect class="m-deep" x="180" y="10" width="140" height="270"/>
+          <text class="acc" x="250" y="48" text-anchor="middle">Yang boleh dilihat</text><text class="acc" x="250" y="64" text-anchor="middle">akun ini</text>
+          <text class="dim" x="250" y="112" text-anchor="middle">karyawan</text><text class="dim" x="250" y="130" text-anchor="middle">depo</text><text class="dim" x="250" y="148" text-anchor="middle">downline</text><text class="dim" x="250" y="166" text-anchor="middle">kunci cache</text>
+          <text class="dim" x="250" y="208" text-anchor="middle">pengecualian</text><text class="dim" x="250" y="224" text-anchor="middle">bernama</text>
+          <rect class="m" x="350" y="10" width="69" height="270"/><text x="385" y="150" text-anchor="middle">data</text>
+          <path class="ln" d="M131 25H178" marker-end="url(#pa)"/><path class="ln" d="M131 65H178" marker-end="url(#pa)"/><path class="ln" d="M131 105H178" marker-end="url(#pa)"/><path class="ln" d="M131 145H178" marker-end="url(#pa)"/><path class="ln" d="M131 185H178" marker-end="url(#pa)"/><path class="ln" d="M131 225H178" marker-end="url(#pa)"/><path class="ln" d="M131 265H178" marker-end="url(#pa)"/>
+          <path class="ln" d="M320 145H349" marker-end="url(#pa)"/>
+        </svg>
+      </figure>
+    </div>
+    <div class="note alarm">
+      <strong>Celah yang terbaca di kode hari ini.</strong> Role Koordinator bawaan memegang menu-menu ini lewat <code>RoleBawaan</code>; pengaturan role di database produksi belum diperiksa.
+      <ul>
+        <li><code>TrackingSalesController:30-43</code> mengembalikan rute GPS motoris mana pun; komentar baris 45 mengakui rute tidak dibatasi cakupan.</li>
+        <li><code>TrackingKoordinatorController</code> tidak memakai cakupan di ketiga endpoint.</li>
+        <li><code>LapLoadingBarangController:23</code> membaca riwayat distributor tanpa cakupan.</li>
+        <li><code>MenuController:129</code> menjalankan <code>DB::table($table)</code> untuk tabel tanpa <code>sumber</code>. Tabel <code>lap_*</code> memuat nama sebagai teks, jadi <code>batasiKaryawan</code> tidak bisa dipasang.</li>
+      </ul>
+    </div>
+    <div class="two">
+      <div class="stack"><p class="label">Problem</p><p>Query baru terbuka sampai penulisnya ingat membatasi. <code>SumberTabel::query()</code> sendiri berbunyi "bila perlu".</p></div>
+      <div class="stack"><p class="label">Solution</p><p>Satu module memegang keputusan "yang boleh dilihat akun ini". Tanpa cakupan menjadi pilihan yang dinyatakan dan bernama.</p></div>
+    </div>
+    <div class="stack"><p class="label">Wins</p>
+      <ul>
+        <li>Leverage: satu aturan, 35 berkas pemanggil</li>
+        <li>Locality: 4 <code>depoCakupan</code> menjadi satu</li>
+        <li>Lenyapnya panggilan statis ke <code>KuotaMotorisController</code></li>
+        <li>Satu test menyapu semua menu</li>
+      </ul>
+    </div>
+    <div class="note">Sebagian bisa jadi sengaja, misalnya rute GPS tetap terlihat. <code>SumberTandaOutlet</code> memang menyatakan tanpa cakupan. Keputusan per endpoint perlu dibuat sebelum dibatasi. Test tracking sekarang tidak menguji cakupan.</div>
+  </article>
 
-  <section id="candidates" class="space-y-14">
-
-    <!-- Candidate 1 -->
-    <article class="card p-6 space-y-5" id="c1">
-      <div class="flex items-start justify-between gap-4 flex-wrap">
-        <h2 class="serif text-xl font-semibold">Menu/Show.vue tumbuh jadi switch per tabel</h2>
-        <div class="flex gap-2 flex-wrap shrink-0">
-          <span class="badge badge-strong">Strong</span>
-          <span class="tag">in-process</span>
+  <!-- 2 -->
+  <article class="card" id="c2">
+    <div class="card-top">
+      <h2>2. Rumus KPI ditulis per layar dan sudah berbeda</h2>
+      <div class="badges"><span class="badge strong">Strong</span><span class="tag">in-process</span><span class="tag">local-substitutable</span></div>
+    </div>
+    <div class="files">app/Support/Motoris/SummaryDepo.php · LaporanMotoris.php · DetailMotoris.php · Dashboard.php<br>app/Http/Controllers/HomeController.php · TrackingSalesController.php · Mobile/KinerjaController.php<br>config/mobile.php · resources/js/Support/summaryDepo.js · Pages/Home/partials/metrikBeranda.js</div>
+    <div class="ba">
+      <figure>
+        <p class="label">Before: definisi tersebar</p>
+        <div class="bands">
+          <div class="b leak">IPT = SKU ÷ EC<br><span class="muted">SummaryDepo:247,305 · Home:648</span></div>
+          <div class="b leak">IPT = SKU ÷ transaksi<br><span class="muted">Kinerja:133 · TrackingSales:85 · DetailMotoris:173 · LaporanMotoris:102</span></div>
+          <div class="b leak">Target 45/35/3 <span class="muted">SummaryDepo:25</span><br>Target 40/25/3 <span class="muted">config/mobile.php:42</span></div>
+          <div class="b leak">Hari kerja: 4 definisi<br><span class="muted">absen ∪ kunjungan · Sen–Jum · jam aktif · bukan Minggu</span></div>
+          <div class="b">Ambang 100/75 di 3 tempat<br><span class="muted">summaryDepo.js · metrikBeranda.js · Home:555</span></div>
         </div>
-      </div>
-      <div class="mono text-sm space-y-0.5" style="color: var(--muted);">
-        <div>resources/js/Pages/Menu/Show.vue</div>
-        <div>resources/js/Components/ui/organisms/DataTable.vue</div>
-      </div>
-
-      <!-- before/after: interface-vs-implementation mass diagram -->
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-1.5">
-          <p class="label text-center">Before — shallow</p>
-          <svg viewBox="0 0 260 220" class="w-full" style="height: 280px;">
-            <rect x="30" y="10" width="200" height="130" class="mod-box" stroke-dasharray="3 3"/>
-            <text x="130" y="30" text-anchor="middle" class="mono" font-size="10" fill="var(--muted)">Show.vue — interface</text>
-            <text x="130" y="50" text-anchor="middle" class="mono" font-size="9" fill="var(--leak)">table.name === 'checkin_pagi'</text>
-            <text x="130" y="65" text-anchor="middle" class="mono" font-size="9" fill="var(--leak)">table.name === 'master_depo'</text>
-            <text x="130" y="80" text-anchor="middle" class="mono" font-size="9" fill="var(--leak)">table.name === 'master_area' ×2</text>
-            <text x="130" y="95" text-anchor="middle" class="mono" font-size="9" fill="var(--leak)">table.name === 'loading_barang'</text>
-            <text x="130" y="110" text-anchor="middle" class="mono" font-size="9" fill="var(--leak)">table.aksi === 'verifikasi_outlet_baru'</text>
-            <text x="130" y="125" text-anchor="middle" class="mono" font-size="9" fill="var(--muted)">6 refs, 5 drawer partials</text>
-            <rect x="80" y="150" width="100" height="25" class="mod-box"/>
-            <text x="130" y="167" text-anchor="middle" class="mono" font-size="9" fill="var(--muted)">implementation</text>
-          </svg>
+      </figure>
+      <figure>
+        <p class="label">After: satu rumah untuk definisi</p>
+        <div class="callers"><span>Summary</span><span>Beranda</span><span>Laporan</span><span>Detail Motoris</span><span>Lacak</span><span>Mobile</span></div>
+        <div class="deep">
+          <strong>Definisi KPI motoris</strong>
+          <span class="in">IPT, Call, EC<br>target nasional dan target depo<br>hari kerja: varian bernama<br>ambang pencapaian<br>penjualan yang dihitung</span>
         </div>
-        <div class="space-y-1.5">
-          <p class="label text-center">After — deep</p>
-          <svg viewBox="0 0 260 220" class="w-full" style="height: 280px;">
-            <rect x="70" y="10" width="120" height="30" class="mod-box"/>
-            <text x="130" y="29" text-anchor="middle" class="mono" font-size="9" fill="var(--fg)">row_detail lookup</text>
-            <rect x="30" y="55" width="200" height="140" class="deep-box"/>
-            <text x="130" y="75" text-anchor="middle" class="mono" font-size="10" fill="var(--accent)">RowDrawer registry</text>
-            <text x="130" y="100" text-anchor="middle" class="mono" font-size="9" fill="var(--muted)" opacity="0.7">depo drawer</text>
-            <text x="130" y="115" text-anchor="middle" class="mono" font-size="9" fill="var(--muted)" opacity="0.7">area drawer ×2</text>
-            <text x="130" y="130" text-anchor="middle" class="mono" font-size="9" fill="var(--muted)" opacity="0.7">loading drawer</text>
-            <text x="130" y="145" text-anchor="middle" class="mono" font-size="9" fill="var(--muted)" opacity="0.7">badge maps</text>
-            <text x="130" y="175" text-anchor="middle" class="mono" font-size="9" fill="var(--muted)">config/marketama.php: 'row_detail' => X::class</text>
-          </svg>
+        <figcaption>Perbedaan yang sah tetap ada, tapi bernama. Layar memilih varian, bukan menulis rumus.</figcaption>
+      </figure>
+    </div>
+    <div class="two">
+      <div class="stack"><p class="label">Problem</p><p>Motoris yang sama bisa punya IPT berbeda di dua layar, karena EC hanya penjualan di atas <code>minimal_transaksi</code> (<code>PenjualanController:80-81</code>).</p></div>
+      <div class="stack"><p class="label">Solution</p><p>Pindahkan definisi ke satu tempat bernama. Layar hanya merangkai hasil dan menampilkan.</p></div>
+    </div>
+    <div class="stack"><p class="label">Wins</p>
+      <ul>
+        <li>Locality: rumus berubah di satu tempat</li>
+        <li>Lenyapnya <code>Home::kpi</code> dan <code>kpiHari</code></li>
+        <li>Test rumus tanpa HTTP</li>
+      </ul>
+    </div>
+    <div class="note">Butuh keputusan produk dulu: IPT satu rumus atau dua. Test sekarang mengunci keduanya (<code>SummaryDepoTest:64</code>, <code>DetailMotorisTest:120</code>). <code>DetailMotoris</code> menulis perbedaan hari kerjanya sebagai "sengaja". Ini hanya menyangkut tabel dasar <code>trx_*</code>, bukan <code>lap_*</code>.</div>
+  </article>
+
+  <!-- 3 -->
+  <article class="card" id="c3">
+    <div class="card-top">
+      <h2>3. Tanda aktif dan milik tim punya banyak arti</h2>
+      <div class="badges"><span class="badge strong">Strong</span><span class="tag">local-substitutable</span></div>
+    </div>
+    <div class="files">app/Http/Controllers/HomeController.php (687 baris, 20 method privat)<br>app/Support/Motoris/KinerjaKoordinator.php · Dashboard.php · SummaryDepo.php<br>app/Support/Menu/Motoris/SumberLastSeen.php · app/Support/Menu/SumberTandaOutlet.php</div>
+    <div class="ba">
+      <figure>
+        <p class="label">Before: satu istilah, banyak query</p>
+        <div class="bands">
+          <div class="b leak"><strong>Tanda aktif</strong> = status perlu_dicek <span class="muted">Home:194,434,481</span></div>
+          <div class="b leak"><strong>Tanda aktif</strong> = dicabut_at kosong <span class="muted">SummaryDepo:283</span></div>
+          <div class="b leak"><strong>Tanda aktif</strong> = dicabut_at kosong, 30 hari, plus tanda outlet <span class="muted">SumberLastSeen:59</span></div>
+          <div class="b"><strong>Milik tim</strong> = pendaftar atau rute <span class="muted">Home:528</span></div>
+          <div class="b"><strong>Milik tim</strong> = pernah dikunjungi <span class="muted">KinerjaKoordinator:176</span></div>
+          <div class="b"><strong>Milik tim</strong> = pendaftar dalam jendela <span class="muted">TandaOutletMotoris</span></div>
+          <div class="b"><strong>Milik tim</strong> = area depo <span class="muted">Dashboard:169</span></div>
         </div>
-      </div>
-
-      <div class="grid sm:grid-cols-2 gap-4 text-sm pt-2">
-        <div><p class="label mb-1">Problem</p><p>Interface sudah lebar seperti implementasinya: lima <span class="mono">v-if table.name === '...'</span> dan enam ref untuk drawer per tabel.</p></div>
-        <div><p class="label mb-1">Solution</p><p>Pindahkan keputusan "tabel X pakai drawer Y" ke <span class="mono">'row_detail' => Class</span> di <span class="mono">config/marketama.php</span>, dibaca satu <span class="mono">&lt;RowDrawer&gt;</span> generik.</p></div>
-      </div>
-      <div>
-        <p class="label mb-1">Wins</p>
-        <ul class="text-sm list-disc pl-5 space-y-0.5">
-          <li>Interface menyusut; implementasi menyerap switch</li>
-          <li>Leverage: satu registry, N tabel</li>
-          <li>Locality: tabel baru cuma sentuh config</li>
-        </ul>
-      </div>
-      <div class="text-sm p-3 rounded border" style="border-color: var(--worth); background: color-mix(in srgb, var(--worth) 10%, transparent);">
-        Tegangan: beberapa drawer (peta depo, riwayat distributor) genuinely one-off — generalisasi untuk 2-3 tabel saja mungkin belum sepadan. Cek laju pertambahan drawer dulu.
-      </div>
-    </article>
-
-    <!-- Candidate 2 -->
-    <article class="card p-6 space-y-5" id="c2">
-      <div class="flex items-start justify-between gap-4 flex-wrap">
-        <h2 class="serif text-xl font-semibold">Insert area_polygon diduplikasi di dua controller</h2>
-        <div class="flex gap-2 flex-wrap shrink-0">
-          <span class="badge badge-strong">Strong</span>
-          <span class="tag">local-substitutable</span>
+      </figure>
+      <figure>
+        <p class="label">After: Beranda hanya merangkai</p>
+        <div class="callers"><span>Beranda</span><span>Summary</span><span>Lacak Motoris</span><span>Kinerja Koordinator</span></div>
+        <div class="deep">
+          <strong>Tanda terbuka untuk tim ini</strong>
+          <span class="in">arti aktif, ditinjau, dicabut<br>outlet milik tim: arti bernama<br>lupakan cache tanda<br>kartu admin dan koordinator</span>
         </div>
-      </div>
-      <div class="mono text-sm space-y-0.5" style="color: var(--muted);">
-        <div>app/Http/Controllers/GenerateKelurahanController.php</div>
-        <div>app/Http/Controllers/AutoGridController.php</div>
-      </div>
+        <figcaption>HomeController menyusut menjadi penyusun props dan <code>Inertia::defer</code>.</figcaption>
+      </figure>
+    </div>
+    <div class="two">
+      <div class="stack"><p class="label">Problem</p><p>Komentar <code>SummaryDepo:281</code> menyebut definisinya sama dengan <code>HomeController::tandaMotoris</code>; kode Beranda sudah memakai arti lain.</p></div>
+      <div class="stack"><p class="label">Solution</p><p>Satu module menjawab tanda mana yang terbuka bagi sebuah tim. Controller Beranda melepas aturan ke module itu.</p></div>
+    </div>
+    <div class="stack"><p class="label">Wins</p>
+      <ul>
+        <li>Lenyapnya panggilan statis <code>HomeController::lupakanTanda</code></li>
+        <li>Locality: arti tanda satu tempat</li>
+        <li>Pasangan admin/koordinator melebur</li>
+        <li>Aturan teruji tanpa HTTP</li>
+      </ul>
+    </div>
+    <div class="note">Perlu dicek berbeda dari Ditandai mungkin memang dua konsep. Beri keduanya nama, jangan dipaksa satu. Istilah Tanda, Cakupan, dan IPT belum ada di <code>GLOSSARY.md</code>.</div>
+  </article>
 
-      <div class="card p-3" style="background: color-mix(in srgb, var(--card) 100%, transparent);">
-        <pre class="mermaid">
-flowchart LR
-  G["GenerateKelurahanController::simpan"] --> R1["build $baris[]"]
-  A["AutoGridController::simpan"] --> R2["build $baris[]"]
-  G -.leak.-> D["DesignAreaController::diubah (static)"]
-  A -.leak.-> D
-  R1 --> S1["chunk insert ×100 + AreaMk::sinkronKode"]
-  R2 --> S2["chunk insert ×100 + AreaMk::sinkronKode"]
-  classDef leak stroke:#b42318,stroke-width:2px,color:#b42318;
-  class D leak
-        </pre>
-      </div>
-      <p class="label text-center">After — satu seam</p>
-      <div class="card p-3">
-        <pre class="mermaid">
-flowchart LR
-  G["GenerateKelurahanController"] --> U["unit list: kelurahan"]
-  A["AutoGridController"] --> U2["unit list: grid cell"]
-  U --> P["AreaPembuat::simpanBaru"]
-  U2 --> P
-  P --> S["chunk insert + AreaMk::sinkronKode (satu tempat)"]
-        </pre>
-      </div>
+  <!-- 4 -->
+  <article class="card" id="c4">
+    <div class="card-top">
+      <h2>4. Menu/Show.vue menyimpan perilaku per tabel</h2>
+      <div class="badges"><span class="badge strong">Strong</span><span class="tag">in-process</span></div>
+    </div>
+    <div class="files">resources/js/Pages/Menu/Show.vue (567 baris)<br>resources/js/Pages/Menu/partials/* · config/marketama.php</div>
+    <div class="ba">
+      <figure>
+        <p class="label">Before: interface setebal implementasi</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="Show.vue punya 29 rujukan table.name, 14 modal, dan 14 ref pilihan, lebih besar dari bagian generiknya">
+          <rect class="m-leak" x="40" y="8" width="320" height="150"/>
+          <text class="dim" x="200" y="28" text-anchor="middle">pengetahuan per tabel</text>
+          <text class="red" x="200" y="56" text-anchor="middle">29 rujukan table.name, 9 tabel</text>
+          <text class="red" x="200" y="78" text-anchor="middle">14 &lt;Modal&gt;, 14 ref pilihan</text>
+          <text class="red" x="200" y="100" text-anchor="middle">2 cabang slug === untuk tombol</text>
+          <text class="red" x="200" y="122" text-anchor="middle">2 peta warna status memakai label</text>
+          <rect class="m" x="130" y="170" width="140" height="44"/>
+          <text x="200" y="196" text-anchor="middle">tabel generik</text>
+        </svg>
+      </figure>
+      <figure>
+        <p class="label">After: halaman tidak kenal nama tabel</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="Show.vue tipis, pengetahuan per tabel pindah ke satu deep module yang dibaca dari config">
+          <rect class="m" x="130" y="8" width="140" height="40"/>
+          <text x="200" y="32" text-anchor="middle">Show.vue</text>
+          <line class="ln-seam" x1="40" y1="62" x2="360" y2="62"/>
+          <rect class="m-deep" x="40" y="76" width="320" height="140"/>
+          <text class="acc" x="200" y="100" text-anchor="middle">Perilaku baris per tabel</text>
+          <text class="dim" x="200" y="128" text-anchor="middle">drawer · tombol · tautan sel</text>
+          <text class="dim" x="200" y="148" text-anchor="middle">warna status · badge</text>
+          <text class="dim" x="200" y="178" text-anchor="middle">dipilih dari config/marketama.php</text>
+        </svg>
+      </figure>
+    </div>
+    <div class="two">
+      <div class="stack"><p class="label">Problem</p><p>Tiap perilaku tabel baru menambah cabang di satu halaman. Dalam seminggu angkanya naik dari 5 cabang menjadi 29 rujukan. Bilah filter sudah tergandakan dan berbeda (<code>Show.vue:328-331</code>, <code>379-383</code>).</p></div>
+      <div class="stack"><p class="label">Solution</p><p>Keputusan "tabel X berperilaku Y" pindah ke config, seperti <code>sumber</code>. Satu module membaca dan merender perilaku itu.</p></div>
+    </div>
+    <div class="stack"><p class="label">Wins</p>
+      <ul>
+        <li>Locality: tabel baru hanya sentuh config</li>
+        <li>Leverage: satu daftar, 9 tabel</li>
+        <li>5 peta warna status menjadi satu</li>
+        <li>Show.vue akhirnya bisa punya spec</li>
+      </ul>
+    </div>
+    <div class="note">Keraguan 31 Okt soal laju pertambahan drawer sudah terjawab: tetap bertambah. Sebagian drawer tetap one-off, jadi yang digeneralisasi adalah pemilihan drawer, bukan isi drawer.</div>
+  </article>
 
-      <div class="grid sm:grid-cols-2 gap-4 text-sm pt-2">
-        <div><p class="label mb-1">Problem</p><p>Dua <span class="mono">simpan()</span> membangun baris insert yang bentuknya sama persis, dan keduanya memanggil <span class="mono">DesignAreaController::diubah()</span> secara statis dari controller tetangga — tanda seam area-row mutation ada di tempat yang salah.</p></div>
-        <div><p class="label mb-1">Solution</p><p>Satu <span class="mono">AreaPembuat::simpanBaru()</span> menangani chunk-insert + <span class="mono">AreaMk::sinkronKode</span>; kedua controller hanya menyiapkan unit list domainnya.</p></div>
+  <!-- 5 -->
+  <article class="card" id="c5">
+    <div class="card-top">
+      <h2>5. Tanggal lokal dibaca dari kolom UTC</h2>
+      <div class="badges"><span class="badge worth">Worth exploring</span><span class="tag">in-process</span></div>
+    </div>
+    <div class="files">app/Support/Mobile/Pengaturan.php · app/Support/Menu/JamLokal.php<br>app/Support/Motoris/Dashboard.php · KinerjaKoordinator.php<br>app/Http/Controllers/Admin/AkunController.php · RoleController.php</div>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 720 150" style="min-width:560px" role="img" aria-label="Kejadian pukul 00.00 sampai 07.00 WIB jatuh ke tanggal sebelumnya saat dibaca dengan DATE pada kolom UTC">
+        <rect class="band-leak" x="200" y="30" width="280" height="96"/>
+        <text class="dim" x="10" y="52">WIB</text>
+        <line class="ln" x1="60" y1="60" x2="700" y2="60"/>
+        <line class="ln" x1="200" y1="50" x2="200" y2="70"/>
+        <text x="130" y="52" text-anchor="middle">1 Nov</text><text x="340" y="52" text-anchor="middle">2 Nov</text><text x="600" y="52" text-anchor="middle">2 Nov</text>
+        <text class="dim" x="10" y="112">UTC</text>
+        <line class="ln" x1="60" y1="104" x2="700" y2="104"/>
+        <line class="ln" x1="480" y1="94" x2="480" y2="114"/>
+        <text x="270" y="122" text-anchor="middle">1 Nov</text><text x="600" y="122" text-anchor="middle">2 Nov</text>
+        <line class="ln-leak" x1="460" y1="60" x2="460" y2="104"/>
+        <circle cx="460" cy="60" r="4" fill="var(--leak)"/><circle cx="460" cy="104" r="4" fill="var(--leak)"/>
+        <text class="red" x="452" y="86" text-anchor="end">06.30 WIB, 2 Nov dihitung 1 Nov</text>
+        <text class="dim" x="340" y="18" text-anchor="middle">00.00 sampai 07.00 WIB</text>
+      </svg>
       </div>
-      <div>
-        <p class="label mb-1">Wins</p>
-        <ul class="text-sm list-disc pl-5 space-y-0.5">
-          <li>Locality: bug insert hanya di satu tempat</li>
-          <li>Hapus panggilan statis antar controller</li>
-          <li>Leverage: satu implementasi, dua pemanggil</li>
-        </ul>
-      </div>
-      <div class="text-sm p-3 rounded border" style="border-color: var(--worth); background: color-mix(in srgb, var(--worth) 10%, transparent);">
-        Pengecekan "area sudah ada" TIDAK ikut digabung — dedup kelurahan (kode/nama resmi) dan dedup grid (overlap geometris) beda sifat, jangan dipaksa satu abstraksi.
-      </div>
-    </article>
-
-    <!-- Candidate 3 -->
-    <article class="card p-6 space-y-5" id="c3">
-      <div class="flex items-start justify-between gap-4 flex-wrap">
-        <h2 class="serif text-xl font-semibold">Loop registrasi rute CRUD ditulis ulang 3×</h2>
-        <div class="flex gap-2 flex-wrap shrink-0">
-          <span class="badge badge-worth">Worth exploring</span>
-          <span class="tag">in-process</span>
+      <figcaption><code>recorded_at</code> tersimpan UTC. <code>DATE(b.recorded_at)</code> di <code>Dashboard:69,104,154</code> dan <code>"{$dari} 00:00:00"</code> di <code>Dashboard:168,173</code>, <code>KinerjaKoordinator:168,232</code> memakai batas hari UTC.</figcaption>
+    </figure>
+    <div class="ba">
+      <figure>
+        <p class="label">Before</p>
+        <div class="bands">
+          <div class="b"><code>Pengaturan::sekarang</code> 35 panggilan</div>
+          <div class="b leak">Dilewati di LaporanKendala, LaporanMotoris, BarangCanvassing, Dashboard</div>
+          <div class="b leak"><code>'Asia/Jakarta'</code> tertulis di Akun dan Role, mengabaikan <code>MOBILE_ZONA_WAKTU</code></div>
+          <div class="b">7 helper privat <code>waktu</code>/<code>jam</code></div>
         </div>
-      </div>
-      <div class="mono text-sm" style="color: var(--muted);">routes/web.php (baris 106–242)</div>
+      </figure>
+      <figure>
+        <p class="label">After</p>
+        <div class="deep"><strong>Hari lokal</strong><span class="in">hari ini · rentang tanggal lokal ke batas UTC · format balik</span></div>
+      </figure>
+    </div>
+    <div class="two">
+      <div class="stack"><p class="label">Problem</p><p>Bug jatuh di pagi hari dan batas periode, jadi tidak tampak di data siang. Test zona waktu langsung untuk <code>JamLokal</code> dan <code>Pengaturan</code> belum ada.</p></div>
+      <div class="stack"><p class="label">Solution</p><p>Satu cara mengubah tanggal atau rentang lokal menjadi batas UTC dan memformatnya kembali.</p></div>
+    </div>
+    <div class="stack"><p class="label">Wins</p>
+      <ul>
+        <li>Locality: aturan zona di satu tempat</li>
+        <li>Lenyapnya 7 helper privat</li>
+        <li>Batas hari teruji tanpa database</li>
+      </ul>
+    </div>
+    <div class="note">Dampak angka belum diukur. Kebocoran yang sudah terbaca di <code>Dashboard</code> bisa diperbaiki lebih dulu tanpa menunggu refactor ini.</div>
+  </article>
 
-      <!-- cross-section pattern -->
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-1.5">
-          <p class="label text-center">Before — 3 lapis tipis</p>
-          <div class="space-y-1">
-            <div class="h-10 border-l-4 flex items-center px-2 text-xs mono" style="border-color: var(--leak); background: color-mix(in srgb, var(--leak) 8%, transparent);">Akun: $rute[] + foreach Route::</div>
-            <div class="h-10 border-l-4 flex items-center px-2 text-xs mono" style="border-color: var(--leak); background: color-mix(in srgb, var(--leak) 8%, transparent);">Karyawan: $rute[] + foreach Route::</div>
-            <div class="h-10 border-l-4 flex items-center px-2 text-xs mono" style="border-color: var(--leak); background: color-mix(in srgb, var(--leak) 8%, transparent);">MasterProduk: $rute[] + foreach Route::</div>
-          </div>
-        </div>
-        <div class="space-y-1.5">
-          <p class="label text-center">After — satu band</p>
-          <div class="h-32 border-l-4 flex items-center px-3 text-xs mono" style="border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);">
-            RotaMenu::daftarkan($slug, $controller, $rute)<br/>— dipanggil 3×, isinya sama
-          </div>
-        </div>
-      </div>
+  <!-- 6 -->
+  <article class="card" id="c6">
+    <div class="card-top">
+      <h2>6. Generate Kelurahan dan Auto Grid kembar</h2>
+      <div class="badges"><span class="badge worth">Worth exploring</span><span class="tag">in-process</span><span class="tag">local-substitutable</span></div>
+    </div>
+    <div class="files">resources/js/Pages/Area/GenerateKelurahan.vue · AutoGrid.vue<br>app/Http/Controllers/GenerateKelurahanController.php · AutoGridController.php · DesignAreaController.php</div>
+    <div class="ba">
+      <figure>
+        <p class="label">Before: baris skrip unik (perkiraan)</p>
+        <div class="bar"><span class="mono muted">GenerateKelurahan ±156</span><div class="bar-track"><div class="bar-shared" style="width:57%"></div><div class="bar-own" style="width:43%"></div></div></div>
+        <div class="bar"><span class="mono muted">AutoGrid ±171</span><div class="bar-track"><div class="bar-shared" style="width:52%"></div><div class="bar-own" style="width:48%"></div></div></div>
+        <figcaption>Merah: ±89 baris sama di kedua halaman, plus 49 dari ±90 baris template. Di backend, keduanya memanggil <code>DesignAreaController::diubah</code> secara statis.</figcaption>
+      </figure>
+      <figure>
+        <p class="label">After: daftar polygon terpilih</p>
+        <div class="callers"><span>GenerateKelurahan</span><span>AutoGrid</span></div>
+        <div class="deep"><strong>Pilih polygon, simpan</strong><span class="in">pilih semua · tri-state · fokus · gambar depo · hasil simpan</span></div>
+        <figcaption><code>Design.vue</code> tetap sendiri: alatnya beda, hanya berbagi boilerplate.</figcaption>
+      </figure>
+    </div>
+    <div class="two">
+      <div class="stack"><p class="label">Problem</p><p>Interaksi pilih-lalu-simpan ditulis dua kali. Kolom baris area berbeda, jadi backend hanya berbagi ±4 baris insert dan penanda <code>diubah</code>.</p></div>
+      <div class="stack"><p class="label">Solution</p><p>Satu module daftar polygon untuk dua halaman itu. Penanda <code>diubah</code> pindah dari controller ke module area.</p></div>
+    </div>
+    <div class="stack"><p class="label">Wins</p>
+      <ul>
+        <li>Leverage: satu interaksi, dua halaman</li>
+        <li>Lenyapnya panggilan statis antar controller</li>
+      </ul>
+    </div>
+  </article>
 
-      <div class="grid sm:grid-cols-2 gap-4 text-sm pt-2">
-        <div><p class="label mb-1">Problem</p><p>Tabel aturan <span class="mono">[method, uri, aksi, hak, nama]</span> itu config yang wajar, tapi loop yang mengubahnya jadi route ter-gated ditulis ulang di tiga tempat.</p></div>
-        <div><p class="label mb-1">Solution</p><p>Satu helper/macro <span class="mono">RotaMenu::daftarkan()</span> menerima tabel aturan; tiga call site menyusut jadi daftar slug + controller.</p></div>
-      </div>
-      <div>
-        <p class="label mb-1">Wins</p>
-        <ul class="text-sm list-disc pl-5 space-y-0.5">
-          <li>Leverage: satu loop, N resource CRUD</li>
-          <li>3 kopi yang harus disinkron jadi 1</li>
-        </ul>
-      </div>
-      <p class="text-sm" style="color: var(--muted);">Prioritas lebih rendah — rute dibaca sekali saat boot, biayanya cuma biaya sinkronisasi, bukan kompleksitas runtime.</p>
-    </article>
+  <!-- 7 -->
+  <article class="card" id="c7">
+    <div class="card-top">
+      <h2>7. Tiga pembersihan kecil</h2>
+      <div class="badges"><span class="badge spec">Speculative</span><span class="tag">in-process</span></div>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Before</th><th>After</th><th>Deletion test</th></tr></thead>
+        <tbody>
+          <tr><td><code>fetch</code> langsung di 29 berkas, csrf dan state memuat ditulis ulang</td><td>Satu pemuat JSON</td><td>Lebih banyak memindah daripada menghapus</td></tr>
+          <tr><td><code>jejak</code>, <code>diubah</code>, <code>waktu</code>, <code>ekspor</code> sama di <code>KaryawanController</code> dan <code>MasterProdukController</code>; <code>ringkasPerubahan</code> ×3</td><td>Tugas admin bersama saja</td><td><code>AkunController</code> dan <code>KaryawanController</code> tidak lolos: besar, tapi hanya orkestrasi</td></tr>
+          <tr><td>Loop rute CRUD ×3 di <code>routes/web.php:196,292,312</code></td><td>Satu pendaftar rute</td><td>Hanya hilang ±8 baris</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
 
-    <!-- Candidate 4 -->
-    <article class="card p-6 space-y-5" id="c4">
-      <div class="flex items-start justify-between gap-4 flex-wrap">
-        <h2 class="serif text-xl font-semibold">Tiga halaman peta Area menyiapkan Leaflet sendiri-sendiri</h2>
-        <div class="flex gap-2 flex-wrap shrink-0">
-          <span class="badge badge-spec">Speculative</span>
-          <span class="tag">ports & adapters</span>
-        </div>
-      </div>
-      <div class="mono text-sm space-y-0.5" style="color: var(--muted);">
-        <div>resources/js/Pages/Area/Design.vue (554 baris)</div>
-        <div>resources/js/Pages/Area/GenerateKelurahan.vue (352 baris)</div>
-        <div>resources/js/Pages/Area/AutoGrid.vue (389 baris)</div>
-        <div>resources/js/Support/peta.js — baru menangani icon/popup</div>
-      </div>
-      <div class="card p-3">
-        <pre class="mermaid">
-flowchart LR
-  D["Design.vue — editable vertex editor"] --> L1["setup Leaflet #1"]
-  K["GenerateKelurahan.vue — preview only"] --> L2["setup Leaflet #2"]
-  A["AutoGrid.vue — preview only"] --> L3["setup Leaflet #3"]
-  L1 & L2 & L3 -.pakai bersama.-> P["peta.js — icon/popup saja"]
-        </pre>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4 text-sm pt-2">
-        <div><p class="label mb-1">Problem</p><p>Tiga page punya call-site Leaflet sendiri di luar <span class="mono">peta.js</span>; belum dibaca penuh seberapa banyak yang genuinely duplikat vs berbeda (editable vs preview-only).</p></div>
-        <div><p class="label mb-1">Solution</p><p>Kalau duplikasinya nyata: satu modul map-preview dipakai GenerateKelurahan + AutoGrid; Design.vue tetap sendiri karena editor vertex-nya memang beda interaksi.</p></div>
-      </div>
-      <div>
-        <p class="label mb-1">Wins</p>
-        <ul class="text-sm list-disc pl-5 space-y-0.5">
-          <li>Berpotensi locality, belum terverifikasi</li>
-        </ul>
-      </div>
-      <div class="text-sm p-3 rounded border" style="border-color: var(--worth); background: color-mix(in srgb, var(--worth) 10%, transparent);">
-        Baca penuh ketiga file dulu — interaksi map yang legitimately berbeda (editable vs preview) bisa membuat modul bersama jadi prop-explosion, bukan deepening.
-      </div>
-    </article>
+</section>
 
-  </section>
+<section class="card" id="status">
+  <h2>Status kandidat 31 Okt</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Kandidat lama</th><th>Keadaan sekarang</th><th>Keputusan</th></tr></thead>
+      <tbody>
+        <tr><td>#1 Show.vue switch per tabel</td><td>Belum dikerjakan, membesar dari 5 cabang ke 29 rujukan</td><td>Tetap Strong, menjadi #4</td></tr>
+        <tr><td>#2 Insert <code>area_polygon</code> (top recommendation lama)</td><td>Masih ada. Yang benar-benar sama hanya ±4 baris insert dan return</td><td>Turun ke Worth exploring, dilebur ke #6</td></tr>
+        <tr><td>#3 Loop rute CRUD</td><td>Masih ada, 3–4 baris per loop, Akun punya <code>where</code> tambahan</td><td>Turun ke Speculative, di #7</td></tr>
+        <tr><td>#4 Setup Leaflet ×3</td><td>Tidak terbukti: <code>L.map(</code> hanya sekali, di <code>useLeafletMap.js:35</code></td><td>Dicabut, sisanya dilebur ke #6</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 
-  <section id="top-recommendation" class="card p-6 space-y-3" style="border-color: var(--accent); border-width: 2px;">
-    <p class="label">Top recommendation</p>
-    <h2 class="serif text-xl font-semibold">Mulai dari <a href="#c2">#2 — Insert area_polygon</a></h2>
-    <p class="text-sm">Duplikasinya paling jelas lolos deletion test: hapus satu <span class="mono">simpan()</span> dan baris insert yang sama harus ditulis ulang di tempat lain. Juga satu-satunya kandidat dengan panggilan statis antar controller yang aktif membocorkan seam sekarang — bukan spekulasi masa depan seperti #4.</p>
-  </section>
+<section class="card top" id="top-recommendation">
+  <p class="label">Top recommendation</p>
+  <h2>Mulai dari <a href="#c1">#1, cakupan akun</a></h2>
+  <p>Hanya kandidat ini yang gagal tanpa suara: query baru yang lupa dibatasi tetap jalan dan tetap lolos test, sedangkan data motoris depo lain ikut terbaca. Setiap fitur Lacak Motoris dan Beranda menambah query baru, jadi nilainya naik tiap minggu.</p>
+</section>
 
-  <section class="card p-5 space-y-2" style="border-color: var(--line);">
-    <p class="label">Catatan: modul yang sudah dalam</p>
-    <p class="text-sm"><span class="mono">MenuController@show</span> dan <span class="mono">SummaryDepoController</span> dibaca juga — keduanya contoh deep module yang sudah benar (sort/filter/search uniform lewat <span class="mono">SumberTabel</span>; adapter tipis ke <span class="mono">App\Support\Motoris\SummaryDepo</span>). Tidak perlu dideepen — jadi referensi bentuk yang dituju #1 dan #2.</p>
-  </section>
+<section class="card">
+  <h2>Yang sudah deep, biarkan</h2>
+  <p><code>Akses::bisa</code>/<code>menu</code>/<code>tabHalaman</code> dengan <code>CekHak</code> · <code>MenuController@show</code> dengan seam <code>SumberTabel</code> · <code>useLeafletMap</code> dan <code>peta.js</code> · <code>GridArea</code>, <code>Geometri</code>, <code>AreaMk</code>, <code>CsvTableLoader</code> · <code>DetailMotoris::untuk</code>, <code>AnomaliGps</code></p>
+  <h2>Batas pemeriksaan</h2>
+  <p>Tidak ada kode dijalankan. Klaim celah cakupan berasal dari kode dan <code>RoleBawaan</code>, belum dari role di produksi atau percobaan login. Bukti utama kandidat 1–5 dicek ulang langsung di kode; angka baris kandidat 6 perkiraan. Belum dibuka: <code>Marketama/*</code>, <code>Wilayah/*</code>, <code>Backup/*</code>, <code>app.css</code>, <code>DataTable.vue</code>, <code>Pages/Home/*</code>. Hanya dibaca sebagian: controller Admin besar dan controller Mobile.</p>
+</section>
 
 </main>
+</body>
+</html>
