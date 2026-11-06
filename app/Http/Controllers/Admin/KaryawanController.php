@@ -54,7 +54,15 @@ class KaryawanController extends Controller
         'lainnya' => ['Karyawan Lainnya', 'karyawan'],
     ];
 
-    private const GAJI = ['gaji_pokok' => 'Gaji pokok', 'tunjangan_bbm_makan' => 'Tunjangan BBM & makan', 'sewa_motor' => 'Sewa motor', 'tunjangan_internet' => 'Tunjangan kuota internet'];
+    /** Status keluarga (PTKP) untuk PPh 21 dan BPJS: kode => label. */
+    private const PTKP = [
+        'TK/0' => 'TK/0 · Tidak kawin, tanpa tanggungan', 'TK/1' => 'TK/1 · Tidak kawin, 1 tanggungan',
+        'TK/2' => 'TK/2 · Tidak kawin, 2 tanggungan', 'TK/3' => 'TK/3 · Tidak kawin, 3 tanggungan',
+        'K/0' => 'K/0 · Kawin, tanpa tanggungan', 'K/1' => 'K/1 · Kawin, 1 tanggungan',
+        'K/2' => 'K/2 · Kawin, 2 tanggungan', 'K/3' => 'K/3 · Kawin, 3 tanggungan',
+    ];
+
+    private const GAJI = ['gaji_pokok' => 'Gaji pokok', 'tunjangan_bbm_makan' => 'Tunjangan BBM & makan', 'sewa_motor' => 'Sewa motor', 'tunjangan_internet' => 'Tunjangan kuota internet', 'tunjangan_jabatan' => 'Tunjangan jabatan'];
 
     public function index(Request $request): Response
     {
@@ -404,6 +412,7 @@ class KaryawanController extends Controller
                 'tempat_lahir' => $item->tempat_lahir ?? '',
                 'tanggal_lahir' => $this->tanggalForm($item->tanggal_lahir ?? null),
                 'alamat' => $item->alamat ?? '',
+                'status_ptkp' => $item->status_ptkp ?? '',
                 'depo_id' => $depo ? (string) $depo : '',
                 'koordinator_id' => $item?->koordinator_id ? (string) $item->koordinator_id : '',
                 'wilayah_depo_id' => $item?->wilayah_depo_id ? (string) $item->wilayah_depo_id : '',
@@ -415,7 +424,7 @@ class KaryawanController extends Controller
                 'tanggal_mulai' => $this->tanggalForm($item->tanggal_mulai ?? null),
                 'aktif' => $item ? ($item->aktif === null ? '' : ($item->aktif ? '1' : '0')) : '1',
             ] + collect(self::GAJI)->mapWithKeys(fn ($l, $k) => [$k => $item?->{$k} === null ? '' : (string) (int) round((float) $item->{$k})])->all(),
-            'opsi' => ['depo' => $this->daftarDepo(), 'jabatan' => $this->daftarJabatan($item?->jabatan)] + $this->opsiDepo($kategori, $depo, $item),
+            'opsi' => ['ptkp' => collect(self::PTKP)->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values()->all(), 'depo' => $this->daftarDepo(), 'jabatan' => $this->daftarJabatan($item?->jabatan)] + $this->opsiDepo($kategori, $depo, $item),
             'dipakai' => $item ? $this->dipakai((int) $item->id) : [],
             'salesSeDepo' => $item && $kategori === 'sales' ? $this->salesSeDepo($item) : [],
             'riwayat' => $item ? DB::table('riwayat_admin')->where('objek', 'karyawan')->where('objek_id', $item->id)
@@ -476,6 +485,7 @@ class KaryawanController extends Controller
             'tempat_lahir' => ['nullable', 'string', 'max:100'],
             'tanggal_lahir' => ['nullable', 'date_format:Y-m-d'],
             'alamat' => ['nullable', 'string', 'max:500'],
+            'status_ptkp' => ['nullable', Rule::in(array_keys(self::PTKP))],
             'email' => ['nullable', 'email', 'max:150'],
             'no_hp' => [$lainnya ? 'nullable' : 'required', 'string', 'max:30', 'regex:/^[0-9+\- ]{5,30}$/'],
             'tanggal_mulai' => [$lainnya ? 'nullable' : 'required', 'date_format:Y-m-d'],
@@ -514,7 +524,7 @@ class KaryawanController extends Controller
             'nik.digits' => 'NIK harus 16 digit angka.',
             'nik.unique' => 'NIK ini sudah dipakai karyawan lain.',
         ], [
-            'nama' => 'nama lengkap', 'nik' => 'NIK', 'tempat_lahir' => 'tempat lahir', 'tanggal_lahir' => 'tanggal lahir', 'alamat' => 'alamat',
+            'nama' => 'nama lengkap', 'nik' => 'NIK', 'tempat_lahir' => 'tempat lahir', 'tanggal_lahir' => 'tanggal lahir', 'alamat' => 'alamat', 'status_ptkp' => 'status keluarga (PTKP)',
             'no_hp' => 'no HP', 'tanggal_mulai' => 'tanggal mulai bekerja', 'aktif' => 'status',
             'depo_id' => 'depo', 'koordinator_id' => 'koordinator', 'wilayah_depo_id' => 'wilayah depo', 'jabatan' => 'kategori',
         ] + array_map('mb_strtolower', self::GAJI));
@@ -529,6 +539,7 @@ class KaryawanController extends Controller
             'tempat_lahir' => isset($d['tempat_lahir']) && $d['tempat_lahir'] !== '' ? trim($d['tempat_lahir']) : null,
             'tanggal_lahir' => $d['tanggal_lahir'] ?? null,
             'alamat' => isset($d['alamat']) && $d['alamat'] !== '' ? trim($d['alamat']) : null,
+            'status_ptkp' => ($d['status_ptkp'] ?? '') !== '' ? $d['status_ptkp'] : null,
             'email' => $d['email'] ?? null,
             'no_hp' => isset($d['no_hp']) ? trim($d['no_hp']) : null,
             'tanggal_mulai' => $d['tanggal_mulai'] ?? null,
@@ -626,7 +637,7 @@ class KaryawanController extends Controller
     private function ringkasPerubahan(object $lama, array $d, $areaLama): array
     {
         $baru = $this->kolomSimpan($d);
-        $label = ['nama' => 'Nama', 'nik' => 'NIK', 'tempat_lahir' => 'Tempat lahir', 'tanggal_lahir' => 'Tanggal lahir', 'alamat' => 'Alamat',
+        $label = ['nama' => 'Nama', 'nik' => 'NIK', 'tempat_lahir' => 'Tempat lahir', 'tanggal_lahir' => 'Tanggal lahir', 'alamat' => 'Alamat', 'status_ptkp' => 'Status keluarga (PTKP)',
             'email' => 'Email', 'no_hp' => 'No HP', 'tanggal_mulai' => 'Tanggal mulai', 'aktif' => 'Status',
             'depo_id' => 'Depo', 'wilayah_depo_id' => 'Wilayah depo', 'jabatan' => 'Kategori'] + self::GAJI;
         $nama = fn ($k, $v) => match ($k) {

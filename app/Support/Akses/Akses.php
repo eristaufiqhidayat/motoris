@@ -28,7 +28,7 @@ class Akses
         'kategori_surat_peringatan', 'surat_peringatan', 'lap_karyawan', 'lap_user',
         // Grup sidebar "Absensi dan Penggajian": data gaji/absensi sensitif, hanya untuk Super Admin.
         'absensi_sales', 'absensi_sales_terlambat', 'absensi_koordinator', 'absensi_ssk_supervisor', 'permintaan_izin',
-        'parameter_pemotong_gaji', 'potongan_gaji', 'penggajian_sales', 'penggajian_koordinator',
+        'parameter_pemotong_gaji', 'potongan_gaji', 'penggajian_sales', 'penggajian_koordinator', 'pengaturan_penggajian',
         'lap_absensi_sales', 'lap_absensi_koordinator', 'lap_izin_sakit', 'lap_insentif_sales', 'lap_insentif_koordinator',
         'lap_penggajian_sales', 'lap_penggajian_koordinator',
     ];

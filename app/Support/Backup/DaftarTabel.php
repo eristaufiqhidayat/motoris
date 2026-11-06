@@ -20,9 +20,10 @@ class DaftarTabel
         'lap_karyawan', 'lap_user', 'lap_penggajian_sales', 'lap_penggajian_koordinator', 'lap_absensi_sales', 'lap_absensi_koordinator',
         'karyawan_sales', 'karyawan_koordinator', 'karyawan_supervisor', 'karyawan_lainnya', 'login_session',
         'super_admin', 'user_sales', 'user_koordinator', 'user_lainnya',
+        'penggajian_detail', 'penggajian_komponen',
     ];
 
-    private const ENESIS = ['master_kuota_motoris', 'pengaturan_admin', 'hierarki_sales', 'area_polygon', 'area_depo',
+    private const ENESIS = ['master_kuota_motoris', 'pengaturan_admin', 'hierarki_sales', 'area_polygon', 'area_depo', 'pengaturan_tanggal_penggajian', 'penggajian', 'penggajian_detail', 'penggajian_komponen',
         'tracking_sales', 'tracking_sales_lokasi', 'tracking_koordinator', 'tracking_koordinator_lokasi', 'tanda_motoris'];
 
     private const AKUN = ['users', 'roles', 'role_hak', 'riwayat_admin', 'mobile_tokens', 'mobile_uploads', 'mobile_idempotency'];

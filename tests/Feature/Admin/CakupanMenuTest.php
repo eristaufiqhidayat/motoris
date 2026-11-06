@@ -67,7 +67,9 @@ class CakupanMenuTest extends AdminTestCase
         $slug = collect(Akses::menu($this->akunTerbatas('downline')))
             ->flatMap(fn ($g) => collect($g['items'])->flatMap(fn ($i) => $i['children'] ?? [$i]))->pluck('slug')->all();
 
-        foreach (['loading_barang', 'retur_barang', 'setor_margin', 'lap_loading_barang', 'penggajian_sales'] as $tutup) {
+        // penggajian_sales dan penggajian_koordinator punya rute sendiri (PenggajianController membatasi per depo);
+        // koordinator sungguhan tetap tidak melihatnya lewat Akses::MENU_ADMIN.
+        foreach (['loading_barang', 'retur_barang', 'setor_margin', 'lap_loading_barang'] as $tutup) {
             $this->assertNotContains($tutup, $slug);
         }
 

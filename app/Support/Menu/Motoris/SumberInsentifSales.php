@@ -31,8 +31,7 @@ class SumberInsentifSales implements SumberBertanggal
     public function queryTanggal(?User $user, string $tanggal, array $filter): Builder
     {
         [$dari, $sampai] = $this->bulan($tanggal);
-        $jual = DB::table('trx_penjualan')->whereBetween('tanggal', [$dari, $sampai])->whereNull('dibatalkan_at')->groupBy('karyawan_id')
-            ->selectRaw('karyawan_id, SUM(CASE WHEN is_effective_call THEN 1 ELSE 0 END) AS ec, COALESCE(SUM(poin), 0) AS poin');
+        $jual = Insentif::penjualanPerSales($dari, $sampai);
 
         $q = DB::table('mk_karyawan as k')
             ->leftJoinSub($jual, 'j', 'j.karyawan_id', '=', 'k.id')

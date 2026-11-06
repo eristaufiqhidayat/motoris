@@ -41,6 +41,7 @@ const GAJI = [
     ['tunjangan_bbm_makan', 'Tunjangan BBM & makan'],
     ['sewa_motor', 'Sewa motor'],
     ['tunjangan_internet', 'Tunjangan kuota internet'],
+    ['tunjangan_jabatan', 'Tunjangan jabatan'],
 ];
 
 const form = useForm({ ...props.nilai, foto: null });
@@ -298,6 +299,12 @@ function simpan() {
                                 <Label for="alamat">Alamat{{ fieldDariKtp.has('alamat') ? ' (dari KTP)' : '' }}</Label>
                                 <Textarea id="alamat" v-model="form.alamat" maxlength="500" />
                                 <FieldError v-if="form.errors.alamat">{{ form.errors.alamat }}</FieldError>
+                            </div>
+                            <div>
+                                <Label for="status_ptkp">Status keluarga (PTKP)</Label>
+                                <Combobox id="status_ptkp" v-model="form.status_ptkp" :options="opsi.ptkp" placeholder="Pilih status keluarga" clearable />
+                                <small class="text-gray-500">Dipakai untuk perhitungan PPh 21 dan BPJS.</small>
+                                <FieldError v-if="form.errors.status_ptkp">{{ form.errors.status_ptkp }}</FieldError>
                             </div>
 
                             <div v-if="kategori === 'lainnya'">
