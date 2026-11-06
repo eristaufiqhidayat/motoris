@@ -108,6 +108,10 @@ _Aturan setoran hasil penjualan, setor margin ke depo, tenggat, selisih/kekurang
 _Rumus insentif per depo/produk, cara target ditetapkan, konversi poin, periode perhitungan._
 
 - **Belum diketahui** — rumus insentif dan potongan di Marketama hanya tampak sebagai data referensi (CSV), logika perhitungannya belum teramati. — _docs/PRD.md §5_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Insentif dihitung per **bulan kalender** (tanggal 1 sampai akhir bulan), terpisah dari periode gaji. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Insentif dibayarkan **tanggal 15 bulan berikutnya**, dan admin dapat mengubah tanggal bayar ini dengan tanggal mulai berlaku. Contoh: insentif November dibayar 15 Desember. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Insentif sales terdiri dari **insentif EC** (Rumus Insentif Sales, total EC sebulan) dan **nilai poin** (Konversi Poin Per Depo). **Insentif absensi tidak dipakai.** — _spec 070; kode: `App\Support\Motoris\Insentif`_
+- **Belum diketahui** — Rumus insentif koordinator untuk tim yang jumlahnya bukan 10 sales. Batas EC di `rumus_insentif_koordinator` ditulis untuk 10 sales (mis. 7.200 EC = 720 EC × 10 sales). — _spec 070_
 - _(TBD setelah penelusuran alur tulis Absensi/Penggajian — lihat PRD §7 fase 7)_
 
 ## 10. Izin & potongan
@@ -115,6 +119,9 @@ _Rumus insentif per depo/produk, cara target ditetapkan, konversi poin, periode 
 _Jenis izin, alur persetujuan, jenis potongan gaji dan pemicunya._
 
 - **Dikonfirmasi** — Keterlambatan absen (lihat §3) ditoleransi **3 kali per bulan** tanpa sanksi. Mulai keterlambatan ke-4 dan seterusnya **dalam bulan yang sama**, motoris dikenakan **denda potongan** (gaji — lihat §11).
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Hari izin dihitung seperti hari hadir untuk tunjangan prorata (lihat §11). Hari izin diisi admin saat meninjau draf penggajian, bukan diambil otomatis dari `permintaan_izin`. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Potongan diisi manual oleh admin di draf penggajian, dengan jenis dari Parameter Pemotong Gaji. — _spec 070_
+- **Belum diketahui** — Tarif Potongan Absen dan Potongan Terlambat. `parameter_pemotong_gaji` hanya berisi nama, tanpa nominal atau rumus. — _spec 070_
 - _(TBD: jenis izin lain, alur persetujuan, jenis potongan gaji lain dan pemicunya)_
 
 ## 11. Penggajian
@@ -122,7 +129,17 @@ _Jenis izin, alur persetujuan, jenis potongan gaji dan pemicunya._
 _Komponen gaji, periode, hubungan dengan absensi/insentif/potongan, siapa yang mem-finalisasi._
 
 - **Catatan proses** — hasil gaji & insentif aplikasi baru harus identik dengan Marketama (toleransi disepakati) untuk minimal satu periode penuh sebelum cut-over; pemilik proses/validasi: Super Admin PT. Marketama. — _docs/PRD.md §9/§10_
-- _(TBD)_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Periode gaji berjalan dari **tanggal 20 sampai tanggal 19 bulan berikutnya**, dan admin dapat mengubah tanggal cut off ini (nilai 1–28) dengan tanggal mulai berlaku. Perubahan tidak memengaruhi penggajian yang sudah dibuat. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Nama periode mengikuti bulan tanggal akhir: 20 Oktober–19 November adalah periode **November**. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Tanggal cut off dan tanggal bayar insentif berlaku **sama untuk semua depo**. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — **Hari kerja** adalah Senin–Sabtu, dikurangi hari libur di `holiday_dates`. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — **Gaji pokok, tunjangan internet, dan tunjangan jabatan** dibayar penuh. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — **Tunjangan BBM dan makan** serta **sewa motor** dibayar prorata: nilai bulanan × (hari hadir + hari izin) ÷ hari kerja. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — **Gaji dan insentif adalah dua penggajian terpisah**, masing-masing ditinjau dan difinalkan sendiri, supaya bisa dibayar pada tanggal berbeda. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Admin memfinalkan penggajian setelah meninjau draf. Jika penggajian sudah final, angkanya tidak bisa diubah, dan koreksi dicatat sebagai komponen manual di periode berikutnya. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Jika karyawan masuk atau keluar di tengah periode, gaji pokok tetap penuh dan admin menyesuaikannya lewat komponen manual. — _spec 070_
+- **Asumsi** (menunggu konfirmasi Marketama/Enesis) — Penggajian koordinator memakai alur yang sama dengan sales. — _spec 070_
+- _(TBD: tanggal bayar gaji)_
 
 ## 12. Outlet: status, duplikat & fiktif
 
@@ -152,6 +169,9 @@ Daftar kesenjangan antara aturan di atas dan kode yang berjalan saat ini. Perbar
 - **§10 — Denda keterlambatan absen**: `App\Http\Controllers\Mobile\AbsensiController` sudah menandai setiap absen `terlambat`/`is_late` (baris 63, 76, 84, 126), tapi **tidak ada penghitungan jumlah keterlambatan per bulan** maupun logika pemicu denda/potongan di manapun di kode. Terbuka: nominal/rumus denda per keterlambatan (tetap, atau persentase gaji?), apakah hitungan 3x reset tiap tanggal 1 atau per periode gajian.
 - **§12 — Validasi NOO oleh Koordinator**: implementasi saat ini (`App\Http\Controllers\OutletBaruController::setujui/tolak`, dipakai dari menu web "All Outlet" tab "Outlet Baru dari HP") tidak mengecek peran Koordinator secara spesifik; siapa pun akun web dengan **cakupan akses** ke sales tersebut (`App\Support\Akses\Akses::batasiKaryawan` — depo/downline/diri sendiri) dan hak ke menu itu bisa menyetujui/menolak. Tidak ada endpoint di aplikasi HP (`App\Http\Controllers\Mobile\KoordinatorController`) untuk Koordinator melakukan ini dari HP-nya sendiri. Perlu diputuskan: apakah validasi NOO cukup dibatasi lewat hak menu web (role "Koordinator" di tabel role), atau perlu ditambah alur approval di aplikasi HP koordinator.
 - **§3 — Akurasi GPS vs radius 15 m**: radius Absen Datang/Pulang (`mobile.absen_radius_depo_m`, 15 m) jauh lebih ketat daripada akurasi GPS HP biasa di lapangan (`accuracy_m` sering 5–20 m, lebih buruk dekat bangunan) — ada risiko absen sah ditolak gara-gara akurasi GPS, bukan posisi sebenarnya. Belum ada toleransi akurasi di kode (`cekRadiusDepo` membandingkan jarak mentah terhadap radius, tidak memperhitungkan `accuracy_m`). Perlu dipantau setelah rilis; opsi mitigasi: radius efektif = `absen_radius_depo_m + accuracy_m`, atau naikkan ambang bila keluhan penolakan absen sah meningkat. — _lihat `docs/backlog_items/037-absen-radius-depo-15m/spec.md`_
+- **§9–§11 — Penggajian**: aturan penggajian belum diimplementasikan. Halaman Penggajian Sales dan Koordinator masih membaca tabel impor Marketama yang kosong. Rancangannya ada di backlog 075 (`docs/backlog_items/070-penggajian-motoris-koordinator/spec.md`), dan sebagian besar aturannya masih **Asumsi** yang menunggu konfirmasi Marketama/Enesis.
+- **§9 — Insentif koordinator**: `rumus_insentif_koordinator` tersedia sebagai data, tapi belum ada kode yang menghitungnya; `App\Support\Motoris\Insentif` hanya menangani sales.
+- **§11 — Tunjangan jabatan**: `mk_karyawan` belum punya kolom tunjangan jabatan.
 
 ## Glosarium
 
