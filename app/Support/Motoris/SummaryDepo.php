@@ -3,7 +3,7 @@
 namespace App\Support\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Tabel\SortFilterKolom;
 use Carbon\CarbonImmutable;
@@ -96,7 +96,7 @@ class SummaryDepo
 
         $ids = collect([...$sales->keys(), ...$koordinator->keys(), ...$visitDepo->keys()])
             ->filter()->map(fn ($id) => (int) $id)->unique();
-        $cakupan = $this->depoCakupan();
+        $cakupan = Cakupan::untuk($this->user)->depoIds();
         $aktif = DB::table('mk_depo')->where('aktif', true)
             ->when($cakupan !== null, fn ($q) => $q->whereIn('id', $cakupan ?: [0]))->pluck('id')->map(fn ($id) => (int) $id);
 
@@ -164,7 +164,7 @@ class SummaryDepo
     /** Identitas satu depo dalam cakupan akun (ringan, tanpa query motoris); null jika di luar cakupan atau tidak ada. */
     public function depo(int $depoId): ?object
     {
-        $cakupan = $this->depoCakupan();
+        $cakupan = Cakupan::untuk($this->user)->depoIds();
 
         if ($cakupan !== null && ! in_array($depoId, $cakupan, true)) {
             return null;
@@ -327,18 +327,7 @@ class SummaryDepo
 
     private function karyawan(string $kategori): Builder
     {
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', $kategori), $this->user);
-    }
-
-    /** @return array<int>|null null = semua depo */
-    private function depoCakupan(): ?array
-    {
-        if (Akses::cakupan($this->user) === 'semua') {
-            return null;
-        }
-
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->whereNotNull('k.depo_id'), $this->user)
-            ->distinct()->pluck('k.depo_id')->map(fn ($id) => (int) $id)->all();
+        return Cakupan::untuk($this->user)->batasi(DB::table('mk_karyawan as k')->where('k.kategori', $kategori));
     }
 
     /** Nama distributor pertama per depo (sub-judul kartu). */

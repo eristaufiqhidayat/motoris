@@ -3,7 +3,7 @@
 namespace App\Support\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Cache;
@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 // tren harian. Funnel outlet (NOO → AC → EC → RO, OSS sebagai peringatan terpisah) memakai definisi yang
 // sama dengan App\Support\Menu\Motoris\SumberOutletStatus — status seumur hidup outlet, bukan dibatasi
 // tanggal, kecuali NOO yang memang punya tanggal daftar. Dibatasi cakupan akun lewat depo outlet (sama dengan
-// SummaryDepo / SumberOutletStatus, lihat depoCakupan), KECUALI NOO yang dibatasi lewat motoris pendaftarnya
+// SummaryDepo / SumberOutletStatus, lihat Cakupan::depoIds), KECUALI NOO yang dibatasi lewat motoris pendaftarnya
 // (lihat outletBaru) karena kolom depo_id di trx_outlet_baru tidak selalu terisi. funnelOutlet() dan
 // trenHarian() scan trx_penjualan/trx_kunjungan yang di produksi bisa sampai jutaan baris (lihat CLAUDE.md
 // § Data loading) dan Beranda dibuka jauh lebih sering daripada menu lain, jadi hasilnya di-cache singkat
@@ -43,7 +43,7 @@ class Dashboard
     public function funnelOutlet(): array
     {
         return Cache::remember($this->kunci('funnel'), self::CACHE_TTL, function () {
-            $depo = $this->depoCakupan();
+            $depo = Cakupan::untuk($this->user)->depoIds();
 
             $kunjunganTerakhir = DB::table('trx_kunjungan')->whereNotNull('outlet_id')
                 ->groupBy('outlet_id')->selectRaw('outlet_id, MAX(id) AS kunjungan_id');
@@ -89,7 +89,7 @@ class Dashboard
     public function trenHarian(): array
     {
         return Cache::remember($this->kunci('tren'), self::CACHE_TTL, function () {
-            $depo = $this->depoCakupan();
+            $depo = Cakupan::untuk($this->user)->depoIds();
 
             $baris = DB::table('trx_penjualan as p')
                 ->join('mk_karyawan as k', 'k.id', '=', 'p.karyawan_id')
@@ -140,7 +140,7 @@ class Dashboard
     public function penyebaran(): array
     {
         return Cache::remember($this->kunci('penyebaran'), self::CACHE_TTL, function () {
-            $depo = $this->depoCakupan();
+            $depo = Cakupan::untuk($this->user)->depoIds();
 
             $perOutlet = $this->penjualanEc($depo)->groupBy('p.outlet_id')
                 ->selectRaw('p.outlet_id, COUNT(DISTINCT p.tanggal) AS hari');
@@ -195,7 +195,7 @@ class Dashboard
     public function outletPerDepo(): array
     {
         return Cache::remember($this->kunci('outlet_depo'), self::CACHE_TTL, function () {
-            return $this->penjualanEc($this->depoCakupan())
+            return $this->penjualanEc(Cakupan::untuk($this->user)->depoIds())
                 ->join('mk_depo as d', 'd.id', '=', 'k.depo_id')
                 ->groupBy('d.id', 'd.nama')
                 ->selectRaw('d.id, d.nama, COUNT(DISTINCT p.outlet_id) AS outlet, COUNT(DISTINCT p.karyawan_id) AS motoris')
@@ -230,7 +230,7 @@ class Dashboard
     /** Kunci cache: dipisah per rentang tanggal + cakupan akun (akun dengan cakupan "semua" berbagi satu entri). */
     private function kunci(string $bagian): string
     {
-        $cakupan = Akses::cakupan($this->user) === 'semua' ? 'semua' : 'user_'.($this->user?->id ?? 0);
+        $cakupan = Cakupan::untuk($this->user)->kunci();
 
         return "beranda:{$bagian}:{$this->dari}:{$this->sampai}:{$cakupan}".($this->nooTerverifikasi ? ':v' : '');
     }
@@ -261,18 +261,7 @@ class Dashboard
     {
         $status ??= $this->nooTerverifikasi && ! $semuaStatus ? 'disetujui' : null;
 
-        return Akses::batasiKaryawan(DB::table('trx_outlet_baru as b')->join('mk_karyawan as k', 'k.id', '=', 'b.karyawan_id'), $this->user)
+        return Cakupan::untuk($this->user)->batasi(DB::table('trx_outlet_baru as b')->join('mk_karyawan as k', 'k.id', '=', 'b.karyawan_id'))
             ->when($status !== null, fn ($q) => $q->where('b.status', $status));
-    }
-
-    /** @return array<int>|null null = semua depo (sama dengan SummaryDepo::depoCakupan / SumberOutletStatus::depoCakupan) */
-    private function depoCakupan(): ?array
-    {
-        if (Akses::cakupan($this->user) === 'semua') {
-            return null;
-        }
-
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->whereNotNull('k.depo_id'), $this->user)
-            ->distinct()->pluck('k.depo_id')->map(fn ($id) => (int) $id)->all();
     }
 }

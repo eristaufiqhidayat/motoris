@@ -3,7 +3,7 @@
 namespace App\Support\Menu;
 
 use App\Models\User;
-use App\Support\Menu\Motoris\SumberOutletStatus;
+use App\Support\Akses\Cakupan;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -23,7 +23,7 @@ class SumberOutletMaster implements SumberTabel
     {
         // Lencana "Ditandai" (tanda outlet, spec 053): jumlah tanda aktif outlet itu, lepas dari motoris/tanggal kunjungan.
         $ditandai = DB::table('tanda_outlet as t')->whereColumn('t.outlet_id', 'o.id')->whereNull('t.dicabut_at')->selectRaw('COUNT(*)');
-        $depo = SumberOutletStatus::depoCakupan($user);
+        $depo = Cakupan::untuk($user)->depoIds();
 
         return DB::table('mk_outlet as o')
             ->leftJoin('mk_area as a', 'a.id', '=', 'o.area_id')

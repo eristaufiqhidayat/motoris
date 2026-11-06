@@ -3,7 +3,7 @@
 namespace App\Support\Menu;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -50,12 +50,12 @@ class SumberSalesTidakAbsen implements SumberBertanggal
 
     public function pilihanFilter(?User $user): array
     {
-        $depo = Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', 'sales')->whereNotNull('k.depo_id'), $user)
+        $depo = Cakupan::untuk($user)->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'sales')->whereNotNull('k.depo_id'))
             ->distinct()->pluck('k.depo_id');
 
         return [
             'depo' => DB::table('mk_depo')->whereIn('id', $depo->all() ?: [0])->orderBy('nama')->pluck('nama', 'id')->all(),
-            'koordinator' => Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', 'koordinator')->where('k.aktif', true), $user)
+            'koordinator' => Cakupan::untuk($user)->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'koordinator')->where('k.aktif', true))
                 ->orderBy('k.nama')->pluck('k.nama', 'k.id')->all(),
         ];
     }
@@ -79,7 +79,7 @@ class SumberSalesTidakAbsen implements SumberBertanggal
             ->when($filter['depo'] ?? null, fn ($w, $depo) => $w->where('k.depo_id', $depo))
             ->when($filter['koordinator'] ?? null, fn ($w, $koor) => $w->where('k.koordinator_id', $koor));
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     /** Subquery: ada baris trx_absensi sales k pada tanggal itu (absen masuk tercatat). */

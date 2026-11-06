@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Akses\Cakupan;
 use App\Support\Tracking\TitikGps;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -21,12 +22,12 @@ class TrackingKoordinatorController extends Controller
             'title' => config('marketama.pages.tracking_koordinator_history_location.title'),
             'label' => 'Koordinator',
             'idParam' => 'koordinator_id',
-            'people' => $this->daftarKoordinator()->values()->all(),
+            'people' => $this->daftarKoordinator($request)->values()->all(),
             'groups' => [],
             'locationsUrl' => route('tracking-koordinator.locations'),
             'countsUrl' => route('tracking-koordinator.counts'),
             'tanggal' => $tanggal,
-            'counts' => (object) $this->countsFor($tanggal),
+            'counts' => (object) $this->countsFor($request, $tanggal),
             'pilihId' => $request->integer('koordinator_id') ?: null,
         ]);
     }
@@ -38,7 +39,7 @@ class TrackingKoordinatorController extends Controller
     {
         $data = $request->validate(['tanggal' => ['required', 'date']]);
 
-        return response()->json($this->countsFor($data['tanggal']));
+        return response()->json($this->countsFor($request, $data['tanggal']));
     }
 
     public function locations(Request $request)
@@ -49,8 +50,10 @@ class TrackingKoordinatorController extends Controller
         ]);
 
         $id = (int) $data['koordinator_id'];
+        abort_unless(Cakupan::untuk($request->user())->mencakup($id), 404);
+
         $koordinator = DB::table('tracking_koordinator')->where('koordinator_id', $id)->first()
-            ?? $this->daftarKoordinator()->firstWhere('id', $id);
+            ?? $this->daftarKoordinator($request)->firstWhere('id', $id);
 
         $depo = TitikGps::depoMaster($id);
 
@@ -73,12 +76,14 @@ class TrackingKoordinatorController extends Controller
     // ------------------------------------------------------------------
 
     /** Koordinator dari data lama + master karyawan (yang memakai aplikasi HP), tanpa ganda. */
-    private function daftarKoordinator(): Collection
+    private function daftarKoordinator(Request $request): Collection
     {
-        $lama = DB::table('tracking_koordinator')->get(['koordinator_id as id', 'nama', 'telepon', 'depo']);
+        $dalam = $this->idDalamCakupan($request);
+        $lama = DB::table('tracking_koordinator')->get(['koordinator_id as id', 'nama', 'telepon', 'depo'])
+            ->filter(fn ($k) => $dalam === null || isset($dalam[$k->id]));
         $ada = $lama->pluck('id')->flip();
 
-        $master = DB::table('mk_karyawan as k')->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')
+        $master = Cakupan::untuk($request->user())->karyawan()->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')
             ->where('k.kategori', 'koordinator')->where('k.aktif', true)
             ->get(['k.id', 'k.nama', 'k.no_hp as telepon', 'd.nama as depo'])
             ->reject(fn ($k) => isset($ada[$k->id]));
@@ -86,7 +91,15 @@ class TrackingKoordinatorController extends Controller
         return $lama->concat($master)->sortBy('nama', SORT_NATURAL | SORT_FLAG_CASE)->values();
     }
 
-    private function countsFor(string $tanggal): array
+    /** Id karyawan dalam cakupan akun sebagai kunci (id => true); null = tidak dibatasi. */
+    private function idDalamCakupan(Request $request): ?array
+    {
+        $cakupan = Cakupan::untuk($request->user());
+
+        return $cakupan->semua() ? null : $cakupan->karyawan()->pluck('k.id')->flip()->all();
+    }
+
+    private function countsFor(Request $request, string $tanggal): array
     {
         $hasil = DB::table('tracking_koordinator_lokasi')
             ->whereDate('tanggal', $tanggal)
@@ -96,6 +109,9 @@ class TrackingKoordinatorController extends Controller
             ->map(fn ($total) => (int) $total)
             ->all();
 
-        return TitikGps::tambahJumlah($hasil, 'koordinator', $tanggal);
+        $hasil = TitikGps::tambahJumlah($hasil, 'koordinator', $tanggal);
+        $dalam = $this->idDalamCakupan($request);
+
+        return $dalam === null ? $hasil : array_intersect_key($hasil, $dalam);
     }
 }

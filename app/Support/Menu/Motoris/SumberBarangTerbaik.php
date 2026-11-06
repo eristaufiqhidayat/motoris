@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\SumberBertanggal;
 use App\Support\Mobile\Pengaturan;
 use Carbon\CarbonImmutable;
@@ -70,12 +70,12 @@ abstract class SumberBarangTerbaik implements SumberBertanggal
 
     public function pilihanFilter(?User $user): array
     {
-        $depo = Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', 'sales')->whereNotNull('k.depo_id'), $user)
+        $depo = Cakupan::untuk($user)->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'sales')->whereNotNull('k.depo_id'))
             ->distinct()->pluck('k.depo_id');
 
         return [
             'depo' => DB::table('mk_depo')->whereIn('id', $depo->all() ?: [0])->orderBy('nama')->pluck('nama', 'id')->all(),
-            'koordinator' => Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', 'koordinator')->where('k.aktif', true), $user)
+            'koordinator' => Cakupan::untuk($user)->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'koordinator')->where('k.aktif', true))
                 ->orderBy('k.nama')->pluck('k.nama', 'k.id')->all(),
         ];
     }

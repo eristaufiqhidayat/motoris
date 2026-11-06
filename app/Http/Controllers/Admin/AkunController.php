@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Akses\HierarkiSales;
 use App\Support\Area\WilayahKerjaSales;
 use App\Support\Mobile\HariKerja;
@@ -489,7 +490,7 @@ class AkunController extends Controller
                 ->whereColumn('ks.koordinator_id', 'u.karyawan_id')->selectRaw('COUNT(*)'), 'jumlah_sales');
         }
 
-        return match (Akses::cakupan($saya)) {
+        return match (Cakupan::untuk($saya)->mode()) {
             'depo' => $q->where('k.depo_id', DB::table('mk_karyawan')->where('id', $saya->karyawan_id ?? 0)->value('depo_id') ?? -1),
             'downline' => $q->where(fn ($w) => $w->where('k.koordinator_id', $saya->karyawan_id ?? -1)->orWhere('u.id', $saya->id)),
             'diri' => $q->where('u.id', $saya->id),

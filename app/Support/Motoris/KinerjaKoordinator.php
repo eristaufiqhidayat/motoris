@@ -3,7 +3,7 @@
 namespace App\Support\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Tracking\SinkronTemuan;
 use Carbon\CarbonImmutable;
@@ -65,10 +65,7 @@ class KinerjaKoordinator
         }
 
         $atur = config('marketama.kinerja_koordinator');
-        $koordinator = Akses::batasiKaryawan(
-            DB::table('mk_karyawan as k')->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')->where('k.kategori', 'koordinator')->where('k.aktif', true),
-            $this->user,
-        )->orderBy('k.nama')->get(['k.id', 'k.nama', 'd.nama as depo']);
+        $koordinator = Cakupan::untuk($this->user)->batasi(DB::table('mk_karyawan as k')->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')->where('k.kategori', 'koordinator')->where('k.aktif', true))->orderBy('k.nama')->get(['k.id', 'k.nama', 'd.nama as depo']);
         $ids = $koordinator->pluck('id')->map(fn ($id) => (int) $id)->all();
 
         $tim = DB::table('mk_karyawan')->where('kategori', 'sales')->where('aktif', true)->whereIn('koordinator_id', $ids ?: [0])

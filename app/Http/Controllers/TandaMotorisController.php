@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Lokasi;
 use App\Support\Mobile\Pengaturan;
@@ -211,7 +212,7 @@ class TandaMotorisController extends Controller
     /** Motoris (kategori sales) dalam cakupan role akun; selain itu 404. */
     private function motoris(Request $request, int $id): object
     {
-        $motoris = Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.id', $id)->where('k.kategori', 'sales'), $request->user())
+        $motoris = Cakupan::untuk($request->user())->batasi(DB::table('mk_karyawan as k')->where('k.id', $id)->where('k.kategori', 'sales'))
             ->first(['k.id', 'k.nama']);
 
         abort_unless($motoris, 404);

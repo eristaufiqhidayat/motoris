@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\SumberTabel;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -50,7 +50,7 @@ class SumberOutletStatus implements SumberTabel
                     ->whereNotNull('s.produk_id')->where('s.qty', '>', 0)->selectRaw('1'));
         }
 
-        $depo = self::depoCakupan($user);
+        $depo = Cakupan::untuk($user)->depoIds();
 
         return $q->when($depo !== null, fn ($w) => $w->whereIn('a.depo_id', $depo ?: [0]))
             ->orderByDesc('o.id')
@@ -80,16 +80,5 @@ class SumberOutletStatus implements SumberTabel
     public function kolomCari(): array
     {
         return ['o.kode', 'o.nama', 'o.alamat', 'o.area', 'a.nama', 'd.nama', 'o.kota_kabupaten', 'o.kecamatan', 'o.kelurahan'];
-    }
-
-    /** @return array<int>|null depo dalam cakupan akun; null = semua depo */
-    public static function depoCakupan(?User $user): ?array
-    {
-        if (! $user || Akses::cakupan($user) === 'semua') {
-            return null;
-        }
-
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->whereNotNull('k.depo_id'), $user)
-            ->distinct()->pluck('k.depo_id')->map(fn ($id) => (int) $id)->all();
     }
 }

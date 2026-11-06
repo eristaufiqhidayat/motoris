@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Menu\SumberTabel;
 use Illuminate\Database\Query\Builder;
@@ -50,7 +50,7 @@ class SumberPenjualan implements SumberTabel
             ->whereNull('p.dibatalkan_at')
             ->when($hanyaEc, fn ($w) => $w->where('p.is_effective_call', true));
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     public function ubahBaris(object $baris): object

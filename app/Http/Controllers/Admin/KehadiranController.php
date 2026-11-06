@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Tabel\SortFilterKolom;
 use Carbon\CarbonImmutable;
@@ -215,9 +216,7 @@ class KehadiranController extends Controller
 
         $bolehMenu = collect(['absensi_sales', 'lap_absensi_sales', 'absensi_sales_terlambat', 'absensi_koordinator', 'lap_absensi_koordinator', 'checkin_outlet', 'lap_checkin_outlet', 'outlet_all', 'join_visit', 'lap_join_visit'])
             ->contains(fn ($slug) => Akses::bisa($request->user(), $slug));
-        $dalamCakupan = $foto->karyawan_id && Akses::batasiKaryawan(
-            DB::table('mk_karyawan as k')->where('k.id', $foto->karyawan_id), $request->user()
-        )->exists();
+        $dalamCakupan = $foto->karyawan_id && Cakupan::untuk($request->user())->batasi(DB::table('mk_karyawan as k')->where('k.id', $foto->karyawan_id))->exists();
 
         abort_unless($bolehMenu && $dalamCakupan, 403, 'Anda tidak punya hak untuk membuka foto ini.');
         abort_unless(Storage::disk($foto->disk)->exists($foto->path), 404);
@@ -293,7 +292,7 @@ class KehadiranController extends Controller
             ->when($f['q'] !== '', fn ($w) => $w->whereRaw('LOWER(k.nama) LIKE ?', ['%'.mb_strtolower($f['q']).'%']))
             ->select(['t.id', 't.tanggal', 't.karyawan_id', 't.sumber', 'k.nama as sales', 'd.nama as depo', 'ko.nama as koordinator']);
 
-        return Akses::batasiKaryawan($q, $request->user());
+        return Cakupan::untuk($request->user())->batasi($q);
     }
 
     /** Format tampilan (padanan helper di Blade kunjungan): tanggal bahasa Indonesia, jam WIB, durasi "x j y m". */
@@ -348,9 +347,7 @@ class KehadiranController extends Controller
             'baris' => $baris,
             'daftarSumber' => self::SUMBER,
             'daftarDepo' => DB::table('mk_depo')->orderBy('nama')->pluck('nama', 'id'),
-            'daftarKoordinator' => Akses::batasiKaryawan(
-                DB::table('mk_karyawan as k')->where('k.kategori', 'koordinator')->where('k.aktif', true), auth()->user()
-            )->orderBy('k.nama')->pluck('k.nama', 'k.id'),
+            'daftarKoordinator' => Cakupan::untuk(auth()->user())->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'koordinator')->where('k.aktif', true))->orderBy('k.nama')->pluck('k.nama', 'k.id'),
         ];
     }
 }

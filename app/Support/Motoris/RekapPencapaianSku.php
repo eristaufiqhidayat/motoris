@@ -3,7 +3,7 @@
 namespace App\Support\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -174,7 +174,7 @@ class RekapPencapaianSku
     /** Karyawan kategori sales dalam cakupan akun dan filter depo (alias k). */
     private function sales(): Builder
     {
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', 'sales'), $this->user)
+        return Cakupan::untuk($this->user)->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'sales'))
             ->when($this->depo, fn ($q) => $q->whereIn('k.depo_id', $this->depo));
     }
 

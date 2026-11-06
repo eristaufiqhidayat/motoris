@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Menu\SumberTabel;
 use Illuminate\Database\Query\Builder;
@@ -31,7 +31,7 @@ class SumberSesiLogin implements SumberTabel
                 'ko.nama as nama_koordinator', 'm.device_id', 'm.device_model', 'm.app_version', 'm.created_at as login_pada', 'm.last_used_at as terakhir_aktif',
             ]);
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     public function ubahBaris(object $baris): object

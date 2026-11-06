@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Akses\HierarkiSales;
 use App\Support\Karyawan\BacaKtp;
 use App\Support\Karyawan\TanggalBebas;
@@ -325,7 +326,7 @@ class KaryawanController extends Controller
             ->select(['k.*', 'd.nama as depo', 'ko.nama as koordinator', 'w.nama as wilayah_depo', 'aa.nama as area_aktif',
                 DB::raw('COALESCE(ar.total_area, 0) as total_area'), DB::raw('COALESCE(js.jumlah_sales, 0) as jumlah_sales')]);
 
-        return Akses::batasiKaryawan($q, $request->user());
+        return Cakupan::untuk($request->user())->batasi($q);
     }
 
     private function kolom(string $kategori): array
@@ -687,7 +688,7 @@ class KaryawanController extends Controller
     {
         [, $kategori] = $this->menu($request);
 
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', $kategori)->where('k.id', $id), $request->user())
+        return Cakupan::untuk($request->user())->batasi(DB::table('mk_karyawan as k')->where('k.kategori', $kategori)->where('k.id', $id))
             ->select('k.*')->first() ?? abort(404);
     }
 

@@ -3,7 +3,7 @@
 namespace App\Support\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -167,7 +167,7 @@ class LaporanMotoris
             return $this->perDepo;
         }
 
-        $cakupan = Akses::cakupan($this->user) === 'semua' ? null
+        $cakupan = Cakupan::untuk($this->user)->semua() ? null
             : (clone $this->sales())->whereNotNull('k.depo_id')->distinct()->pluck('k.depo_id')->map(fn ($id) => (int) $id)->all();
 
         $depo = KuotaMotoris::untukBulan($this->bulan, $cakupan)
@@ -222,6 +222,6 @@ class LaporanMotoris
     /** Karyawan kategori sales dalam cakupan akun (alias k). */
     private function sales(): Builder
     {
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', 'sales'), $this->user);
+        return Cakupan::untuk($this->user)->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'sales'));
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Motoris\KuotaMotoris;
 use Carbon\CarbonImmutable;
@@ -30,8 +31,8 @@ class KuotaMotorisController extends Controller
             'judul' => config('marketama.pages.'.self::MENU.'.title') ?? 'Kuota Motoris',
             'bulan' => $bulan,
             'namaBulan' => self::namaBulan($bulan),
-            'depo' => Inertia::defer(fn () => self::muatDepo($bulan, self::depoCakupan($request)), 'depo'),
-            'riwayat' => Inertia::defer(fn () => self::muatRiwayat(self::depoCakupan($request)), 'riwayat'),
+            'depo' => Inertia::defer(fn () => self::muatDepo($bulan, Cakupan::untuk($request->user())->depoIds()), 'depo'),
+            'riwayat' => Inertia::defer(fn () => self::muatRiwayat(Cakupan::untuk($request->user())->depoIds()), 'riwayat'),
             'bolehUbah' => Akses::bisa($request->user(), self::MENU, 'ubah'),
         ]);
     }
@@ -82,7 +83,7 @@ class KuotaMotorisController extends Controller
         ], ['kuota.*.integer' => 'Kuota harus angka bulat.', 'kuota.*.min' => 'Kuota tidak boleh negatif.']);
 
         $bulan = $data['bulan'];
-        $sekarang = KuotaMotoris::untukBulan($bulan, self::depoCakupan($request))->keyBy('id');
+        $sekarang = KuotaMotoris::untukBulan($bulan, Cakupan::untuk($request->user())->depoIds())->keyBy('id');
         $berubah = 0;
 
         foreach ($data['kuota'] ?? [] as $depoId => $nilai) {
@@ -128,20 +129,5 @@ class KuotaMotorisController extends Controller
     public static function namaBulan(string $bulan): string
     {
         return CarbonImmutable::parse("{$bulan}-01")->locale('id')->translatedFormat('F Y');
-    }
-
-    /**
-     * Depo yang boleh dilihat akun: null = semua (cakupan "semua"); selain itu depo karyawan dalam cakupannya.
-     *
-     * @return array<int>|null
-     */
-    public static function depoCakupan(Request $request): ?array
-    {
-        if (Akses::cakupan($request->user()) === 'semua') {
-            return null;
-        }
-
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k')->whereNotNull('k.depo_id'), $request->user())
-            ->distinct()->pluck('k.depo_id')->map(fn ($id) => (int) $id)->all();
     }
 }

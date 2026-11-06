@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Motoris\DetailMotoris;
 use Carbon\CarbonImmutable;
@@ -50,11 +50,8 @@ class DetailMotorisController extends Controller
     {
         $saatIni = $request->integer('id');
 
-        $motoris = Akses::batasiKaryawan(
-            DB::table('mk_karyawan as k')->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')->where('k.kategori', 'sales')
-                ->where(fn ($w) => $w->where('k.aktif', true)->when($saatIni, fn ($x) => $x->orWhere('k.id', $saatIni))),
-            $request->user()
-        )->orderBy('k.nama')->get(['k.id', 'k.nama', 'd.nama as depo'])
+        $motoris = Cakupan::untuk($request->user())->batasi(DB::table('mk_karyawan as k')->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')->where('k.kategori', 'sales')
+            ->where(fn ($w) => $w->where('k.aktif', true)->when($saatIni, fn ($x) => $x->orWhere('k.id', $saatIni))))->orderBy('k.nama')->get(['k.id', 'k.nama', 'd.nama as depo'])
             ->map(fn ($m) => ['value' => (string) $m->id, 'label' => $m->nama.($m->depo ? " · {$m->depo}" : '')]);
 
         return response()->json(['motoris' => $motoris->values()]);

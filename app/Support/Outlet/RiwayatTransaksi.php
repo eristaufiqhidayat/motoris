@@ -3,7 +3,7 @@
 namespace App\Support\Outlet;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -80,9 +80,6 @@ class RiwayatTransaksi
 
     private static function dasar(?User $user): Builder
     {
-        return Akses::batasiKaryawan(
-            DB::table('trx_penjualan as p')->join('mk_karyawan as k', 'k.id', '=', 'p.karyawan_id')->whereNull('p.dibatalkan_at'),
-            $user,
-        );
+        return Cakupan::untuk($user)->batasi(DB::table('trx_penjualan as p')->join('mk_karyawan as k', 'k.id', '=', 'p.karyawan_id')->whereNull('p.dibatalkan_at'));
     }
 }

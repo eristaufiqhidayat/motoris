@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Motoris\RekapPencapaianSku;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -90,7 +91,7 @@ class RekapPencapaianSkuController extends Controller
 
     private function daftarDepo(Request $request)
     {
-        $cakupan = KuotaMotorisController::depoCakupan($request);
+        $cakupan = Cakupan::untuk($request->user())->depoIds();
 
         return DB::table('mk_depo')->when($cakupan !== null, fn ($q) => $q->whereIn('id', $cakupan ?: [0]))
             ->orderBy('nama')->pluck('nama', 'id');

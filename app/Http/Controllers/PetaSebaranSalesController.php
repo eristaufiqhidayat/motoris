@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Area\AreaMk;
 use App\Support\Menu\Motoris\SumberLastSeenSales;
 use App\Support\Mobile\Pengaturan;
@@ -149,11 +149,11 @@ class PetaSebaranSalesController extends Controller
     private function areaDalamCakupan(Request $request)
     {
         $q = DB::table('area_polygon as ap');
-        if (Akses::cakupan($request->user()) === 'semua') {
+        if (Cakupan::untuk($request->user())->semua()) {
             return $q;
         }
 
-        $karyawan = Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.kategori', 'sales'), $request->user());
+        $karyawan = Cakupan::untuk($request->user())->batasi(DB::table('mk_karyawan as k')->where('k.kategori', 'sales'));
         $depo = (clone $karyawan)->whereNotNull('k.depo_id')->distinct()->pluck('k.depo_id')->all();
         $idMk = DB::table('mk_karyawan_area')->whereIn('karyawan_id', (clone $karyawan)->pluck('k.id')->all() ?: [0])->pluck('area_id')->map(fn ($id) => (int) $id);
         [$enesis, $lama] = $idMk->partition(fn ($id) => $id >= AreaMk::ID_AWAL);

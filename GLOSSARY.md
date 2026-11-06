@@ -77,3 +77,9 @@ Konteks untuk pembaruan Marketama Motorist System: admin penjualan keliling (can
 | **Insentif** | Tambahan pendapatan sales/koordinator yang dihitung dengan rumus insentif dan konversi poin per depo. | |
 | **Penggajian** | Perhitungan gaji karyawan dari absensi, insentif, dan potongan gaji; saat ini tersedia untuk koordinator. | |
 | **Potongan Gaji** | Pengurang gaji berdasarkan parameter pemotong gaji, mis. keterlambatan. | |
+
+### Akses
+
+| Istilah | Arti | Hindari |
+| --- | --- | --- |
+| **Cakupan** | Bagian data karyawan yang boleh dilihat sebuah akun menurut role-nya: `semua`, `depo` (depo sendiri), `downline` (dirinya dan timnya), atau `diri`. Dijawab satu tempat oleh `App\Support\Akses\Cakupan`; pengecualian ditulis `Cakupan::tanpa('alasan')`. | Scope, batasi manual per query |

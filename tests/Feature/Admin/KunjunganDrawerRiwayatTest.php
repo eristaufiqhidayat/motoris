@@ -200,12 +200,12 @@ class KunjunganDrawerRiwayatTest extends AdminTestCase
 
     public function test_kunjungan_motoris_di_luar_cakupan_role_tidak_dikirim(): void
     {
-        // Koordinator Koor Satu (137) hanya mencakup bawahannya: Rudi (1) ya, Sinta (2) tidak.
+        // Koordinator Koor Satu (137) hanya mencakup bawahannya: Rudi (1) ya, Sinta (2) tidak (404, rute GPS pun tertutup).
         $role = $this->role('Pemantau Downline', 'downline', ['tracking_sales_history_location' => ['lihat']]);
         $this->actingAs($this->akun('pemantau', 'koordinator', 137, ['role_id' => $role]));
 
         $this->getJson(self::URL.'?sales_id=1&tanggal=2026-10-24')->assertOk()->assertJsonCount(3, 'kunjungan');
-        $this->getJson(self::URL.'?sales_id=2&tanggal=2026-10-24')->assertOk()->assertJsonPath('kunjungan', []);
+        $this->getJson(self::URL.'?sales_id=2&tanggal=2026-10-24')->assertNotFound();
     }
 
     public function test_endpoint_koordinator_tanpa_kunci_kunjungan(): void
