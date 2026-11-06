@@ -178,6 +178,17 @@ class KaryawanTest extends AdminTestCase
         $this->assertStringContainsString('600,Rinto,Auditor', $csv);
     }
 
+    public function test_status_keluarga_ptkp_disimpan_boleh_kosong_dan_hanya_kode_yang_dikenal(): void
+    {
+        $this->post('/karyawan_sales', $this->dataSales(['status_ptkp' => 'K/2']))->assertRedirect('/karyawan_sales');
+        $id = KaryawanController::ID_AWAL;
+        $this->assertSame('K/2', DB::table('mk_karyawan')->where('id', $id)->value('status_ptkp'));
+
+        $this->post('/karyawan_sales', $this->dataSales(['nama' => 'Karyawan Lain', 'status_ptkp' => 'K/9']))->assertSessionHasErrors('status_ptkp');
+        $this->post('/karyawan_sales', $this->dataSales(['nama' => 'Tanpa Status', 'status_ptkp' => '']))->assertSessionHasNoErrors();
+        $this->assertNull(DB::table('mk_karyawan')->where('nama', 'Tanpa Status')->value('status_ptkp'));
+    }
+
     public function test_tambah_sales_menyimpan_data_ktp_dan_menolak_nik_tidak_valid(): void
     {
         $this->post('/karyawan_sales', $this->dataSales([

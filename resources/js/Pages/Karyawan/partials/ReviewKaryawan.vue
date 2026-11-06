@@ -42,6 +42,7 @@ const areaAktif = computed(() => (props.nilai.area_aktif_ids.length
                 <div><dt class="text-xs text-gray-500">Tempat lahir</dt><dd class="font-semibold mb-0">{{ nilai.tempat_lahir || '-' }}</dd></div>
                 <div><dt class="text-xs text-gray-500">Tanggal lahir</dt><dd class="font-semibold mb-0">{{ tanggal(nilai.tanggal_lahir) }}</dd></div>
                 <div class="col-span-2"><dt class="text-xs text-gray-500">Alamat</dt><dd class="font-semibold mb-0">{{ nilai.alamat || '-' }}</dd></div>
+                <div class="col-span-2"><dt class="text-xs text-gray-500">Status keluarga (PTKP)</dt><dd class="font-semibold mb-0">{{ cariLabel(opsi.ptkp, nilai.status_ptkp) }}</dd></div>
 
                 <div v-if="kategori === 'lainnya'"><dt class="text-xs text-gray-500">Kategori karyawan</dt><dd class="font-semibold mb-0">{{ nilai.jabatan || '-' }}</dd></div>
 
