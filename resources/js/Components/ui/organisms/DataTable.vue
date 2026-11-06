@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, onUpdated, reactive, ref, useSlots, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, reactive, ref, useSlots, watch } from 'vue';
 import Card from '@/Components/ui/molecules/Card.vue';
 import Pagination from '@/Components/ui/molecules/Pagination.vue';
 import Badge from '@/Components/ui/atoms/Badge.vue';
@@ -9,6 +9,7 @@ import Input from '@/Components/ui/atoms/Input.vue';
 import Select from '@/Components/ui/atoms/Select.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
 import Checkbox from '@/Components/ui/atoms/Checkbox.vue';
+import { tanggalSingkat } from '@/Support/format.js';
 
 const props = defineProps({
     title: { type: String, default: null },
@@ -153,69 +154,62 @@ function ariaSort(kolom) {
     return arah === null ? 'none' : (arah === 'asc' ? 'ascending' : 'descending');
 }
 
-// Nilai input dan operator per kolom. Ditampilkan dari backend, lalu dikirim ulang (debounce) saat user mengubahnya.
+// Nilai input dan operator per kolom: isian sementara di flyout, baru dikirim saat Terapkan atau Enter.
 const nilaiFilter = reactive({});
 const operatorFilter = reactive({});
 
-// Ketikan yang belum terkirim (belum lewat jeda, atau sedang di perjalanan) tidak boleh ditimpa
-// oleh respons request sebelumnya, supaya teks yang sedang diketik tidak hilang.
-let adaKetikanBelumTerkirim = false;
+// Flyout filter: hanya satu kolom terbuka. Tertutup saat klik di luar atau tekan Esc.
+const flyoutKolom = ref(null);
 
+// Isi dari backend, kecuali kolom yang flyout-nya sedang terbuka supaya isian yang belum diterapkan tidak tertimpa.
 function sinkronFilter() {
-    if (adaKetikanBelumTerkirim) {
-        return;
-    }
-
     for (const kolom of props.filterable) {
-        nilaiFilter[kolom] = props.filterValues[kolom] ?? '';
+        if (kolom !== flyoutKolom.value) {
+            nilaiFilter[kolom] = props.filterValues[kolom] ?? '';
+        }
     }
 
     for (const kolom of kolomOperator.value) {
-        operatorFilter[kolom] = props.filterOperator[kolom] ?? '=';
+        if (kolom !== flyoutKolom.value) {
+            operatorFilter[kolom] = props.filterOperator[kolom] ?? '=';
+        }
     }
 }
 
 sinkronFilter();
 watch(() => [props.filterValues, props.filterOperator], sinkronFilter, { deep: true });
 
-let jedaFilter = null;
-
-// Jeda setelah ketikan terakhir sebelum filter dikirim ke server, supaya tidak reload di tengah kata.
-const JEDA_FILTER_MS = 700;
-
-function jadwalkanFilter() {
-    adaKetikanBelumTerkirim = true;
-    clearTimeout(jedaFilter);
-
-    // Seluruh nilai dan operator dikirim sekaligus, jadi mengubah dua kolom berurutan tidak saling membatalkan.
-    jedaFilter = setTimeout(() => {
-        adaKetikanBelumTerkirim = false;
-        emit('filter', {
-            nilai: Object.fromEntries(props.filterable.map((k) => [k, (nilaiFilter[k] ?? '').trim()])),
-            operator: Object.fromEntries(kolomOperator.value.map((k) => [k, operatorFilter[k] ?? '='])),
-        });
-    }, JEDA_FILTER_MS);
+function kirimFilter() {
+    // Seluruh nilai dan operator dikirim sekaligus; kolom lain tetap berisi nilai dari backend.
+    emit('filter', {
+        nilai: Object.fromEntries(props.filterable.map((k) => [k, (nilaiFilter[k] ?? '').trim()])),
+        operator: Object.fromEntries(kolomOperator.value.map((k) => [k, operatorFilter[k] ?? '='])),
+    });
 }
 
 function ubahFilter(kolom, nilai) {
     nilaiFilter[kolom] = nilai;
-    jadwalkanFilter();
 }
 
 function ubahOperator(kolom, op) {
     operatorFilter[kolom] = op;
-    jadwalkanFilter();
 }
 
-// Flyout filter: hanya satu kolom terbuka. Tertutup saat klik di luar atau tekan Esc.
-const flyoutKolom = ref(null);
-
-function bukaFlyout(kolom) {
-    flyoutKolom.value = flyoutKolom.value === kolom ? null : kolom;
-}
-
+// Menutup flyout membuang isian yang belum diterapkan.
 function tutupFlyout() {
     flyoutKolom.value = null;
+    sinkronFilter();
+}
+
+async function bukaFlyout(kolom) {
+    const tujuan = flyoutKolom.value === kolom ? null : kolom;
+
+    tutupFlyout();
+    flyoutKolom.value = tujuan;
+
+    // Langsung bisa mengetik begitu flyout terbuka (kolom operator: fokus ke nilai, bukan pilihan operator).
+    await nextTick();
+    tabel.value?.querySelector('.filter-flyout input')?.focus();
 }
 
 function tutupFlyoutSaatKlikLuar() {
@@ -230,8 +224,48 @@ function tutupFlyoutSaatEsc(event) {
     }
 }
 
+// Filter yang berlaku di server, bukan isian yang belum diterapkan.
 function adaFilterAktif(kolom) {
-    return (nilaiFilter[kolom] ?? '') !== '';
+    return (props.filterValues[kolom] ?? '') !== '';
+}
+
+function filterBerubah(kolom) {
+    const operatorBerubah = kolomOperator.value.includes(kolom)
+        && (operatorFilter[kolom] ?? '=') !== (props.filterOperator[kolom] ?? '=');
+
+    return (nilaiFilter[kolom] ?? '').trim() !== (props.filterValues[kolom] ?? '') || operatorBerubah;
+}
+
+// Ringkasan filter yang berlaku di server: label kolom dan nilainya, dengan operator untuk kolom angka/tanggal.
+const filterTerpasang = computed(() => props.filterable
+    .filter((kolom) => adaFilterAktif(kolom))
+    .map((kolom) => {
+        const nilai = props.filterValues[kolom];
+        const teks = props.filterTanggal.includes(kolom) ? tanggalSingkat(nilai) || nilai : nilai;
+        const operator = OPERATOR_FILTER.find((o) => o.value === (props.filterOperator[kolom] ?? '='))?.label ?? '=';
+
+        return { kolom, label: props.columns[kolom] ?? kolom, nilai: kolomOperator.value.includes(kolom) ? `${operator} ${teks}` : teks };
+    }));
+
+function resetFilter() {
+    for (const { kolom } of filterTerpasang.value) {
+        nilaiFilter[kolom] = '';
+
+        if (kolomOperator.value.includes(kolom)) {
+            operatorFilter[kolom] = '=';
+        }
+    }
+
+    kirimFilter();
+    tutupFlyout();
+}
+
+function terapkanFilter(kolom) {
+    if (filterBerubah(kolom)) {
+        kirimFilter();
+    }
+
+    tutupFlyout();
 }
 
 function hapusFilter(kolom) {
@@ -241,8 +275,8 @@ function hapusFilter(kolom) {
         operatorFilter[kolom] = '=';
     }
 
+    kirimFilter();
     tutupFlyout();
-    jadwalkanFilter();
 }
 
 // Kolom sticky disusun berurutan: offset `left` tiap kolom = total lebar kolom sticky di sebelah kirinya.
@@ -317,7 +351,6 @@ onMounted(() => {
 onUpdated(perbaruiTampilan);
 
 onBeforeUnmount(() => {
-    clearTimeout(jedaFilter);
     document.removeEventListener('click', tutupFlyoutSaatKlikLuar);
     document.removeEventListener('keydown', tutupFlyoutSaatEsc);
     window.removeEventListener('resize', sesuaikanTinggi);
@@ -327,8 +360,16 @@ onBeforeUnmount(() => {
 
 <template>
     <Card :class="{ 'card-isi-wadah': isiWadah }" :body-class="isiWadah ? 'card-body card-body-isi-wadah' : 'overflow-x-auto'">
-        <template v-if="slots.header || title" #header>
+        <template v-if="slots.header || title || filterTerpasang.length" #header>
             <slot name="header">{{ title }}</slot>
+            <div v-if="filterTerpasang.length" class="filter-terpasang" :class="{ 'mt-2': slots.header || title }" aria-label="Filter aktif">
+                <span class="text-gray-500">Filter aktif:</span>
+                <span v-for="f in filterTerpasang" :key="f.kolom" class="filter-chip">
+                    {{ f.label }}: <strong>{{ f.nilai }}</strong>
+                    <button type="button" class="filter-chip-hapus" :aria-label="`Hapus filter ${f.label}`" @click="hapusFilter(f.kolom)"><Icon name="x" class="w-3 h-3" /></button>
+                </span>
+                <Button variant="outline-secondary" class="filter-reset" @click="resetFilter"><Icon name="x" class="me-1" /> Reset filter</Button>
+            </div>
         </template>
 
         <div ref="scrollEl" class="overflow-auto" :class="{ 'h-full': isiWadah }">
@@ -394,6 +435,7 @@ onBeforeUnmount(() => {
                                     :placeholder="label"
                                     :aria-label="`Nilai ${label}`"
                                     @update:model-value="ubahFilter(kolom, $event)"
+                                    @keydown.enter.prevent="terapkanFilter(kolom)"
                                 />
                             </div>
                             <Input
@@ -404,9 +446,11 @@ onBeforeUnmount(() => {
                                 :placeholder="label"
                                 :aria-label="`Nilai ${label}`"
                                 @update:model-value="ubahFilter(kolom, $event)"
+                                @keydown.enter.prevent="terapkanFilter(kolom)"
                             />
                             <div class="filter-flyout-aksi">
                                 <Button variant="outline-secondary" :disabled="!adaFilterAktif(kolom)" @click="hapusFilter(kolom)">Hapus filter</Button>
+                                <Button :disabled="!filterBerubah(kolom)" @click="terapkanFilter(kolom)">Terapkan</Button>
                             </div>
                         </div>
                     </th>

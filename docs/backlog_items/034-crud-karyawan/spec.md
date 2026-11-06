@@ -13,7 +13,7 @@ Menu Karyawan Sales, Karyawan Koordinator, Karyawan Supervisor, dan Karyawan Lai
 - Migration `2026_10_28_000004`: `mk_karyawan` + `jabatan`, `wilayah_depo_id`, `gaji_pokok`, `tunjangan_bbm_makan`, `sewa_motor`, `tunjangan_internet`, `foto`, `diubah_oleh`, `diubah_pada`. Jabatan Karyawan Lainnya dan wilayah depo koordinator diisi dari kolom `data` hasil tarikan.
 - `KaryawanController` (route per menu, hak lihat/tambah/ubah/hapus/ekspor):
   - daftar dengan saring status (semua/aktif/tidak aktif), depo, dan cari nama/HP/email/koordinator;
-  - tambah/edit di modal kanan (JSON) atau halaman `/{menu}/{id}/edit`;
+  - tambah di halaman `/{menu}/tambah`, edit di halaman `/{menu}/{id}/edit`; drawer kanan (JSON) hanya detail;
   - hapus, ekspor CSV, foto.
 - Sales:
   - koordinator harus dari depo yang sama; disimpan lewat `HierarkiSales::atur`;

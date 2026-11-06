@@ -67,9 +67,7 @@ class KaryawanController extends Controller
     public function index(Request $request): Response
     {
         [$slug, $kategori] = $this->menu($request);
-        $q = trim((string) $request->query('q'));
-        $status = in_array($request->query('status'), ['semua', 'aktif', 'tidak_aktif'], true) ? $request->query('status') : 'aktif';
-        $depo = $request->integer('depo') ?: null;
+        $status = $request->query('status') === 'tidak_aktif' ? 'tidak_aktif' : 'aktif';
 
         $dasar = $this->query($request, $kategori);
         $jumlah = ['semua' => (clone $dasar)->count(), 'aktif' => (clone $dasar)->where('k.aktif', true)->count()];
@@ -84,13 +82,12 @@ class KaryawanController extends Controller
         $filterAktif = SortFilterKolom::filter($request, $kolomFilter);
 
         $baris = $dasar
-            ->when($status !== 'semua', fn ($w) => $w->where('k.aktif', $status === 'aktif'))
-            ->when($depo, fn ($w) => $w->where('k.depo_id', $depo))
-            ->when($q !== '', fn ($w) => $w->where(function ($x) use ($q) {
-                foreach (['k.nama', 'k.no_hp', 'k.email', 'd.nama', 'ko.nama', 'k.jabatan'] as $kolom) {
-                    $x->orWhereRaw("LOWER({$kolom}) LIKE ?", ['%'.mb_strtolower($q).'%']);
-                }
-            }))
+            // Status kosong (hasil tarikan lama) dihitung tidak aktif, sama seperti jumlah di tab.
+            ->when(
+                $status === 'aktif',
+                fn ($w) => $w->where('k.aktif', true),
+                fn ($w) => $w->where(fn ($x) => $x->where('k.aktif', false)->orWhereNull('k.aktif'))
+            )
             ->tap(fn ($w) => SortFilterKolom::terapkanFilter($w, $filterAktif, $kolomFilter))
             ->when(
                 $sort,
@@ -108,11 +105,8 @@ class KaryawanController extends Controller
             'nama' => self::JUDUL[$kategori][1],
             'kolom' => $this->kolom($kategori),
             'baris' => $baris,
-            'q' => $q,
             'status' => $status,
-            'depo' => $depo,
             'jumlah' => $jumlah,
-            'daftarDepo' => in_array($kategori, ['sales', 'koordinator'], true) ? $this->daftarDepo() : [],
             'bisa' => $this->bisa($request, $slug),
             'sortableColumns' => array_keys($kolomUrut),
             'sort' => $sort,
@@ -121,13 +115,12 @@ class KaryawanController extends Controller
         ]);
     }
 
-    public function create(Request $request): Response|JsonResponse
+    public function create(Request $request): Response
     {
-        $props = $this->propsForm($request, null);
-
-        return $request->expectsJson() ? response()->json($props) : Inertia::render('Karyawan/Form', $props);
+        return Inertia::render('Karyawan/Form', $this->propsForm($request, null));
     }
 
+    /** Halaman edit; versi JSON mengisi drawer detail di daftar. */
     public function edit(Request $request, int $id): Response|JsonResponse
     {
         $props = $this->propsForm($request, $this->cari($request, $id));
@@ -479,6 +472,8 @@ class KaryawanController extends Controller
 
         $depo = $request->integer('depo_id') ?: null;
         $lainnya = $kategori === 'lainnya';
+        // Motoris: No HP angka saja. Nomor lama berspasi yang tidak diubah tetap lolos supaya form lain bisa disimpan.
+        $hpAngka = $kategori === 'sales' && ! ($lama && $request->input('no_hp') === $lama->no_hp);
         $aturan = [
             'nama' => ['required', 'string', 'max:150'],
             'nik' => ['nullable', 'digits:16', Rule::unique('mk_karyawan', 'nik')->ignore($lama?->id)],
@@ -487,7 +482,7 @@ class KaryawanController extends Controller
             'alamat' => ['nullable', 'string', 'max:500'],
             'status_ptkp' => ['nullable', Rule::in(array_keys(self::PTKP))],
             'email' => ['nullable', 'email', 'max:150'],
-            'no_hp' => [$lainnya ? 'nullable' : 'required', 'string', 'max:30', 'regex:/^[0-9+\- ]{5,30}$/'],
+            'no_hp' => [$lainnya ? 'nullable' : 'required', 'string', 'max:30', $hpAngka ? 'regex:/^[0-9]{5,30}$/' : 'regex:/^[0-9+\- ]{5,30}$/'],
             'tanggal_mulai' => [$lainnya ? 'nullable' : 'required', 'date_format:Y-m-d'],
             'aktif' => ['required', Rule::in(['1', '0'])],
             'foto' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:2048'],
@@ -516,11 +511,17 @@ class KaryawanController extends Controller
         }
 
         return $request->validate($aturan, [
+            // Form memakai novalidate (tab), jadi pesan wajib isi selalu datang dari sini.
+            'required' => ':Attribute wajib diisi.',
+            'email' => 'Format email tidak valid.',
+            'foto.image' => 'Foto harus berupa gambar.',
+            'foto.mimes' => 'Foto harus .jpg, .jpeg, atau .png.',
+            'foto.max' => 'Ukuran foto maksimal 2 MB.',
             'koordinator_id.in' => 'Pilih koordinator dari depo yang sama.',
             'area_ids.required' => 'Pilih minimal satu area.',
             'area_ids.*.in' => 'Area harus milik depo yang dipilih.',
             'area_aktif_ids.*.in' => 'Area aktif harus salah satu area motoris ini.',
-            'no_hp.regex' => 'No HP hanya boleh angka, spasi, + dan -.',
+            'no_hp.regex' => $hpAngka ? 'No HP hanya boleh angka tanpa spasi, minimal 5 digit.' : 'No HP hanya boleh angka, spasi, + dan -.',
             'nik.digits' => 'NIK harus 16 digit angka.',
             'nik.unique' => 'NIK ini sudah dipakai karyawan lain.',
         ], [

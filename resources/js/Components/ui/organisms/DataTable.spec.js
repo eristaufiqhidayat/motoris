@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { nextTick } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import DataTable from './DataTable.vue';
 
@@ -67,72 +68,150 @@ describe('DataTable filter', () => {
         expect(filterButton(wrapper, 'kode').classes()).toContain('filter-aktif');
     });
 
-    it('emits all filter values once after the debounce delay', async () => {
-        vi.useFakeTimers();
-        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode', 'nama_provinsi'] } });
+    const tombolTerapkan = (wrapper) => wrapper.findAll('.filter-flyout-aksi button').find((b) => b.text() === 'Terapkan');
 
-        await filterButton(wrapper, 'kode').trigger('click');
-        await wrapper.find('input.col-filter').setValue('11');
-        await filterButton(wrapper, 'nama_provinsi').trigger('click');
-        await wrapper.find('input.col-filter').setValue('  Aceh ');
+    it('shows no active filter summary when nothing is filtered', () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode'] } });
 
-        expect(wrapper.emitted('filter')).toBeUndefined();
-
-        vi.advanceTimersByTime(700);
-
-        expect(wrapper.emitted('filter')).toEqual([[{ nilai: { kode: '11', nama_provinsi: 'Aceh' }, operator: {} }]]);
+        expect(wrapper.find('.filter-terpasang').exists()).toBe(false);
+        expect(wrapper.find('.card-header').exists()).toBe(false);
     });
 
-    it('does not emit while the user is still typing within the delay', async () => {
+    it('lists each applied filter with its column label, not unapplied text', async () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode', 'nama_provinsi'], filterValues: { kode: '11' } } });
+
+        await filterButton(wrapper, 'nama_provinsi').trigger('click');
+        await wrapper.find('input.col-filter').setValue('Aceh');
+
+        const chip = wrapper.findAll('.filter-chip');
+        expect(chip).toHaveLength(1);
+        expect(chip[0].text()).toBe(`${columns.kode}: 11`);
+    });
+
+    it('shows the operator and a readable date for operator columns', () => {
+        const wrapper = mount(DataTable, {
+            props: {
+                columns, rows, filterable: ['kode', 'dibuat'], filterAngka: ['kode'], filterTanggal: ['dibuat'],
+                filterValues: { kode: '5', dibuat: '2026-10-31' }, filterOperator: { kode: '>=', dibuat: '<' },
+            },
+        });
+
+        expect(wrapper.findAll('.filter-chip strong').map((n) => n.text())).toEqual(['≥ 5', '< 31 Okt 2026']);
+    });
+
+    it('removes one filter from its chip and all filters from Reset filter', async () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode', 'nama_provinsi'], filterValues: { kode: '11', nama_provinsi: 'Aceh' } } });
+
+        await wrapper.find('.filter-chip-hapus').trigger('click');
+        await wrapper.find('.filter-reset').trigger('click');
+
+        expect(wrapper.emitted('filter')).toEqual([
+            [{ nilai: { kode: '', nama_provinsi: 'Aceh' }, operator: {} }],
+            [{ nilai: { kode: '', nama_provinsi: '' }, operator: {} }],
+        ]);
+    });
+
+    it('offers Reset filter even with a single active filter', () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode'], filterValues: { kode: '11' } } });
+
+        expect(wrapper.find('.filter-reset').text()).toBe('Reset filter');
+    });
+
+    it('focuses the value input when the flyout opens', async () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode'], filterAngka: ['kode'] }, attachTo: document.body });
+
+        await filterButton(wrapper, 'kode').trigger('click');
+        await nextTick();
+
+        expect(document.activeElement).toBe(wrapper.find('input.col-filter').element);
+        wrapper.unmount();
+    });
+
+    it('does not emit while typing, however long the user waits', async () => {
         vi.useFakeTimers();
         const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode'] } });
 
         await filterButton(wrapper, 'kode').trigger('click');
-        const input = wrapper.find('input.col-filter');
-
-        await input.setValue('1');
-        vi.advanceTimersByTime(500);
-        await input.setValue('11');
-        vi.advanceTimersByTime(500);
+        await wrapper.find('input.col-filter').setValue('11');
+        vi.advanceTimersByTime(5000);
 
         expect(wrapper.emitted('filter')).toBeUndefined();
+    });
 
-        vi.advanceTimersByTime(200);
+    it('emits trimmed values with the other active filters when Terapkan is clicked, then closes', async () => {
+        const wrapper = mount(DataTable, {
+            props: { columns, rows, filterable: ['kode', 'nama_provinsi'], filterValues: { kode: '11' } },
+        });
+
+        await filterButton(wrapper, 'nama_provinsi').trigger('click');
+        await wrapper.find('input.col-filter').setValue('  Aceh ');
+        await tombolTerapkan(wrapper).trigger('click');
+
+        expect(wrapper.emitted('filter')).toEqual([[{ nilai: { kode: '11', nama_provinsi: 'Aceh' }, operator: {} }]]);
+        expect(wrapper.find('.filter-flyout').exists()).toBe(false);
+    });
+
+    it('applies the filter when Enter is pressed in the input', async () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode'] } });
+
+        await filterButton(wrapper, 'kode').trigger('click');
+        await wrapper.find('input.col-filter').setValue('11');
+        await wrapper.find('input.col-filter').trigger('keydown', { key: 'Enter' });
 
         expect(wrapper.emitted('filter')).toEqual([[{ nilai: { kode: '11' }, operator: {} }]]);
     });
 
-    it('keeps text typed during a request when the server echoes older values', async () => {
-        vi.useFakeTimers();
+    it('disables Terapkan and sends nothing until the value differs from the active filter', async () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode'], filterValues: { kode: '11' } } });
+
+        await filterButton(wrapper, 'kode').trigger('click');
+        expect(tombolTerapkan(wrapper).attributes('disabled')).toBeDefined();
+
+        await wrapper.find('input.col-filter').trigger('keydown', { key: 'Enter' });
+        expect(wrapper.emitted('filter')).toBeUndefined();
+
+        await filterButton(wrapper, 'kode').trigger('click');
+        await wrapper.find('input.col-filter').setValue('12');
+        expect(tombolTerapkan(wrapper).attributes('disabled')).toBeUndefined();
+    });
+
+    it('discards unapplied text when the flyout closes or moves to another column', async () => {
+        const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode', 'nama_provinsi'], filterValues: { kode: '11' } } });
+
+        await filterButton(wrapper, 'kode').trigger('click');
+        await wrapper.find('input.col-filter').setValue('99');
+        await filterButton(wrapper, 'nama_provinsi').trigger('click');
+        await filterButton(wrapper, 'kode').trigger('click');
+
+        expect(wrapper.find('input.col-filter').element.value).toBe('11');
+        expect(wrapper.emitted('filter')).toBeUndefined();
+    });
+
+    it('keeps text typed in the open flyout when the server echoes other values', async () => {
         const wrapper = mount(DataTable, { props: { columns, rows, filterable: ['kode'] } });
 
         await filterButton(wrapper, 'kode').trigger('click');
         const input = wrapper.find('input.col-filter');
 
-        await input.setValue('1');
-        vi.advanceTimersByTime(700);
-        // User mengetik lagi sebelum respons request pertama datang.
         await input.setValue('11');
         await wrapper.setProps({ filterValues: { kode: '1' } });
 
         expect(input.element.value).toBe('11');
     });
 
-    it('renders an operator select and emits the chosen operator for numeric columns', async () => {
-        vi.useFakeTimers();
+    it('sends the operator of a numeric column when Terapkan is clicked', async () => {
         const wrapper = mount(DataTable, {
             props: { columns, rows, filterable: ['kode'], filterAngka: ['kode'] },
         });
 
         await filterButton(wrapper, 'kode').trigger('click');
         await wrapper.find('select.col-filter-op').setValue('<');
-        vi.advanceTimersByTime(700);
+        await tombolTerapkan(wrapper).trigger('click');
 
         expect(wrapper.emitted('filter')).toEqual([[{ nilai: { kode: '' }, operator: { kode: '<' } }]]);
     });
 
     it('uses a datepicker with an operator select for date columns', async () => {
-        vi.useFakeTimers();
         const wrapper = mount(DataTable, {
             props: { columns, rows, filterable: ['dibuat'], filterAngka: [], filterTanggal: ['dibuat'] },
         });
@@ -144,8 +223,9 @@ describe('DataTable filter', () => {
 
         await wrapper.find('.filter-flyout .datepicker-input').trigger('click');
         await wrapper.find('.datepicker-hari:not(.datepicker-hari-luar)').trigger('click');
+        expect(wrapper.emitted('filter')).toBeUndefined();
 
-        vi.advanceTimersByTime(700);
+        await tombolTerapkan(wrapper).trigger('click');
 
         const [[filter]] = wrapper.emitted('filter');
         expect(filter.nilai.dibuat).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -160,7 +240,6 @@ describe('DataTable filter', () => {
 
         await filterButton(wrapper, 'kode').trigger('click');
         await wrapper.find('.filter-flyout-aksi button').trigger('click');
-        vi.advanceTimersByTime(700);
 
         expect(wrapper.find('.filter-flyout').exists()).toBe(false);
         expect(wrapper.emitted('filter')).toEqual([[{ nilai: { kode: '' }, operator: {} }]]);
