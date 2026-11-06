@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Menu\SumberTabel;
 use Illuminate\Database\Query\Builder;
@@ -54,7 +54,7 @@ class SumberCanvassing implements SumberTabel
             ->when($hanyaDiterima, fn ($w) => $w->whereNotNull('c.diterima_at'))
             ->when($mode === 'kembali', fn ($w) => $w->whereNotNull('c.dikembalikan_at'));
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     public function query(?User $user): Builder

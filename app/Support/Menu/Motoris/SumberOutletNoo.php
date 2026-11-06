@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Menu\SumberTabel;
 use Illuminate\Database\Query\Builder;
@@ -41,7 +41,7 @@ class SumberOutletNoo implements SumberTabel
                 'ko.nama as koordinator_name', 'b.status',
             ]);
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     public function ubahBaris(object $baris): object

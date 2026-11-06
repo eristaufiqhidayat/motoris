@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Kendala\LaporanKendala;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
@@ -17,7 +18,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 // Laporan Kendala Lapangan (spec 064): koordinator mencatat kendala operasional, atasan membaca sesuai cakupan role.
-// Daftar dibatasi Akses::batasiKaryawan terhadap karyawan PELAPOR (mk_karyawan): downline = laporan sendiri dan
+// Daftar dibatasi Cakupan terhadap karyawan PELAPOR (mk_karyawan): downline = laporan sendiri dan
 // koordinator di bawahnya, depo = pelapor di depo akun, semua = semua laporan.
 class LaporanKendalaController extends Controller
 {
@@ -26,7 +27,7 @@ class LaporanKendalaController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $cakupan = Akses::cakupan($user);
+        $cakupan = Cakupan::untuk($user)->mode();
 
         $status = $request->query('status');
         $status = $status === 'semua' || isset(LaporanKendala::STATUS[$status]) ? $status : LaporanKendala::STATUS_TERBUKA;

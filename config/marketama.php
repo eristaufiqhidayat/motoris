@@ -898,6 +898,10 @@ return [
         ],
     ],
 
+    // Cakupan halaman menu umum (MenuController, rute /{slug}) untuk akun bercakupan selain "semua":
+    // halaman terbuka bila tabelnya punya 'sumber' (SumberTabel yang menerima $user), halamannya punya rute sendiri,
+    // atau ditandai 'cakupan' => 'master' (data referensi/pengaturan, bukan data per karyawan).
+    // Selain itu tertutup (disembunyikan dari sidebar, 403 bila dibuka lewat URL). Lihat App\Support\Akses\Cakupan::halamanTerbuka.
     'pages' => [
         // Halaman sendiri (BackupDataController); entri ini untuk judul, breadcrumb dan hak menu.
         'backup_data' => [
@@ -1006,6 +1010,7 @@ return [
             'same_as' => 'lap_checkin_checkout',
         ],
         'template_barang_canvassing' => [
+            'cakupan' => 'master',
             'title' => 'Template Barang Canvassing',
             'tables' => [
                 'template_barang_canvassing',
@@ -1582,6 +1587,7 @@ return [
             'same_as' => null,
         ],
         'kategori_surat_peringatan' => [
+            'cakupan' => 'master',
             'title' => 'Kategori Surat Peringatan',
             'tables' => [
                 'kategori_surat_peringatan',
@@ -1617,6 +1623,7 @@ return [
             'same_as' => null,
         ],
         'panduan' => [
+            'cakupan' => 'master',
             'title' => 'Panduan',
             'tables' => [
                 'panduan',
@@ -1624,6 +1631,7 @@ return [
             'same_as' => null,
         ],
         'pengumuman' => [
+            'cakupan' => 'master',
             'title' => 'Pengumuman',
             'tables' => [
                 'pengumuman',
@@ -1694,6 +1702,7 @@ return [
             'sticky_columns' => ['nama'],
         ],
         'wilayah_depo' => [
+            'cakupan' => 'master',
             'title' => 'Wilayah Depo',
             'tables' => [
                 'wilayah_depo',
@@ -1701,6 +1710,7 @@ return [
             'same_as' => null,
         ],
         'master_project' => [
+            'cakupan' => 'master',
             'title' => 'Master Project',
             'tables' => [
                 'master_project',
@@ -1708,6 +1718,7 @@ return [
             'same_as' => null,
         ],
         'holiday_dates' => [
+            'cakupan' => 'master',
             'title' => 'Tanggal Libur',
             'tables' => [
                 'holiday_dates',
@@ -1715,6 +1726,7 @@ return [
             'same_as' => null,
         ],
         'waktu_aktif_app' => [
+            'cakupan' => 'master',
             'title' => 'Hari Kerja Aktif',
             'tables' => [
                 'waktu_aktif_app',
@@ -1722,6 +1734,7 @@ return [
             'same_as' => null,
         ],
         'target_setting' => [
+            'cakupan' => 'master',
             'title' => 'Setting Target',
             'tables' => [
                 'target_setting',
@@ -1729,6 +1742,7 @@ return [
             'same_as' => null,
         ],
         'provinsi' => [
+            'cakupan' => 'master',
             'title' => 'Provinsi',
             'tables' => [
                 'provinsi',
@@ -1736,6 +1750,7 @@ return [
             'same_as' => null,
         ],
         'city_group' => [
+            'cakupan' => 'master',
             'title' => 'City Group',
             'tables' => [
                 'city_group',
@@ -1743,6 +1758,7 @@ return [
             'same_as' => null,
         ],
         'kota_kabupaten' => [
+            'cakupan' => 'master',
             'title' => 'Kota Kabupaten',
             'tables' => [
                 'kota_kabupaten',
@@ -1750,6 +1766,7 @@ return [
             'same_as' => null,
         ],
         'kecamatan' => [
+            'cakupan' => 'master',
             'title' => 'Kecamatan',
             'tables' => [
                 'kecamatan',
@@ -1757,6 +1774,7 @@ return [
             'same_as' => null,
         ],
         'kelurahan' => [
+            'cakupan' => 'master',
             'title' => 'Kelurahan',
             'tables' => [
                 'kelurahan',
@@ -1764,6 +1782,7 @@ return [
             'same_as' => null,
         ],
         'kategori_user' => [
+            'cakupan' => 'master',
             'title' => 'Kategori User',
             'tables' => [
                 'kategori_user',
@@ -1771,6 +1790,7 @@ return [
             'same_as' => null,
         ],
         'kategori_karyawan' => [
+            'cakupan' => 'master',
             'title' => 'Kategori Karyawan',
             'tables' => [
                 'kategori_karyawan',
@@ -1778,6 +1798,7 @@ return [
             'same_as' => null,
         ],
         'tipe_outlet' => [
+            'cakupan' => 'master',
             'title' => 'Tipe Outlet',
             'tables' => [
                 'tipe_outlet',
@@ -1785,6 +1806,7 @@ return [
             'same_as' => null,
         ],
         'kategori_outlet' => [
+            'cakupan' => 'master',
             'title' => 'Kategori Outlet',
             'tables' => [
                 'kategori_outlet',
@@ -1792,6 +1814,7 @@ return [
             'same_as' => null,
         ],
         'rumus_insentif_point_sales' => [
+            'cakupan' => 'master',
             'title' => 'Rumus Insentif Poin Sales',
             'tables' => [
                 'rumus_insentif_point_sales_0',
@@ -1800,6 +1823,7 @@ return [
             'same_as' => null,
         ],
         'sales_point_conversion_per_warehouse' => [
+            'cakupan' => 'master',
             'title' => 'Konversi Poin Per Depo',
             'tables' => [
                 'sales_point_conversion_per_warehouse',
@@ -1807,6 +1831,7 @@ return [
             'same_as' => null,
         ],
         'rumus_insentif_sales' => [
+            'cakupan' => 'master',
             'title' => 'Rumus Insentif Sales',
             'tables' => [
                 'rumus_insentif_sales',
@@ -1814,6 +1839,7 @@ return [
             'same_as' => null,
         ],
         'rumus_insentif_koordinator' => [
+            'cakupan' => 'master',
             'title' => 'Rumus Insentif Koordinator',
             'tables' => [
                 'rumus_insentif_koordinator',

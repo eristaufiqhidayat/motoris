@@ -3,7 +3,7 @@
 namespace App\Support\Menu;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -35,7 +35,7 @@ class SumberOutletBaru implements SumberTabel
             ->orderByRaw("CASE WHEN b.status = 'menunggu' THEN 0 ELSE 1 END")
             ->orderByDesc('b.id');
 
-        return Akses::batasiKaryawan($query, $user);
+        return Cakupan::untuk($user)->batasi($query);
     }
 
     public function ubahBaris(object $baris): object

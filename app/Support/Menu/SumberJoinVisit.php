@@ -3,7 +3,7 @@
 namespace App\Support\Menu;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -36,7 +36,7 @@ class SumberJoinVisit implements SumberTabel
             ])
             ->orderByDesc('j.tanggal')->orderByDesc('j.mulai_at')->orderByDesc('j.id');
 
-        return Akses::batasiKaryawan($query, $user);
+        return Cakupan::untuk($user)->batasi($query);
     }
 
     public function ubahBaris(object $baris): object

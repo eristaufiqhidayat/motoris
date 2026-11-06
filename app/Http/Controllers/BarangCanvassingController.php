@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Admin\KuotaMotorisController;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\Motoris\SumberCanvassing;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -133,7 +133,7 @@ class BarangCanvassingController extends Controller
     public function opsi(Request $request)
     {
         $depo = $request->integer('depo');
-        $cakupan = KuotaMotorisController::depoCakupan($request);
+        $cakupan = Cakupan::untuk($request->user())->depoIds();
 
         return response()->json([
             'tanggal' => now(config('mobile.zona_waktu'))->toDateString(),
@@ -202,6 +202,6 @@ class BarangCanvassingController extends Controller
             ->where('k.kategori', 'sales')->where('ko.kategori', 'koordinator')
             ->where('k.aktif', true)->where('k.depo_id', $depo);
 
-        return Akses::batasiKaryawan($q, $request->user());
+        return Cakupan::untuk($request->user())->batasi($q);
     }
 }

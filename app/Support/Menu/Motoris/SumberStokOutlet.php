@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Menu\SumberTabel;
 use Illuminate\Database\Query\Builder;
@@ -47,7 +47,7 @@ class SumberStokOutlet implements SumberTabel
             ])
             ->selectSub($beli->limit(1), 'beli');
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     public function ubahBaris(object $baris): object

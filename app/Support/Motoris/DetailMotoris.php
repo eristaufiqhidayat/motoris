@@ -4,6 +4,7 @@ namespace App\Support\Motoris;
 
 use App\Models\User;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Karyawan\TanggalBebas;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
@@ -29,13 +30,10 @@ class DetailMotoris
     /** Motoris (kategori sales) dalam cakupan role akun, atau null. */
     public static function untuk(?User $user, int $id, string $dari, string $sampai): ?self
     {
-        $motoris = Akses::batasiKaryawan(
-            DB::table('mk_karyawan as k')
-                ->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')
-                ->leftJoin('mk_karyawan as ko', 'ko.id', '=', 'k.koordinator_id')
-                ->where('k.kategori', 'sales')->where('k.id', $id),
-            $user
-        )->first(['k.id', 'k.nama', 'k.no_hp', 'k.tanggal_mulai', 'k.aktif', 'k.foto', 'k.depo_id', 'd.nama as depo', 'ko.nama as koordinator']);
+        $motoris = Cakupan::untuk($user)->batasi(DB::table('mk_karyawan as k')
+            ->leftJoin('mk_depo as d', 'd.id', '=', 'k.depo_id')
+            ->leftJoin('mk_karyawan as ko', 'ko.id', '=', 'k.koordinator_id')
+            ->where('k.kategori', 'sales')->where('k.id', $id))->first(['k.id', 'k.nama', 'k.no_hp', 'k.tanggal_mulai', 'k.aktif', 'k.foto', 'k.depo_id', 'd.nama as depo', 'ko.nama as koordinator']);
 
         return $motoris ? new self($motoris, $dari, $sampai) : null;
     }

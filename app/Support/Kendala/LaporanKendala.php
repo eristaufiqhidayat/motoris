@@ -4,6 +4,7 @@ namespace App\Support\Kendala;
 
 use App\Models\User;
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -36,10 +37,7 @@ class LaporanKendala
     /** Laporan (alias l) yang pelapornya (alias k) masuk cakupan role akun. */
     public static function dalamCakupan(?User $user): Builder
     {
-        return Akses::batasiKaryawan(
-            DB::table('laporan_kendala as l')->join('mk_karyawan as k', 'k.id', '=', 'l.karyawan_id'),
-            $user,
-        );
+        return Cakupan::untuk($user)->batasi(DB::table('laporan_kendala as l')->join('mk_karyawan as k', 'k.id', '=', 'l.karyawan_id'));
     }
 
     /** Laporan Terbuka dalam cakupan yang dilaporkan orang lain dan belum pernah dibuka akun ini (dasar lencana Belum dibaca). */
@@ -81,7 +79,7 @@ class LaporanKendala
         }
 
         $terbuka = self::dalamCakupan($user)->where('l.status', self::STATUS_TERBUKA);
-        $tim = Akses::cakupan($user) === 'downline';
+        $tim = Cakupan::untuk($user)->tim();
         $daftar = $tim ? (clone $terbuka) : self::belumDibaca($user);
 
         return [
@@ -110,7 +108,7 @@ class LaporanKendala
 
         $balasan = self::adaBalasanBaru($user)->count();
 
-        if (Akses::cakupan($user) === 'downline') {
+        if (Cakupan::untuk($user)->tim()) {
             return $balasan ?: null;
         }
 

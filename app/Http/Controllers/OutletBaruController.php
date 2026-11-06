@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Outlet\VerifikasiOutletBaru;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,7 +49,7 @@ class OutletBaruController extends Controller
         abort_if(Akses::penuh($request->user()), 403, 'Outlet baru diverifikasi oleh koordinator, bukan admin.');
 
         $karyawanId = DB::table('trx_outlet_baru')->where('id', $id)->value('karyawan_id') ?? abort(404);
-        $boleh = Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.id', $karyawanId), $request->user())->exists();
+        $boleh = Cakupan::untuk($request->user())->batasi(DB::table('mk_karyawan as k')->where('k.id', $karyawanId))->exists();
 
         abort_unless($boleh, 403, 'Outlet ini di luar cakupan akun Anda.');
     }

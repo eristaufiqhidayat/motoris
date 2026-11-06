@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Tracking\AnomaliGps;
 use App\Support\Tracking\AnomaliJarakKunjungan;
@@ -27,6 +27,9 @@ class TrackingSalesController extends Controller
         ]);
 
         $id = (int) $data['sales_id'];
+        // Rute GPS, kunjungan, dan KPI hanya untuk motoris dalam cakupan role akun.
+        abort_unless(Cakupan::untuk($request->user())->mencakup($id), 404);
+
         $sales = DB::table('tracking_sales')->where('sales_id', $id)->first()
             ?? $this->daftarSales()->firstWhere('id', $id);
 
@@ -42,10 +45,7 @@ class TrackingSalesController extends Controller
         $locations = $lama->concat(TitikGps::untuk($id, $data['tanggal']))
             ->sortBy('waktu')->values();
 
-        // Kunjungan outlet hanya untuk motoris dalam cakupan role akun (rute GPS di atas tidak dibatasi cakupan).
-        $dalamCakupan = Akses::batasiKaryawan(DB::table('mk_karyawan as k')->where('k.id', $id), $request->user())->exists();
-
-        $kunjungan = $dalamCakupan ? KunjunganHarian::untuk($id, $data['tanggal']) : collect();
+        $kunjungan = KunjunganHarian::untuk($id, $data['tanggal']);
 
         return response()->json([
             'sales' => $sales,
@@ -59,7 +59,7 @@ class TrackingSalesController extends Controller
             // (bisa lebih dari satu per hari), urut dari yang terpanjang; array kosong bila tidak ada.
             'indikasi_jarak_kunjungan' => AnomaliJarakKunjungan::analisis($kunjungan, $request->integer('jarak_dekat_m') ?: null, $request->integer('min_kunjungan') ?: null),
             // Call dan Effective Call hari itu terhadap targetnya (pengaturan per depo, sama dengan KPI di aplikasi HP).
-            'kpi' => $dalamCakupan ? $this->kpiHari($id, $data['tanggal'], $kunjungan->count()) : null,
+            'kpi' => $this->kpiHari($id, $data['tanggal'], $kunjungan->count()),
         ]);
     }
 

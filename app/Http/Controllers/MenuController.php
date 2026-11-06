@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\SumberBerstatus;
 use App\Support\Menu\SumberBertanggal;
 use App\Support\Mobile\Pengaturan;
@@ -101,6 +102,11 @@ class MenuController extends Controller
             $sumber = $kelasSumber ? app($kelasSumber) : null;
 
             if (! Schema::hasTable($sumber?->tabelUtama() ?? $table)) {
+                continue;
+            }
+
+            // Akun bercakupan sempit tidak melihat tabel mentah yang belum menyatakan cakupannya (lihat Cakupan::halamanTerbuka).
+            if (! Cakupan::untuk($request->user())->tabelTerbuka($slug, $table)) {
                 continue;
             }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Kendala\LaporanKendala;
 use App\Support\Menu\JamLokal;
 use App\Support\Mobile\Pengaturan;
@@ -23,7 +24,7 @@ use Inertia\Response;
 
 // Menu Utama › Beranda: dashboard interaktif data motoris, menggantikan halaman placeholder generik slug
 // "home" (lihat MenuController) yang sebelumnya tidak punya tabel (config('marketama.pages.home.tables')
-// === []). Versi berbeda per cakupan role (lihat Akses::cakupan): akun bercakupan "semua"/"depo" (Super
+// === []). Versi berbeda per cakupan role (lihat Cakupan): akun bercakupan "semua"/"depo" (Super
 // Admin, role "Lainnya", dst.) memakai Home/Dashboard — ringkasan nasional (KPI, funnel outlet, tren
 // penjualan, depo teratas); akun bercakupan "downline" (Koordinator) memakai Home/DashboardKoordinator —
 // tim sendiri (lihat SummaryDepo::detail, dipakai juga oleh Summary All Depo), bukan ranking antar-depo
@@ -48,7 +49,7 @@ class HomeController extends Controller
 
     public function index(Request $request): Response
     {
-        if (Akses::cakupan($request->user()) === 'downline') {
+        if (Cakupan::untuk($request->user())->tim()) {
             return self::koordinator($request);
         }
 
@@ -144,7 +145,7 @@ class HomeController extends Controller
      */
     public function sinkronTemuan(Request $request): RedirectResponse
     {
-        abort_unless(Akses::cakupan($request->user()) === 'downline', 403);
+        abort_unless(Cakupan::untuk($request->user())->tim(), 403);
 
         $hariIni = Pengaturan::sekarang()->toDateString();
         $data = $request->validate([
@@ -175,10 +176,10 @@ class HomeController extends Controller
         Cache::forget('beranda:tanda_outlet:user_'.$request->user()?->id);
     }
 
-    /** Id sales motoris aktif dalam cakupan akun (Akses::batasiKaryawan, jadi koordinator bertingkat tetap tim sendiri). */
+    /** Id sales motoris aktif dalam cakupan akun (Cakupan, jadi koordinator bertingkat tetap tim sendiri). */
     private static function motorisCakupan(Request $request): array
     {
-        return Akses::batasiKaryawan(DB::table('mk_karyawan as k'), $request->user())
+        return Cakupan::untuk($request->user())->karyawan()
             ->where('k.kategori', 'sales')->where('k.aktif', true)->pluck('k.id')->map(fn ($id) => (int) $id)->all();
     }
 
@@ -190,7 +191,7 @@ class HomeController extends Controller
      */
     private static function temuan(Request $request, string $dari, string $sampai): array
     {
-        $motoris = Akses::batasiKaryawan(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'), $request->user())
+        $motoris = Cakupan::untuk($request->user())->batasi(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'))
             ->where('tm.status', 'perlu_dicek')
             ->orderByDesc('tm.tanggal')->orderBy('k.nama')
             ->get(['tm.id', 'tm.karyawan_id', 'k.nama as motoris', 'tm.tanggal', 'tm.kategori', 'tm.catatan'])
@@ -302,7 +303,7 @@ class HomeController extends Controller
     }
 
     /**
-     * Beranda admin: jumlah sales motoris aktif dalam cakupan akun (Akses::batasiKaryawan) yang sudah absen datang
+     * Beranda admin: jumlah sales motoris aktif dalam cakupan akun (Cakupan) yang sudah absen datang
      * hari ini (trx_absensi.masuk_at terisi), dibanding seluruh motoris aktif. Aturan hadir sama dengan absenHariIni.
      *
      * @return array{hadir: int, total: int, tanggal: string}
@@ -310,7 +311,7 @@ class HomeController extends Controller
     private static function absenHariIniAdmin(Request $request): array
     {
         $hariIni = Pengaturan::sekarang()->toDateString();
-        $motoris = fn () => Akses::batasiKaryawan(DB::table('mk_karyawan as k'), $request->user())
+        $motoris = fn () => Cakupan::untuk($request->user())->karyawan()
             ->where('k.kategori', 'sales')->where('k.aktif', true);
 
         $hadir = (int) $motoris()->whereExists(fn ($e) => $e->selectRaw('1')->from('trx_absensi as a')
@@ -361,7 +362,7 @@ class HomeController extends Controller
     {
         $sekarang = Pengaturan::sekarang();
         $batas = self::batasCheckinPagi();
-        $motoris = fn () => Akses::batasiKaryawan(DB::table('mk_karyawan as k'), $request->user())
+        $motoris = fn () => Cakupan::untuk($request->user())->karyawan()
             ->where('k.kategori', 'sales')->where('k.aktif', true);
 
         $sudah = (int) $motoris()->whereExists(fn ($e) => $e->selectRaw('1')->from('trx_kunjungan as v')
@@ -430,7 +431,7 @@ class HomeController extends Controller
     {
         abort_unless(Akses::bisa($request->user(), 'motoris_ditandai'), 403);
 
-        $baris = Akses::batasiKaryawan(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'), $request->user())
+        $baris = Cakupan::untuk($request->user())->batasi(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'))
             ->where('tm.status', 'perlu_dicek')->orderByDesc('tm.tanggal')->orderByDesc('tm.id')
             ->get(['tm.id', 'k.nama as motoris', 'tm.tanggal', 'tm.kategori', 'tm.dibuat_nama as ditandai_oleh'])
             ->map(fn ($b) => [
@@ -468,7 +469,7 @@ class HomeController extends Controller
      * Tanda motoris (tanda_motoris, lihat App\Support\Menu\Motoris\SumberTandaMotoris) berstatus Perlu dicek pada
      * tim koordinator — lepas dari tanggal tanda itu sendiri, sama seperti tandaOutlet, supaya tanda lama yang belum
      * diperiksa tidak hilang dari ringkasan ini. Cakupannya sama dengan "Rekap Motoris
-     * Ditandai" (Akses::batasiKaryawan), supaya berapa pun koordinator di-nest tetap melihat tim sendiri saja.
+     * Ditandai" (Cakupan), supaya berapa pun koordinator di-nest tetap melihat tim sendiri saja.
      *
      * @return array{motoris: int, total: int}
      */
@@ -477,7 +478,7 @@ class HomeController extends Controller
         $kunci = 'beranda:tanda:user_'.$request->user()?->id;
 
         return Cache::remember($kunci, self::CACHE_TTL, function () use ($request) {
-            $q = Akses::batasiKaryawan(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'), $request->user())
+            $q = Cakupan::untuk($request->user())->batasi(DB::table('tanda_motoris as tm')->join('mk_karyawan as k', 'k.id', '=', 'tm.karyawan_id'))
                 ->where('tm.status', 'perlu_dicek');
 
             return ['motoris' => (int) (clone $q)->distinct()->count('tm.karyawan_id'), 'total' => (int) (clone $q)->count()];
@@ -516,7 +517,7 @@ class HomeController extends Controller
      */
     private static function outletTimQuery(Request $request): ?Builder
     {
-        $tim = Akses::batasiKaryawan(DB::table('mk_karyawan as k'), $request->user())->pluck('k.nama', 'k.id');
+        $tim = Cakupan::untuk($request->user())->karyawan()->pluck('k.nama', 'k.id');
 
         if ($tim->isEmpty()) {
             return null;
@@ -541,7 +542,7 @@ class HomeController extends Controller
      */
     private static function ringkasanDepo(SummaryDepo $summary, Request $request): array
     {
-        $cakupan = Akses::cakupan($request->user()) === 'semua' ? 'semua' : 'user_'.($request->user()?->id ?? 0);
+        $cakupan = Cakupan::untuk($request->user())->kunci();
         $kunci = "beranda:depo:{$summary->dari}:{$summary->sampai}:{$cakupan}";
 
         return Cache::remember($kunci, self::CACHE_TTL, function () use ($summary) {
@@ -569,7 +570,7 @@ class HomeController extends Controller
         $hariIni = Pengaturan::sekarang();
         $sampaiLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI)->toDateString();
         $dariLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI * 2 - 1)->toDateString();
-        $cakupan = Akses::cakupan($request->user()) === 'semua' ? 'semua' : 'user_'.($request->user()?->id ?? 0);
+        $cakupan = Cakupan::untuk($request->user())->kunci();
 
         // IPT = SKU ÷ EC periode itu (rasio, bukan jumlah).
         $ringkas = fn (string $d, string $s, array $kpi, array $sebar): array => [
@@ -612,7 +613,7 @@ class HomeController extends Controller
         $hariIni = Pengaturan::sekarang();
         $sampaiLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI)->toDateString();
         $dariLalu = $hariIni->copy()->subDays(self::RENTANG_BERANDA_HARI * 2 - 1)->toDateString();
-        $cakupan = Akses::cakupan($request->user()) === 'semua' ? 'semua' : 'user_'.($request->user()?->id ?? 0);
+        $cakupan = Cakupan::untuk($request->user())->kunci();
 
         return Cache::remember("beranda:koordinator:{$dari}:{$sampai}:{$cakupan}", self::CACHE_TTL, function () use ($request, $dari, $sampai, $dariLalu, $sampaiLalu) {
             $kini = new KinerjaKoordinator($dari, $sampai, $request->user());

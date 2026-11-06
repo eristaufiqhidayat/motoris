@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Menu\SumberBerstatus;
 use App\Support\Mobile\Pengaturan;
@@ -65,7 +65,7 @@ abstract class SumberLastSeen implements SumberBerstatus
             $q->selectSub($outlet('COUNT(*)'), 'ditandai_outlet')->selectSub($outlet('MAX(tout.created_at)'), 'ditandai_outlet_waktu');
         }
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     public function ubahBaris(object $baris): object

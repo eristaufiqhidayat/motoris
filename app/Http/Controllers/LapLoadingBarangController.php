@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Akses\Cakupan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,19 @@ class LapLoadingBarangController extends Controller
             'distributor_id' => ['nullable', 'integer'],
             'distributor_name' => ['required_without:distributor_id', 'nullable', 'string', 'max:255'],
         ]);
+
+        // Akun bercakupan hanya melihat distributor di depo dalam cakupannya (distributor dicocokkan lewat id, atau nama bila tanpa id).
+        $depo = Cakupan::untuk($request->user())->depoIds();
+
+        if ($depo !== null) {
+            $boleh = DB::table('mk_distributor')->whereIn('depo_id', $depo)
+                ->when(! empty($data['distributor_id']),
+                    fn ($q) => $q->where('id', $data['distributor_id']),
+                    fn ($q) => $q->where('nama', $data['distributor_name']))
+                ->exists();
+
+            abort_unless($boleh, 404);
+        }
 
         $query = DB::table('lap_loading_barang');
 

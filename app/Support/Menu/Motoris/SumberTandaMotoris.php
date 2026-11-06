@@ -3,7 +3,7 @@
 namespace App\Support\Menu\Motoris;
 
 use App\Models\User;
-use App\Support\Akses\Akses;
+use App\Support\Akses\Cakupan;
 use App\Support\Menu\JamLokal;
 use App\Support\Menu\SumberBerstatus;
 use Illuminate\Database\Query\Builder;
@@ -33,7 +33,7 @@ class SumberTandaMotoris implements SumberBerstatus
             ])
             ->orderByDesc('tm.tanggal')->orderByDesc('tm.id');
 
-        return Akses::batasiKaryawan($q, $user);
+        return Cakupan::untuk($user)->batasi($q);
     }
 
     public function ubahBaris(object $baris): object
