@@ -5,56 +5,104 @@ namespace Tests\Feature\Mobile;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
-// Absen dan checkin depo TERPISAH (keputusan 28 Okt 2026, lihat claude/menu-absensi-master-area.md):
-// absen dicek terhadap area kerja (Master Area), checkin/checkout depo terhadap radius depo. Lihat juga
-// HariKerjaSalesTest (langkah 2 & 5) untuk alur gabungan satu hari kerja lengkap.
+// Absen Datang/Pulang dan checkin/checkout depo TERPISAH, tapi keduanya kini dicek terhadap lokasi
+// Depo (klarifikasi product owner 2026-10-30, lihat docs/BUSINESS_RULES.md §3): absen memakai radius
+// ketat mobile.absen_radius_depo_m (bawaan 15 m), checkin/checkout depo (loading barang) tetap
+// mobile.radius_depo_m (bawaan 100 m). Lihat juga HariKerjaSalesTest (langkah 2 & 5) untuk alur
+// gabungan satu hari kerja lengkap.
 class AbsenCheckinDepoTest extends MobileApiTestCase
 {
     public function test_absen_masuk_tidak_membuat_checkin_depo(): void
     {
         $this->sales();
         $this->login();
-        $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $this->foto()])
+        $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()])
             ->assertCreated()->assertJsonMissingPath('data.depot_visit_id');
 
         $this->assertSame(0, DB::table('trx_checkin_depo')->count());
     }
 
-    public function test_absen_ditolak_di_luar_area_kerja_tapi_dekat_depo(): void
+    public function test_absen_dalam_radius_15m_diterima_dan_jarak_disimpan(): void
     {
         $this->sales();
         $this->login();
 
-        // Jauh di luar polygon area 10 meski cukup dekat dengan depo (radius depo tidak lagi dipakai di sini).
+        $r = $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()])
+            ->assertCreated();
+        $jarak = $r->json('data.distance_to_depot_m');
+
+        $this->assertLessThanOrEqual(15, $jarak);
+        $this->assertSame($jarak, DB::table('trx_absensi')->value('masuk_jarak_m'));
+    }
+
+    public function test_absen_ditolak_di_luar_radius_15m_meski_dekat_secara_lama(): void
+    {
+        $this->sales();
+        $this->login();
+
+        // diDepo() sengaja ±15,6 m dari depo (lihat MobileApiTestCase): dalam radius checkin depo lama
+        // (100 m) tapi di luar radius Absen Datang/Pulang baru (15 m).
         $this->assertError(
-            $this->api('POST', 'attendances/check-in', ['lat' => -6.3, 'lng' => 106.8, 'photo_id' => $this->foto()]),
+            $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $this->foto()]),
             422,
-            'outside_work_area'
-        );
+            'outside_depot_radius'
+        )->assertJsonPath('error.fields.radius_m', 15);
         $this->assertSame(0, DB::table('trx_absensi')->count());
         $this->assertSame(0, DB::table('trx_checkin_depo')->count());
     }
 
-    public function test_absen_ditolak_tanpa_area_kerja_aktif(): void
+    public function test_absen_ditolak_jauh_dari_depo(): void
     {
         $this->sales();
         $this->login();
-        DB::table('mk_karyawan_area')->where('karyawan_id', 1)->delete();
 
         $this->assertError(
-            $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $this->foto()]),
+            $this->api('POST', 'attendances/check-in', ['lat' => -6.3, 'lng' => 106.8, 'photo_id' => $this->foto()]),
+            422,
+            'outside_depot_radius'
+        );
+        $this->assertSame(0, DB::table('trx_absensi')->count());
+    }
+
+    public function test_absen_ditolak_tanpa_depo(): void
+    {
+        $this->sales();
+        DB::table('mk_karyawan')->where('id', 1)->update(['depo_id' => null]);
+        $this->login();
+
+        $this->assertError(
+            $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()]),
             409,
-            'no_work_area'
+            'no_depot'
         );
     }
 
-    public function test_absen_koordinator_dicek_terhadap_gabungan_area_tim(): void
+    public function test_absen_pulang_juga_dicek_radius_depo(): void
+    {
+        $this->sales();
+        $this->login();
+        $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()])->assertCreated();
+
+        $this->assertError(
+            $this->api('POST', 'attendances/check-out', $this->diDepo()),
+            422,
+            'outside_depot_radius'
+        );
+        $this->assertNull(DB::table('trx_absensi')->value('pulang_at'));
+
+        $r = $this->api('POST', 'attendances/check-out', $this->diDepoDekat())->assertOk();
+        $this->assertLessThanOrEqual(15, $r->json('data.distance_to_depot_m'));
+        $this->assertNotNull(DB::table('trx_absensi')->value('pulang_at'));
+        $this->assertNotNull(DB::table('trx_absensi')->value('pulang_jarak_m'));
+    }
+
+    public function test_absen_koordinator_juga_dicek_radius_depo(): void
     {
         User::factory()->create(['username' => 'koor', 'password' => 'rahasia123', 'kategori' => 'koordinator', 'karyawan_id' => 137]);
         $this->login('koor');
 
-        // Di dalam polygon area 10 (area aktif sales 1 & 2, bawahan koordinator 137): diterima.
-        $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $this->foto()])
+        // Koordinator 137 di depo yang sama (46): radius 15 m juga berlaku, bukan gabungan area tim.
+        $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()])
             ->assertCreated()->assertJsonMissingPath('data.depot_visit_id');
         $this->assertSame(0, DB::table('trx_checkin_depo')->count());
     }
@@ -65,7 +113,8 @@ class AbsenCheckinDepoTest extends MobileApiTestCase
         $this->login();
         $this->assertError($this->api('POST', 'depot-visits/check-in', $this->diDepo()), 409, 'not_checked_in');
 
-        $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $this->foto()])->assertCreated();
+        $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $this->foto()])->assertCreated();
+        // Checkin depo tetap radius lama (100 m): diDepo() (±15,6 m) tetap diterima di sini.
         $this->api('POST', 'depot-visits/check-in', $this->diDepo())->assertCreated();
         $this->assertSame(1, DB::table('trx_checkin_depo')->count());
 

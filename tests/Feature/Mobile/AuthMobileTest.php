@@ -146,7 +146,7 @@ class AuthMobileTest extends MobileApiTestCase
         $this->assertError($this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $selfie], false), 422, 'idempotency_key_required');
 
         $kunci = (string) Str::uuid();
-        $this->api('POST', 'attendances/check-in', $this->diDepo() + ['photo_id' => $selfie], $kunci)->assertCreated();
+        $this->api('POST', 'attendances/check-in', $this->diDepoDekat() + ['photo_id' => $selfie], $kunci)->assertCreated();
         $this->assertError($this->api('POST', 'depot-visits/check-in', $this->diDepo(), $kunci), 409, 'idempotency_key_reused');
 
         // Respons gagal tidak disimpan: kunci yang sama boleh dipakai setelah diperbaiki.

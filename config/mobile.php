@@ -18,6 +18,11 @@ return [
 
     // Jarak (meter). (konfirmasi)
     'radius_depo_m' => (int) env('MOBILE_RADIUS_DEPO_M', 100),
+    // Radius Absen Datang/Pulang terhadap lokasi Depo — klarifikasi product owner 2026-10-30 (lihat
+    // docs/BUSINESS_RULES.md §3): absen terjadi di Depo, bukan di area kerja. Sengaja dipisah dari
+    // radius_depo_m (dipakai checkin/checkout depo untuk loading barang, lihat §4) karena ambang yang
+    // diminta jauh lebih ketat (15 m) daripada radius depo lama (100 m).
+    'absen_radius_depo_m' => (int) env('MOBILE_ABSEN_RADIUS_DEPO_M', 15),
     'radius_outlet_m' => (int) env('MOBILE_RADIUS_OUTLET_M', 100),
     'radius_duplikat_m' => (int) env('MOBILE_RADIUS_DUPLIKAT_M', 20),
 
@@ -62,9 +67,9 @@ return [
     // Tipe outlet bila tabel tipe_outlet kosong.
     'tipe_outlet_default' => ['Warung', 'Toko', 'Grosir', 'Minimarket', 'Kios'],
 
-    // Pemeriksaan lokasi saat absen masuk: titik GPS harus di dalam salah satu area kerja aktif
-    // (Master Area) — sales: areanya sendiri; koordinator: gabungan area aktif tim. Bukan radius
-    // depo (itu untuk checkin depo saja, lihat radius_depo_m). Keputusan 28 Okt 2026.
+    // Pemeriksaan lokasi saat absen masuk/pulang: titik GPS harus dalam radius `absen_radius_depo_m`
+    // dari lokasi Depo karyawan. Sebelumnya (28 Okt 2026) ini memvalidasi area kerja (Master Area);
+    // dibatalkan 30 Okt 2026 — Absen Datang/Pulang terjadi DI Depo, lihat docs/BUSINESS_RULES.md §3.
     'absen_cek_lokasi' => (bool) env('MOBILE_ABSEN_CEK_LOKASI', true),
 
     // Tracking GPS.

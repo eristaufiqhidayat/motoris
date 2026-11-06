@@ -5,19 +5,20 @@ namespace App\Http\Controllers\Mobile;
 use App\Support\Mobile\ApiError;
 use App\Support\Mobile\HariKerja;
 use App\Support\Mobile\Pengaturan;
-use App\Support\Mobile\WilayahKerja;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// Absen masuk/pulang dan checkin/checkout depo — TERPISAH (keputusan 28 Okt 2026, lihat
-// claude/menu-absensi-master-area.md): absen dicek terhadap area kerja (Master Area; sales = areanya
-// sendiri, koordinator = gabungan area aktif tim), checkin/checkout depo dicek terhadap radius depo
-// untuk ambil & kembalikan barang canvassing. Dua aksi ini TIDAK saling membuat atau menutup satu sama
-// lain — mobile memanggil keduanya terpisah (AbsenScreen vs CheckinDepoScreen, TutupHariScreen memanggil
-// depot-visits/check-out lalu attendances/check-out). (PR #115 "satukan absen+checkin depo" — di-merge
-// 28 Okt 23:00 tanpa diketahui keputusan ini diambil 22:48 hari yang sama — dibatalkan oleh perubahan ini.)
+// Absen Datang/Pulang dan checkin/checkout depo — TERPISAH, tapi KEDUANYA kini dicek terhadap lokasi
+// Depo (klarifikasi product owner 2026-10-30, lihat docs/BUSINESS_RULES.md §3): Absen Datang/Pulang
+// memakai radius ketat `mobile.absen_radius_depo_m` (15 m), checkin/checkout depo (loading barang
+// canvassing) tetap memakai `mobile.radius_depo_m` (100 m, lebih longgar) — lihat §4, status masih TBD
+// apakah keduanya semestinya satu kejadian. Sebelum 30 Okt, absen sempat dicek terhadap area kerja
+// (Master Area) — keputusan itu DIBATALKAN, lihat docs/BUSINESS_RULES.md "Riwayat perubahan aturan".
+// Dua aksi ini TIDAK saling membuat atau menutup satu sama lain — mobile memanggil keduanya terpisah
+// (AbsenScreen vs CheckinDepoScreen, TutupHariScreen memanggil depot-visits/check-out lalu
+// attendances/check-out).
 class AbsensiController extends MobileController
 {
     public function checkIn(Request $request): JsonResponse
@@ -46,18 +47,12 @@ class AbsensiController extends MobileController
             throw ApiError::konflik('already_checked_in', 'Anda sudah absen masuk hari ini.', ['attendance_id' => (int) $ada->id]);
         }
 
+        $jarak = null;
+
         if (config('mobile.absen_cek_lokasi')) {
-            $areaKerja = WilayahKerja::untukAkun($request->user()->kategori, (int) $karyawan->id);
-
-            if (! $areaKerja) {
-                throw new ApiError('no_work_area', 'Anda belum punya area kerja aktif. Hubungi admin.', 409);
-            }
-
-            if (! WilayahKerja::titikDalam((float) $request->lat, (float) $request->lng, $areaKerja)) {
-                throw new ApiError('outside_work_area', 'Anda di luar area kerja.', 422, [
-                    'work_areas' => array_map(fn ($a) => $a['name'], $areaKerja),
-                ]);
-            }
+            $depo = Pengaturan::depo($karyawan->depo_id ? (int) $karyawan->depo_id : null)
+                ?? throw new ApiError('no_depot', 'Akun belum punya depo. Hubungi admin.', 409);
+            $jarak = $this->cekRadiusDepo($depo, (float) $request->lat, (float) $request->lng, (int) config('mobile.absen_radius_depo_m'));
         }
 
         $terlambat = $pukul > $jam['batas_masuk'];
@@ -72,6 +67,7 @@ class AbsensiController extends MobileController
             'masuk_lat' => $request->lat,
             'masuk_lng' => $request->lng,
             'masuk_akurasi_m' => $request->filled('accuracy_m') ? (int) round((float) $request->accuracy_m) : null,
+            'masuk_jarak_m' => $jarak,
             'masuk_foto_id' => $request->photo_id,
             'terlambat' => $terlambat,
             'mock_location' => $request->boolean('is_mock_location'),
@@ -82,12 +78,13 @@ class AbsensiController extends MobileController
             'date' => $tanggal,
             'checked_in_at' => $sekarang->toIso8601String(),
             'is_late' => $terlambat,
+            'distance_to_depot_m' => $jarak,
         ]);
     }
 
     public function checkOut(Request $request): JsonResponse
     {
-        $request->validate($this->aturanUmum() + $this->aturanLokasi(false));
+        $request->validate($this->aturanUmum() + $this->aturanLokasi());
 
         $hari = $this->hari($request);
         $absen = $hari->wajibAbsen();
@@ -97,16 +94,27 @@ class AbsensiController extends MobileController
         }
 
         $this->tutupHari($hari);
+
+        $jarak = null;
+
+        if (config('mobile.absen_cek_lokasi')) {
+            $karyawan = $this->karyawan($request);
+            $depo = Pengaturan::depo($karyawan->depo_id ? (int) $karyawan->depo_id : null)
+                ?? throw new ApiError('no_depot', 'Akun belum punya depo. Hubungi admin.', 409);
+            $jarak = $this->cekRadiusDepo($depo, (float) $request->lat, (float) $request->lng, (int) config('mobile.absen_radius_depo_m'));
+        }
+
         $pulang = now();
 
         DB::table('trx_absensi')->where('id', $absen->id)->update([
             'pulang_at' => $pulang,
             'pulang_lat' => $request->lat,
             'pulang_lng' => $request->lng,
+            'pulang_jarak_m' => $jarak,
             'pulang_client_ref' => $request->client_ref,
         ]);
 
-        return $this->ok(['attendance_id' => (int) $absen->id, 'checked_out_at' => $this->sekarang()->toIso8601String()]);
+        return $this->ok(['attendance_id' => (int) $absen->id, 'checked_out_at' => $this->sekarang()->toIso8601String(), 'distance_to_depot_m' => $jarak]);
     }
 
     public function index(Request $request): JsonResponse

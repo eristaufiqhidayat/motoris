@@ -102,10 +102,18 @@ abstract class MobileApiTestCase extends TestCase
             ->assertCreated()->json('data.upload_id');
     }
 
-    /** Lokasi di depo / outlet (selisih beberapa meter). */
+    /** Lokasi di depo / outlet (selisih beberapa meter; ±15,6 m dari depo — cukup dekat untuk radius
+     *  checkin/checkout depo lama (100 m) tapi di luar radius Absen Datang/Pulang baru (15 m, lihat
+     *  diDepoDekat()). */
     protected function diDepo(): array
     {
         return ['lat' => -6.2001, 'lng' => 106.8001, 'accuracy_m' => 8];
+    }
+
+    /** Lokasi ±7,8 m dari depo — dalam radius Absen Datang/Pulang (absen_radius_depo_m, bawaan 15 m). */
+    protected function diDepoDekat(): array
+    {
+        return ['lat' => -6.20005, 'lng' => 106.80005, 'accuracy_m' => 6];
     }
 
     protected function diOutlet(int $id): array
