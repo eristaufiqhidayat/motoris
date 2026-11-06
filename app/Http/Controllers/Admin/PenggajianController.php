@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Support\Akses\Akses;
 use App\Support\Akses\Cakupan;
+use App\Support\Ekspor\Xlsx;
 use App\Support\Mobile\Pengaturan;
 use App\Support\Motoris\KuotaMotoris;
 use App\Support\Penggajian\Penggajian;
 use App\Support\Penggajian\PeriodeGaji;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -17,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 // Penggajian › Penggajian Sales / Penggajian Koordinator (satu controller, jenis dari slug URL): daftar gaji dan
 // insentif (tab), riwayat per orang, form Tambah, dan detail per orang. Hanya Super Admin
@@ -62,9 +65,7 @@ class PenggajianController extends Controller
     public function index(Request $request): Response
     {
         $depoIds = Cakupan::untuk($request->user())->depoIds();
-        $periode = preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', (string) $request->query('periode')) ? (string) $request->query('periode') : '';
-        $depo = (int) $request->query('depo_id');
-        $status = array_key_exists((string) $request->query('status'), self::STATUS) ? (string) $request->query('status') : '';
+        [$periode, $depo, $status] = $this->filterDaftar($request);
 
         if ($request->query('tab') === 'riwayat') {
             return $this->riwayat($request, $depoIds);
@@ -72,17 +73,7 @@ class PenggajianController extends Controller
 
         $tab = $this->kategori((string) $request->query('tab'));
 
-        $baris = DB::table('penggajian as p')->leftJoin('mk_depo as d', 'd.id', '=', 'p.depo_id')
-            ->where('p.jenis', $this->jenis)->where('p.kategori', $tab)
-            ->when($depoIds !== null, fn ($q) => $q->whereIn('p.depo_id', $depoIds ?: [0]))
-            // Periode dinamai menurut bulan tanggal akhirnya (lihat PeriodeGaji::label).
-            ->when($periode !== '', fn ($q) => $q->where('p.periode_selesai', 'like', $periode.'-%'))
-            ->when($depo > 0, fn ($q) => $q->where('p.depo_id', $depo))
-            ->when($status !== '', fn ($q) => $q->where('p.status', $status))
-            ->select(['p.id', 'p.no_penggajian', 'p.periode_mulai', 'p.periode_selesai', 'p.tanggal_bayar', 'p.status', 'd.nama as depo'])
-            ->selectSub(DB::table('penggajian_detail')->whereColumn('penggajian_id', 'p.id')->selectRaw('count(*)'), 'orang')
-            ->selectSub(DB::table('penggajian_detail')->whereColumn('penggajian_id', 'p.id')->selectRaw('coalesce(sum(total_bersih), 0)'), 'total')
-            ->orderByDesc('p.periode_mulai')->orderByDesc('p.id')
+        $baris = $this->daftarQuery($depoIds, $tab, $periode, $depo, $status)
             ->paginate(25)
             ->withQueryString()->onEachSide(1)
             ->through(fn ($r) => [
@@ -94,6 +85,8 @@ class PenggajianController extends Controller
                 'total' => 'Rp '.number_format((float) $r->total, 0, ',', '.'),
                 'tanggal_bayar' => $r->tanggal_bayar ? self::tgl($r->tanggal_bayar) : '-',
                 'status' => self::STATUS[$r->status] ?? $r->status,
+                'final' => $r->status === 'final',
+                'bisa_dipilih' => in_array($r->status, ['draf', 'final'], true),
             ]);
 
         return Inertia::render('Penggajian/Index', [
@@ -108,6 +101,8 @@ class PenggajianController extends Controller
             'filter' => ['periode' => $periode, 'depo_id' => $depo ?: '', 'status' => $status],
             'opsi' => ['depo' => $this->daftarDepo($depoIds), 'status' => self::STATUS],
             'bisaTambah' => $this->catatan($tab) === null && Akses::bisa($request->user(), $this->menu(), 'tambah'),
+            'bisaEkspor' => Akses::bisa($request->user(), $this->menu(), 'ekspor'),
+            'bisaUbah' => Akses::bisa($request->user(), $this->menu(), 'ubah'),
         ]);
     }
 
@@ -130,37 +125,74 @@ class PenggajianController extends Controller
     {
         $data = $request->validate([
             'kategori' => ['nullable', 'in:gaji,insentif'],
-            'depo_id' => ['required', 'integer'],
+            'depo_id' => ['nullable', 'integer'],
             'periode_mulai' => ['required', 'date_format:Y-m-d'],
         ], [
             'kategori.in' => 'Kategori penggajian tidak dikenal.',
-            'depo_id.required' => 'Depo wajib dipilih.',
             'depo_id.integer' => 'Depo tidak valid.',
             'periode_mulai.required' => 'Periode wajib dipilih.',
             'periode_mulai.date_format' => 'Periode tidak valid.',
         ]);
 
         $depoIds = Cakupan::untuk($request->user())->depoIds();
+        $kategori = $data['kategori'] ?? 'gaji';
+
+        // Depo kosong = semua depo dalam cakupan akun: satu draf per depo.
+        if (empty($data['depo_id'])) {
+            return $this->simpanSemuaDepo($request, $kategori, $data['periode_mulai'], $depoIds);
+        }
 
         if ($depoIds !== null && ! in_array((int) $data['depo_id'], $depoIds, true)) {
             throw ValidationException::withMessages(['depo_id' => 'Depo ini di luar cakupan akun Anda.']);
         }
 
-        $id = Penggajian::buat($this->jenis, $data['kategori'] ?? 'gaji', (int) $data['depo_id'], $data['periode_mulai'], $request->user());
+        $id = Penggajian::buat($this->jenis, $kategori, (int) $data['depo_id'], $data['periode_mulai'], $request->user());
 
         return redirect('/'.$this->menu().'/'.$id)->with('sukses', 'Draf penggajian dibuat.');
+    }
+
+    /**
+     * Buat draf untuk semua depo dalam cakupan. Depo yang periodenya tumpang tindih dengan penggajian yang sudah ada
+     * dilewati dan disebut di pesan; bila tidak ada satu pun yang bisa dibuat, ditolak dengan pesan jelas.
+     *
+     * @param  list<int>|null  $depoIds
+     */
+    private function simpanSemuaDepo(Request $request, string $kategori, string $tanggal, ?array $depoIds): RedirectResponse
+    {
+        $hasil = Penggajian::buatSemuaDepo($this->jenis, $kategori, $tanggal, $request->user(), $depoIds);
+
+        if (! $hasil['dibuat']) {
+            throw ValidationException::withMessages(['periode_mulai' => 'Tidak ada draf baru: semua depo sudah punya penggajian pada periode yang tumpang tindih ('.self::ringkasDepoDilewati($hasil['dilewati']).').']);
+        }
+
+        $pesan = redirect('/'.$this->menu().'?tab='.$kategori)
+            ->with('sukses', 'Draf penggajian dibuat untuk '.count($hasil['dibuat']).' depo ('.$hasil['orang'].' orang).');
+
+        if ($hasil['dilewati']) {
+            $pesan->with('galat', 'Dilewati '.count($hasil['dilewati']).' depo yang periodenya tumpang tindih dengan penggajian yang sudah ada: '.self::ringkasDepoDilewati($hasil['dilewati']).'.');
+        }
+
+        return $pesan;
+    }
+
+    /**
+     * Nama depo yang dilewati untuk pesan: tiga pertama, sisanya diringkas.
+     *
+     * @param  list<array{depo: string, alasan: string}>  $dilewati
+     */
+    private static function ringkasDepoDilewati(array $dilewati): string
+    {
+        $nama = array_column($dilewati, 'depo');
+        $tampil = implode(', ', array_slice($nama, 0, 3));
+
+        return count($nama) > 3 ? $tampil.', dan '.(count($nama) - 3).' lainnya' : $tampil;
     }
 
     public function tampil(Request $request, int $id): Response
     {
         $p = $this->muat($request, $id);
 
-        $komponen = DB::table('penggajian_komponen')
-            ->whereIn('detail_id', DB::table('penggajian_detail')->where('penggajian_id', $id)->select('id'))
-            ->orderBy('id')->get()->groupBy('detail_id');
-
-        $detail = DB::table('penggajian_detail')->where('penggajian_id', $id)->orderBy('nama')->get()
-            ->map(fn ($d) => self::petakanDetail($d, $komponen[$d->id] ?? collect()))->values()->all();
+        $detail = $this->muatDetail($id);
 
         return Inertia::render('Penggajian/Detail', [
             'slug' => $this->menu(),
@@ -191,6 +223,7 @@ class PenggajianController extends Controller
             'kekurangan' => Penggajian::kekurangan($id),
             'pemotong' => DB::table('parameter_pemotong_gaji')->orderBy('nama')->get(['id', 'nama'])->map(fn ($r) => ['id' => (int) $r->id, 'nama' => $r->nama])->all(),
             'bisaUbah' => Akses::bisa($request->user(), $this->menu(), 'ubah'),
+            'bisaEkspor' => Akses::bisa($request->user(), $this->menu(), 'ekspor'),
         ]);
     }
 
@@ -208,6 +241,46 @@ class PenggajianController extends Controller
         Penggajian::finalkan($id, $request->user());
 
         return $this->kembali($id, 'Penggajian difinalkan dan terkunci.');
+    }
+
+    /**
+     * Finalkan beberapa draf sekaligus dari halaman daftar (ids[]). Semua atau tidak sama sekali: satu draf yang datanya belum
+     * lengkap membatalkan seluruhnya. Yang sudah Final dilewati; yang Batal ditolak.
+     */
+    public function finalkanPilihan(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['integer', 'distinct'],
+        ], [
+            'ids.required' => 'Pilih dulu penggajian yang akan difinalkan.',
+            'ids.min' => 'Pilih dulu penggajian yang akan difinalkan.',
+            'ids.max' => 'Terlalu banyak penggajian dipilih (maksimal 200).',
+            'ids.*.integer' => 'Pilihan penggajian tidak valid.',
+        ]);
+
+        $ids = array_map('intval', $data['ids']);
+        $penggajian = DB::table('penggajian')->whereIn('id', $ids)->where('jenis', $this->jenis)->get();
+        abort_unless($penggajian->count() === count($ids), 404);
+
+        $depoIds = Cakupan::untuk($request->user())->depoIds();
+        abort_if($depoIds !== null && $penggajian->contains(fn ($p) => ! in_array((int) $p->depo_id, $depoIds, true)), 403);
+        abort_if($penggajian->contains(fn ($p) => $p->status === 'batal'), 409, 'Penggajian yang dibatalkan tidak bisa difinalkan.');
+
+        $draf = $penggajian->where('status', 'draf');
+        abort_if($draf->isEmpty(), 409, 'Semua penggajian yang dipilih sudah Final.');
+
+        DB::transaction(fn () => $draf->each(fn ($p) => Penggajian::finalkan((int) $p->id, $request->user())));
+
+        return redirect('/'.$this->menu().'?tab='.$penggajian->first()->kategori)->with('sukses', $draf->count().' penggajian difinalkan dan terkunci.');
+    }
+
+    public function kembalikanKeDraf(Request $request, int $id): RedirectResponse
+    {
+        $this->muat($request, $id);
+        Penggajian::kembalikanKeDraf($id, $request->user());
+
+        return $this->kembali($id, 'Penggajian dikembalikan ke Draf. Koreksi lalu finalkan lagi.');
     }
 
     public function batalkan(Request $request, int $id): RedirectResponse
@@ -267,6 +340,174 @@ class PenggajianController extends Controller
         Penggajian::hapusKomponen($id, $detail, $komponen);
 
         return $this->kembali($id, 'Komponen dihapus.');
+    }
+
+    /** Filter daftar dari query string: [periode (Y-m bulan label), depo_id, status], nilai tidak valid dianggap kosong. */
+    private function filterDaftar(Request $request): array
+    {
+        $periode = preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', (string) $request->query('periode')) ? (string) $request->query('periode') : '';
+        $status = array_key_exists((string) $request->query('status'), self::STATUS) ? (string) $request->query('status') : '';
+
+        return [$periode, (int) $request->query('depo_id'), $status];
+    }
+
+    /** Query daftar penggajian jenis ini untuk satu kategori, dibatasi cakupan akun dan filter; dipakai halaman dan ekspor. */
+    private function daftarQuery(?array $depoIds, string $tab, string $periode, int $depo, string $status): Builder
+    {
+        $detail = fn (string $ekspresi) => DB::table('penggajian_detail')->whereColumn('penggajian_id', 'p.id')->selectRaw($ekspresi);
+
+        return DB::table('penggajian as p')->leftJoin('mk_depo as d', 'd.id', '=', 'p.depo_id')
+            ->where('p.jenis', $this->jenis)->where('p.kategori', $tab)
+            ->when($depoIds !== null, fn ($q) => $q->whereIn('p.depo_id', $depoIds ?: [0]))
+            // Periode dinamai menurut bulan tanggal akhirnya (lihat PeriodeGaji::label).
+            ->when($periode !== '', fn ($q) => $q->where('p.periode_selesai', 'like', $periode.'-%'))
+            ->when($depo > 0, fn ($q) => $q->where('p.depo_id', $depo))
+            ->when($status !== '', fn ($q) => $q->where('p.status', $status))
+            ->select(['p.id', 'p.no_penggajian', 'p.kategori', 'p.periode_mulai', 'p.periode_selesai', 'p.tanggal_bayar', 'p.status', 'd.nama as depo'])
+            ->selectSub($detail('count(*)'), 'orang')
+            ->selectSub($detail('coalesce(sum(total_pendapatan), 0)'), 'total_pendapatan')
+            ->selectSub($detail('coalesce(sum(total_potongan), 0)'), 'total_potongan')
+            ->selectSub($detail('coalesce(sum(total_bersih), 0)'), 'total')
+            ->orderByDesc('p.periode_mulai')->orderByDesc('p.id');
+    }
+
+    /** Semua orang di penggajian beserta komponennya (urut nama), untuk halaman detail dan ekspor. */
+    private function muatDetail(int $id): array
+    {
+        $komponen = DB::table('penggajian_komponen')
+            ->whereIn('detail_id', DB::table('penggajian_detail')->where('penggajian_id', $id)->select('id'))
+            ->orderBy('id')->get()->groupBy('detail_id');
+
+        return DB::table('penggajian_detail')->where('penggajian_id', $id)->orderBy('nama')->get()
+            ->map(fn ($d) => self::petakanDetail($d, $komponen[$d->id] ?? collect()))->values()->all();
+    }
+
+    /** Ekspor satu penggajian (dari halaman detail): sama dengan ekspor pilihan dengan satu id. */
+    public function ekspor(Request $request, int $id): StreamedResponse
+    {
+        return $this->unduhRincian($request, [$id]);
+    }
+
+    /** Ekspor penggajian yang dipilih di halaman daftar (ids[]): pengguna harus memilih dulu no. penggajian yang diekspor. */
+    public function eksporPilihan(Request $request): StreamedResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['integer', 'distinct'],
+        ], [
+            'ids.required' => 'Pilih dulu no. penggajian yang akan diekspor.',
+            'ids.min' => 'Pilih dulu no. penggajian yang akan diekspor.',
+            'ids.max' => 'Terlalu banyak penggajian dipilih (maksimal 200).',
+            'ids.*.integer' => 'Pilihan penggajian tidak valid.',
+        ]);
+
+        return $this->unduhRincian($request, array_map('intval', $data['ids']));
+    }
+
+    /**
+     * Ekspor rincian per orang dari penggajian yang dipilih ke Excel. Satu penggajian: satu sheet "Rincian". Beberapa
+     * penggajian: sheet "Konsolidasi" (rincian per orang dari semua depo dalam satu tabel) lalu satu sheet per depo berisi rincian
+     * penggajian terpilih milik depo itu. Hanya penggajian Final, dalam cakupan akun, sejenis, dan sekategori (gaji atau insentif).
+     *
+     * @param  list<int>  $ids
+     */
+    private function unduhRincian(Request $request, array $ids): StreamedResponse
+    {
+        $ids = array_values(array_unique($ids));
+
+        $penggajian = DB::table('penggajian as p')->leftJoin('mk_depo as d', 'd.id', '=', 'p.depo_id')
+            ->whereIn('p.id', $ids)->where('p.jenis', $this->jenis)
+            ->orderBy('d.nama')->orderBy('p.periode_mulai')->orderBy('p.id')->get(['p.*', 'd.nama as depo']);
+
+        abort_unless($penggajian->count() === count($ids), 404);
+
+        $depoIds = Cakupan::untuk($request->user())->depoIds();
+        abort_if($depoIds !== null && $penggajian->contains(fn ($p) => ! in_array((int) $p->depo_id, $depoIds, true)), 403);
+        // Ekspor hanya untuk penggajian yang sudah final (angka terkunci dan sudah ditinjau).
+        abort_unless($penggajian->every(fn ($p) => $p->status === 'final'), 409, 'Ekspor Excel hanya tersedia untuk penggajian berstatus Final.');
+        abort_unless($penggajian->pluck('kategori')->unique()->count() === 1, 422, 'Pilih penggajian dengan kategori yang sama (Gaji atau Insentif).');
+
+        $gaji = $penggajian->first()->kategori === 'gaji';
+        $semua = $penggajian->map(fn ($p) => [$p, $this->muatDetail((int) $p->id)]);
+        $nik = DB::table('mk_karyawan')->whereIn('id', $semua->flatMap(fn ($x) => array_column($x[1], 'karyawan_id'))->unique()->all())->pluck('nik', 'id')->all();
+
+        if ($semua->count() === 1) {
+            $nama = $penggajian->first()->no_penggajian.'.xlsx';
+
+            return Xlsx::unduhBanyak($nama, [$this->lembarRincian('Rincian', $semua, $gaji, $nik)]);
+        }
+
+        $lembar = [$this->lembarRincian('Konsolidasi', $semua, $gaji, $nik)];
+
+        foreach ($semua->groupBy(fn ($x) => (string) $x[0]->depo) as $depo => $kelompok) {
+            $lembar[] = $this->lembarRincian($depo !== '' ? $depo : 'Tanpa depo', $kelompok, $gaji, $nik);
+        }
+
+        return Xlsx::unduhBanyak('penggajian_'.$this->jenis.'_'.$penggajian->first()->kategori.'_'.now()->format('Ymd_His').'.xlsx', $lembar);
+    }
+
+    /** Label periode untuk berkas ekspor. */
+    private static function periodeEkspor(object $p): string
+    {
+        return PeriodeGaji::label($p->periode_selesai).' ('.$p->periode_mulai.' s.d. '.$p->periode_selesai.')';
+    }
+
+    /**
+     * Sheet rincian per orang sebagai tabel datar: identitas penggajian (no., depo, periode, tanggal bayar), nama, hari
+     * (gaji), satu kolom per komponen (otomatis dan manual yang muncul di sheet ini), dan total, ditutup baris total.
+     *
+     * @param  Collection<int, array{0: object, 1: list<array<string, mixed>>}>  $kelompok
+     * @param  array<int, ?string>  $nik  NIK/KTP per karyawan_id (ditulis sebagai teks: 16 digit melebihi presisi angka Excel)
+     * @return array{nama: string, baris: list<list<mixed>>, opsi: array<string, mixed>}
+     */
+    private function lembarRincian(string $nama, Collection $kelompok, bool $gaji, array $nik): array
+    {
+        // Kolom komponen menurut nama: pendapatan dulu, lalu potongan, urut kemunculan pertama.
+        $kolom = ['pendapatan' => [], 'potongan' => []];
+
+        foreach ($kelompok as [, $detail]) {
+            foreach ($detail as $d) {
+                foreach ($d['komponen'] as $k) {
+                    $kolom[$k['tipe']][$k['nama']] = true;
+                }
+            }
+        }
+
+        $namaKomponen = [...array_keys($kolom['pendapatan']), ...array_keys($kolom['potongan'])];
+        $tipeKomponen = [...array_fill(0, count($kolom['pendapatan']), 'pendapatan'), ...array_fill(0, count($kolom['potongan']), 'potongan')];
+
+        $hari = $gaji ? ['Hari Kerja', 'Hadir', 'Tidak Hadir', 'Terlambat', 'Izin'] : [];
+        $header = ['No', 'No. Penggajian', 'Depo', 'Periode', 'Tanggal Bayar', 'Nama', 'NIK/KTP', ...$hari, ...$namaKomponen, 'Total Pendapatan', 'Total Potongan', 'Total Bersih'];
+        $baris = [$header];
+        $jumlah = array_fill(0, count($namaKomponen) + 3, 0);
+        $no = 0;
+
+        foreach ($kelompok as [$p, $detail]) {
+            foreach ($detail as $d) {
+                $nilai = [];
+
+                foreach ($namaKomponen as $n => $namaK) {
+                    $nilai[$n] = collect($d['komponen'])->where('tipe', $tipeKomponen[$n])->where('nama', $namaK)->sum('nominal') ?: null;
+                }
+
+                $angka = [...$nilai, $d['total_pendapatan'], $d['total_potongan'], $d['total_bersih']];
+
+                foreach ($angka as $n => $v) {
+                    $jumlah[$n] += $v ?? 0;
+                }
+
+                $baris[] = [
+                    ++$no, $p->no_penggajian, $p->depo, self::periodeEkspor($p), $p->tanggal_bayar, $d['nama'], ($nik[$d['karyawan_id']] ?? null) ?: null,
+                    ...($gaji ? [$d['hari_kerja'], $d['hari_hadir'], $d['hari_tidak_hadir'], $d['hari_terlambat'], $d['hari_izin']] : []),
+                    ...$angka,
+                ];
+            }
+        }
+
+        $indeksTotal = count($baris);
+        $baris[] = [null, null, null, null, null, 'Total', null, ...array_fill(0, count($hari), null), ...$jumlah];
+
+        return ['nama' => $nama, 'baris' => $baris, 'opsi' => ['header' => 0, 'tebal' => [$indeksTotal], 'uang' => range(7 + count($hari), count($header) - 1)]];
     }
 
     /**

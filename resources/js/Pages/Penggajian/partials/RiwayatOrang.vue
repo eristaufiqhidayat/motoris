@@ -58,6 +58,7 @@ const orang = computed(() => dipilih.value?.orang ?? null);
     </Card>
 
     <DataTable
+        tinggi-penuh
         :columns="KOLOM"
         :rows="baris.data"
         :total="baris.total"

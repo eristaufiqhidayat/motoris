@@ -34,6 +34,8 @@ const opsiPeriode = computed(() => props.periode.map((p) => ({
     label: `${p.label} (${tanggalSingkat(p.mulai)} – ${tanggalSingkat(p.selesai)})`,
 })));
 const opsiDepo = computed(() => props.depo.map((d) => ({ value: d.id, label: d.nama })));
+// Depo kosong = semua depo dalam cakupan akun (satu draf per depo).
+const semuaDepo = computed(() => form.depo_id === '' || form.depo_id === null);
 const terpilih = computed(() => props.periode.find((p) => p.mulai === form.periode_mulai));
 
 function simpan() {
@@ -44,16 +46,19 @@ function simpan() {
 <template>
     <Head :title="`${judul} · ${appName}`" />
     <AppLayout :breadcrumb-slug="slug">
-        <PageHeader :title="judul" :subtitle="insentif ? `Draf insentif semua ${orangLabel} aktif di depo, dihitung dari penjualan bulan itu` : `Draf gaji semua ${orangLabel} aktif di depo, dihitung dari data karyawan dan absensi periode itu`" />
+        <PageHeader :title="judul" :subtitle="insentif ? `Draf insentif ${orangLabel} aktif per depo, dihitung dari penjualan bulan itu` : `Draf gaji ${orangLabel} aktif per depo, dihitung dari data karyawan dan absensi periode itu`" />
 
         <Alert v-if="catatan" variant="warning">{{ catatan }}</Alert>
 
         <Card class="shadow-sm">
             <form class="grid gap-3 md:grid-cols-2" @submit.prevent="simpan">
                 <div>
-                    <Label for="depo_id">Depo <span class="text-red-600">*</span></Label>
-                    <Combobox id="depo_id" v-model="form.depo_id" :options="opsiDepo" placeholder="Pilih depo..." />
+                    <Label for="depo_id">Depo</Label>
+                    <Combobox id="depo_id" v-model="form.depo_id" :options="opsiDepo" placeholder="Semua depo" />
                     <FieldError v-if="form.errors.depo_id">{{ form.errors.depo_id }}</FieldError>
+                    <p v-else class="mt-1 mb-0 text-xs text-gray-500">
+                        {{ semuaDepo ? `Kosong = semua depo: satu draf per depo untuk semua ${orangLabel} aktif.` : 'Draf hanya untuk depo ini.' }}
+                    </p>
                 </div>
                 <div>
                     <Label for="periode_mulai">Periode <span class="text-red-600">*</span></Label>
@@ -62,8 +67,8 @@ function simpan() {
                     <p v-if="terpilih" class="mt-1 mb-0 text-xs text-gray-500">Dibayar {{ tanggalSingkat(terpilih.tanggal_bayar) }}.</p>
                 </div>
                 <div class="flex gap-2 md:col-span-2">
-                    <Button type="submit" variant="success" :loading="form.processing" :disabled="form.depo_id === '' || !!catatan">
-                        <Icon name="plus" class="me-1 w-3.5 h-3.5" />Buat draf
+                    <Button type="submit" variant="success" :loading="form.processing" :disabled="!!catatan">
+                        <Icon name="plus" class="me-1 w-3.5 h-3.5" />{{ semuaDepo ? 'Buat draf semua depo' : 'Buat draf' }}
                     </Button>
                     <Button :tag="Link" :href="`${base}?tab=${kategori}`" variant="outline-secondary">Batal</Button>
                 </div>

@@ -8,6 +8,7 @@ import DatePicker from '@/Components/ui/atoms/DatePicker.vue';
 import Input from '@/Components/ui/atoms/Input.vue';
 import Select from '@/Components/ui/atoms/Select.vue';
 import Button from '@/Components/ui/atoms/Button.vue';
+import Checkbox from '@/Components/ui/atoms/Checkbox.vue';
 
 const props = defineProps({
     title: { type: String, default: null },
@@ -51,6 +52,18 @@ const props = defineProps({
     barisBisaDiklik: { type: Boolean, default: false },
     // Fungsi (row) => boolean: baris yang sedang dipilih diberi sorotan (mis. tanggal yang detailnya sedang dibuka).
     barisAktif: { type: Function, default: null },
+    // Dengan barisBisaDiklik: kolom penunjuk (panah) di ujung kanan tiap baris supaya terlihat bahwa baris bisa dibuka.
+    penandaKlik: { type: Boolean, default: false },
+    // Baris total di bawah tabel (tetap terlihat saat tabel bergulir): { kolom: nilai }, kolom yang tidak diisi dibiarkan kosong.
+    barisTotal: { type: Object, default: null },
+    // Kolom checkbox di kiri untuk memilih baris (v-model = daftar nilai kunciBaris yang dipilih). Pilihan bertahan antar
+    // halaman tabel; checkbox header memilih/melepas semua baris yang bisa dipilih di halaman ini.
+    dapatDipilih: { type: Boolean, default: false },
+    modelValue: { type: Array, default: () => [] },
+    kunciBaris: { type: String, default: 'id' },
+    // Fungsi (row) => boolean: baris yang tidak bisa dipilih tetap tampil dengan checkbox nonaktif (alasannya jadi tooltip).
+    bisaDipilih: { type: Function, default: () => true },
+    alasanTidakBisaDipilih: { type: String, default: null },
 });
 
 // Kolom yang punya pilihan operator: kolom angka dan kolom tanggal.
@@ -65,7 +78,29 @@ const OPERATOR_FILTER = [
     { value: '>=', label: '≥' },
 ];
 
-const emit = defineEmits(['sort', 'filter', 'klik-baris']);
+const emit = defineEmits(['sort', 'filter', 'klik-baris', 'update:modelValue']);
+
+const barisPilihan = computed(() => props.rows.filter((r) => props.bisaDipilih(r)));
+const semuaTerpilih = computed(() => barisPilihan.value.length > 0 && barisPilihan.value.every((r) => props.modelValue.includes(r[props.kunciBaris])));
+const sebagianTerpilih = computed(() => !semuaTerpilih.value && barisPilihan.value.some((r) => props.modelValue.includes(r[props.kunciBaris])));
+
+function pilihBaris(row, aktif) {
+    const kunci = row[props.kunciBaris];
+    const lain = props.modelValue.filter((k) => k !== kunci);
+
+    emit('update:modelValue', aktif ? [...lain, kunci] : lain);
+}
+
+function pilihSemua(aktif) {
+    const kunciHalaman = barisPilihan.value.map((r) => r[props.kunciBaris]);
+    const lain = props.modelValue.filter((k) => !kunciHalaman.includes(k));
+
+    emit('update:modelValue', aktif ? [...lain, ...kunciHalaman] : lain);
+}
+
+// Jumlah kolom di luar `columns` (checkbox dan aksi), untuk colspan baris kosong.
+const adaPenanda = computed(() => props.penandaKlik && props.barisBisaDiklik);
+const kolomTambahan = computed(() => (props.dapatDipilih ? 1 : 0) + (slots.aksi ? 1 : 0) + (adaPenanda.value ? 1 : 0));
 
 // Klik/Enter pada baris (prop barisBisaDiklik); klik pada kontrol di dalam baris (tombol, tautan, input) tidak ikut dihitung.
 function klikBaris(row, e) {
@@ -230,7 +265,7 @@ function aturSticky() {
             return;
         }
 
-        const sel = tabel.value.querySelectorAll(`tr > :nth-child(${index + 1})`);
+        const sel = tabel.value.querySelectorAll(`tr > :nth-child(${index + 1 + (props.dapatDipilih ? 1 : 0)})`);
 
         sel.forEach((el) => {
             el.style.left = `${kiri}px`;
@@ -300,6 +335,15 @@ onBeforeUnmount(() => {
         <table ref="tabel" class="data-table" :class="{ 'tabel-header-sticky': tinggiPenuh || isiWadah }">
             <thead>
                 <tr>
+                    <th v-if="dapatDipilih" class="kolom-pilih">
+                        <Checkbox
+                            :model-value="semuaTerpilih"
+                            :indeterminate="sebagianTerpilih"
+                            :disabled="!barisPilihan.length"
+                            aria-label="Pilih semua baris yang bisa dipilih di halaman ini"
+                            @update:model-value="pilihSemua"
+                        />
+                    </th>
                     <th
                         v-for="[kolom, label] in Object.entries(columns)"
                         :key="kolom"
@@ -367,12 +411,15 @@ onBeforeUnmount(() => {
                         </div>
                     </th>
                     <th v-if="slots.aksi">Aksi</th>
+                    <th v-if="adaPenanda" class="kolom-panah"><span class="sr-only">Buka rincian</span></th>
                 </tr>
             </thead>
             <tbody v-if="memuat" class="animate-pulse" aria-busy="true" aria-live="polite">
                 <tr v-for="baris in 8" :key="baris">
+                    <td v-if="dapatDipilih" class="kolom-pilih"></td>
                     <td v-for="column in Object.keys(columns)" :key="column"><div class="h-3 rounded bg-gray-200"></div></td>
                     <td v-if="slots.aksi"><div class="h-3 w-12 rounded bg-gray-200"></div></td>
+                    <td v-if="adaPenanda" class="kolom-panah"></td>
                 </tr>
             </tbody>
             <tbody v-else>
@@ -384,6 +431,14 @@ onBeforeUnmount(() => {
                     @click="klikBaris(row, $event)"
                     @keydown.enter.self="barisBisaDiklik && emit('klik-baris', row)"
                 >
+                    <td v-if="dapatDipilih" class="kolom-pilih" :title="bisaDipilih(row) ? null : alasanTidakBisaDipilih">
+                        <Checkbox
+                            :model-value="modelValue.includes(row[kunciBaris])"
+                            :disabled="!bisaDipilih(row)"
+                            :aria-label="`Pilih baris ${index + 1}`"
+                            @update:model-value="pilihBaris(row, $event)"
+                        />
+                    </td>
                     <td v-for="column in Object.keys(columns)" :key="column" :class="kelasSticky(column)">
                         <slot v-if="slots[`cell-${column}`]" :name="`cell-${column}`" :row="row" />
                         <Badge v-else-if="badgeColumns.includes(column)" :variant="badgeVariant(column, row[column])">{{ row[column] || '-' }}</Badge>
@@ -392,11 +447,20 @@ onBeforeUnmount(() => {
                     <td v-if="slots.aksi" class="whitespace-nowrap">
                         <slot name="aksi" :row="row" />
                     </td>
+                    <td v-if="adaPenanda" class="kolom-panah"><Icon name="chevron-right" class="w-4 h-4" /></td>
                 </tr>
                 <tr v-if="!rows.length">
-                    <td :colspan="Object.keys(columns).length + (slots.aksi ? 1 : 0)" class="text-center text-gray-500 py-4">{{ emptyText }}</td>
+                    <td :colspan="Object.keys(columns).length + kolomTambahan" class="text-center text-gray-500 py-4">{{ emptyText }}</td>
                 </tr>
             </tbody>
+            <tfoot v-if="barisTotal && rows.length && !memuat">
+                <tr class="baris-total">
+                    <td v-if="dapatDipilih" class="kolom-pilih"></td>
+                    <td v-for="column in Object.keys(columns)" :key="column">{{ barisTotal[column] ?? '' }}</td>
+                    <td v-if="slots.aksi"></td>
+                    <td v-if="adaPenanda" class="kolom-panah"></td>
+                </tr>
+            </tfoot>
         </table>
         </div>
 

@@ -257,6 +257,41 @@ class PenggajianSiklusTest extends AdminTestCase
         $this->assertSame(1, DB::table('penggajian_komponen')->where('sumber', 'manual')->count());
     }
 
+    public function test_final_bisa_dikembalikan_ke_draf_lalu_dikoreksi_dan_difinalkan_lagi(): void
+    {
+        $this->buat();
+        $this->post($this->url('/finalkan'));
+        $this->assertNotNull(DB::table('penggajian')->find($this->id)->difinalkan_pada);
+
+        $this->post($this->url('/kembalikan-ke-draf'))->assertSessionHasNoErrors()->assertRedirect("/penggajian_sales/{$this->id}");
+
+        $p = DB::table('penggajian')->find($this->id);
+        $this->assertSame('draf', $p->status);
+        $this->assertNull($p->difinalkan_oleh);
+        $this->assertNull($p->difinalkan_pada);
+        $this->assertDatabaseHas('riwayat_admin', ['objek' => 'penggajian', 'objek_id' => $this->id, 'aksi' => 'kembalikan_ke_draf']);
+
+        // Bisa dikoreksi lagi, lalu difinalkan ulang.
+        $this->komponenManual(1)->assertSessionHasNoErrors();
+        $this->post($this->url('/finalkan'))->assertSessionHasNoErrors();
+        $this->assertSame('final', DB::table('penggajian')->find($this->id)->status);
+    }
+
+    public function test_hanya_final_yang_bisa_dikembalikan_ke_draf_dan_butuh_hak_ubah(): void
+    {
+        $this->buat();
+        $this->post($this->url('/kembalikan-ke-draf'))->assertSessionHasErrors('penggajian'); // masih draf
+
+        $this->post($this->url('/batalkan'));
+        $this->post($this->url('/kembalikan-ke-draf'))->assertSessionHasErrors('penggajian'); // batal
+
+        $this->buat();
+        $this->post($this->url('/finalkan'));
+        $this->actingAs($this->akun('koor', 'koordinator', 137));
+        $this->post($this->url('/kembalikan-ke-draf'))->assertForbidden();
+        $this->assertSame('final', DB::table('penggajian')->find($this->id)->status);
+    }
+
     public function test_mengubah_gaji_karyawan_setelah_final_tidak_mengubah_rincian(): void
     {
         $this->buat();

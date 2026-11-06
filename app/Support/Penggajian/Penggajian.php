@@ -84,6 +84,48 @@ class Penggajian
     }
 
     /**
+     * Buat draf untuk semua depo sekaligus: satu penggajian per depo yang punya karyawan aktif jenis itu (opsional
+     * dibatasi ke $depoIds, mis. cakupan akun). Tiap depo dibuat lewat `buat` dengan transaksinya sendiri, jadi depo
+     * yang periodenya tumpang tindih dengan penggajian yang sudah ada dilewati (bukan menggagalkan yang lain) dan
+     * dilaporkan.
+     *
+     * @param  list<int>|null  $depoIds
+     * @return array{dibuat: list<int>, orang: int, dilewati: list<array{depo: string, alasan: string}>}
+     *
+     * @throws ValidationException bila tidak ada depo yang bisa diproses, atau kategori belum tersedia untuk jenis itu
+     */
+    public static function buatSemuaDepo(string $jenis, string $kategori, string $tanggal, User $aktor, ?array $depoIds = null): array
+    {
+        if ($kategori === 'insentif' && $jenis === 'koordinator') {
+            throw ValidationException::withMessages(['kategori' => self::INSENTIF_KOORDINATOR_TERTUNDA]);
+        }
+
+        $depo = DB::table('mk_karyawan as k')->join('mk_depo as d', 'd.id', '=', 'k.depo_id')
+            ->where('k.kategori', $jenis)->where('k.aktif', true)
+            ->when($depoIds !== null, fn ($q) => $q->whereIn('k.depo_id', $depoIds ?: [0]))
+            ->distinct()->orderBy('d.nama')->get(['d.id', 'd.nama']);
+
+        if ($depo->isEmpty()) {
+            throw ValidationException::withMessages(['depo_id' => 'Tidak ada '.($jenis === 'sales' ? 'motoris' : 'koordinator').' aktif di depo mana pun dalam cakupan Anda.']);
+        }
+
+        $hasil = ['dibuat' => [], 'orang' => 0, 'dilewati' => []];
+
+        foreach ($depo as $d) {
+            try {
+                $id = self::buat($jenis, $kategori, (int) $d->id, $tanggal, $aktor);
+
+                $hasil['dibuat'][] = $id;
+                $hasil['orang'] += DB::table('penggajian_detail')->where('penggajian_id', $id)->count();
+            } catch (ValidationException $e) {
+                $hasil['dilewati'][] = ['depo' => $d->nama, 'alasan' => (string) collect($e->errors())->flatten()->first()];
+            }
+        }
+
+        return $hasil;
+    }
+
+    /**
      * Hitung ulang draf dari data terbaru (gaji karyawan, absensi, penjualan, hari libur, rumus): komponen otomatis
      * diganti, sedangkan komponen manual dan hari izin dipertahankan. Orang di draf tidak bertambah atau berkurang.
      *
@@ -246,6 +288,31 @@ class Penggajian
         });
 
         Akses::catat($aktor, 'penggajian', $id, 'batalkan');
+    }
+
+    /**
+     * Kembalikan penggajian Final ke Draf supaya bisa dikoreksi (izin, komponen manual, hitung ulang) lalu difinalkan lagi.
+     * Rincian yang tersimpan tidak berubah sampai ada koreksi; penanda finalisasi dikosongkan dan tercatat di riwayat admin.
+     *
+     * @throws ValidationException
+     */
+    public static function kembalikanKeDraf(int $id, User $aktor): void
+    {
+        DB::transaction(function () use ($id) {
+            $p = DB::table('penggajian')->where('id', $id)->lockForUpdate()->first();
+
+            if (! $p || $p->status !== 'final') {
+                $status = $p->status ?? 'tidak ada';
+
+                throw ValidationException::withMessages(['penggajian' => "Penggajian berstatus {$status}; hanya yang Final yang bisa dikembalikan ke Draf."]);
+            }
+
+            DB::table('penggajian')->where('id', $id)->update([
+                'status' => 'draf', 'difinalkan_oleh' => null, 'difinalkan_pada' => null, 'updated_at' => now(),
+            ]);
+        });
+
+        Akses::catat($aktor, 'penggajian', $id, 'kembalikan_ke_draf');
     }
 
     /** Penggajian harus berstatus draf (baris dikunci selama transaksi). */

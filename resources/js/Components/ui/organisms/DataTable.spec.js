@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import DataTable from './DataTable.vue';
 
@@ -254,5 +255,100 @@ describe('DataTable baris bisa diklik', () => {
         await wrapper.find('button.aksi-dalam').trigger('click');
 
         expect(wrapper.emitted('klik-baris')).toBeUndefined();
+    });
+});
+
+describe('DataTable pilihan baris (checkbox)', () => {
+    const data = [
+        { id: 1, kode: '11', nama_provinsi: 'Aceh', dibuat: 'a', final: true },
+        { id: 2, kode: '12', nama_provinsi: 'Sumut', dibuat: 'b', final: false },
+        { id: 3, kode: '13', nama_provinsi: 'Riau', dibuat: 'c', final: true },
+    ];
+    const pasang = (props = {}) => mount(DataTable, {
+        props: { columns, rows: data, dapatDipilih: true, bisaDipilih: (r) => r.final, alasanTidakBisaDipilih: 'Hanya Final.', modelValue: [], ...props },
+    });
+
+    it('tanpa dapatDipilih tidak ada kolom checkbox', () => {
+        const wrapper = mount(DataTable, { props: { columns, rows: data } });
+
+        expect(wrapper.findAll('input[type=checkbox]')).toHaveLength(0);
+    });
+
+    it('menampilkan checkbox per baris plus header; baris yang tidak bisa dipilih nonaktif dengan alasan', () => {
+        const wrapper = pasang();
+        const kotak = wrapper.findAll('tbody input[type=checkbox]');
+
+        expect(kotak).toHaveLength(3);
+        expect(kotak.map((k) => k.element.disabled)).toEqual([false, true, false]);
+        expect(wrapper.findAll('tbody tr')[1].find('td').attributes('title')).toBe('Hanya Final.');
+        expect(wrapper.findAll('tbody tr')[0].find('td').attributes('title')).toBeUndefined();
+    });
+
+    it('memilih dan melepas satu baris mempertahankan pilihan lain', async () => {
+        const wrapper = pasang({ modelValue: [3] });
+
+        await wrapper.findAll('tbody input[type=checkbox]')[0].setValue(true);
+        expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([[3, 1]]);
+
+        await wrapper.findAll('tbody input[type=checkbox]')[2].setValue(false);
+        expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([[]]);
+    });
+
+    it('checkbox header memilih semua baris yang bisa dipilih saja, dan melepasnya', async () => {
+        const wrapper = pasang({ modelValue: [99] }); // 99 = pilihan dari halaman lain
+
+        await wrapper.find('thead input[type=checkbox]').setValue(true);
+        expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([[99, 1, 3]]);
+
+        await wrapper.setProps({ modelValue: [99, 1, 3] });
+        expect(wrapper.find('thead input[type=checkbox]').element.checked).toBe(true);
+
+        await wrapper.find('thead input[type=checkbox]').setValue(false);
+        expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([[99]]);
+    });
+
+    it('checkbox header indeterminate bila hanya sebagian terpilih', async () => {
+        const wrapper = pasang({ modelValue: [1] });
+
+        await nextTick();
+        const header = wrapper.find('thead input[type=checkbox]').element;
+
+        expect(header.indeterminate).toBe(true);
+        expect(header.checked).toBe(false);
+    });
+
+    it('klik checkbox tidak memicu klik-baris dan baris kosong ber-colspan termasuk kolom checkbox', async () => {
+        const wrapper = pasang({ barisBisaDiklik: true });
+
+        await wrapper.findAll('tbody input[type=checkbox]')[0].trigger('click');
+        expect(wrapper.emitted('klik-baris')).toBeUndefined();
+
+        const kosong = pasang({ rows: [] });
+        expect(kosong.find('tbody td[colspan]').attributes('colspan')).toBe('4');
+    });
+});
+
+describe('DataTable penanda klik dan baris total', () => {
+    const data = [{ kode: '11', nama_provinsi: 'Aceh', dibuat: 'a' }, { kode: '12', nama_provinsi: 'Sumut', dibuat: 'b' }];
+
+    it('menampilkan kolom panah hanya bila penandaKlik dan barisBisaDiklik aktif', () => {
+        expect(mount(DataTable, { props: { columns, rows: data, barisBisaDiklik: true, penandaKlik: true } }).findAll('tbody td.kolom-panah')).toHaveLength(2);
+        expect(mount(DataTable, { props: { columns, rows: data, penandaKlik: true } }).findAll('td.kolom-panah')).toHaveLength(0);
+        expect(mount(DataTable, { props: { columns, rows: data, barisBisaDiklik: true } }).findAll('td.kolom-panah')).toHaveLength(0);
+    });
+
+    it('baris kosong ber-colspan termasuk kolom panah', () => {
+        const wrapper = mount(DataTable, { props: { columns, rows: [], barisBisaDiklik: true, penandaKlik: true } });
+
+        expect(wrapper.find('tbody td[colspan]').attributes('colspan')).toBe('4');
+    });
+
+    it('menampilkan baris total di tfoot sesuai kolom dan tidak muncul saat data kosong', () => {
+        const wrapper = mount(DataTable, { props: { columns, rows: data, barisTotal: { kode: 'Total', dibuat: '99' } } });
+        const sel = wrapper.findAll('tfoot td').map((td) => td.text());
+
+        expect(sel).toEqual(['Total', '', '99']);
+        expect(mount(DataTable, { props: { columns, rows: [], barisTotal: { kode: 'Total' } } }).find('tfoot').exists()).toBe(false);
+        expect(mount(DataTable, { props: { columns, rows: data } }).find('tfoot').exists()).toBe(false);
     });
 });

@@ -62,6 +62,10 @@ Marketama/Enesis. Statusnya dipantau di [docs/BUSINESS_RULES.md](../../BUSINESS_
   tumpang tindih dijaga validasi di dalam transaksi, per kategori, karena constraint unik tidak menangkap tumpang tindih.
 - **Hanya motoris dengan status aktif eksplisit yang digaji.** Karyawan dengan status kosong (banyak hasil impor Marketama)
   atau nonaktif tidak masuk draf. Karyawan yang seharusnya digaji perlu ditandai aktif di data karyawan.
+- **Draf semua depo sekaligus = satu penggajian per depo.** Form Tambah boleh dikosongkan depo-nya; sistem membuat satu draf per
+  depo (dalam cakupan akun) yang punya karyawan aktif jenis itu, masing-masing dengan transaksi sendiri. Depo yang
+  periodenya tumpang tindih dengan penggajian yang sudah ada dilewati dan disebut di pesan; bila tidak ada yang bisa
+  dibuat, ditolak. Model tetap satu depo per penggajian (kuota, cakupan, dan finalisasi per depo).
 - **Satu penggajian mencakup satu depo.** Koordinator ikut menjadi filter opsional, sama seperti kolom di data lama.
 - **Periode gaji mengikuti cut off** *(menunggu konfirmasi)*. Dengan cut off `C`, periode berjalan dari tanggal `C` sampai
   tanggal `C - 1` bulan berikutnya, awalnya 20–19. Header menyimpan tanggal nyata, jadi perubahan pengaturan tidak
@@ -212,3 +216,7 @@ Daftar lengkap untuk pihak Marketama/Enesis ada di
 3. **Karyawan masuk atau keluar di tengah periode**: apakah gaji pokok tetap penuh? Asumsi: tetap penuh, dan admin
    menyesuaikan lewat komponen manual.
 4. **Tunjangan jabatan**: asumsi dibayar penuh karena kolomnya baru diputuskan dan belum ditanyakan prorata atau tidak.
+5. **Daftar gaji per depo atau keseluruhan**: apakah Marketama memproses, meninjau, dan memfinalkan penggajian per depo, atau
+   langsung satu daftar untuk semua motoris? Saat ini satu penggajian = satu depo, dan form Tambah bisa membuat satu draf per
+   depo sekaligus (depo dikosongkan). Jika yang dibutuhkan satu daftar keseluruhan (satu dokumen, finalisasi sekali), model
+   perlu diubah; jika cukup tampilan gabungan untuk dilihat, cukup laporan tanpa mengubah model.

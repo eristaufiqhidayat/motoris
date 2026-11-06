@@ -244,11 +244,15 @@ Route::middleware(['auth', 'wajib-ganti-password'])->group(function () {
         Route::controller(PenggajianController::class)->name("penggajian-{$jenis}.")->group(function () use ($slug) {
             Route::get("/{$slug}", 'index')->middleware("hak:{$slug}")->name('index');
             Route::get("/{$slug}/tambah", 'tambah')->middleware("hak:{$slug},tambah")->name('tambah');
+            Route::get("/{$slug}/ekspor", 'eksporPilihan')->middleware("hak:{$slug},ekspor")->name('ekspor-pilihan');
+            Route::post("/{$slug}/finalkan", 'finalkanPilihan')->middleware("hak:{$slug},ubah")->name('finalkan-pilihan');
             Route::post("/{$slug}", 'simpan')->middleware("hak:{$slug},tambah")->name('simpan');
             Route::get("/{$slug}/{id}", 'tampil')->whereNumber('id')->middleware("hak:{$slug}")->name('tampil');
+            Route::get("/{$slug}/{id}/ekspor", 'ekspor')->whereNumber('id')->middleware("hak:{$slug},ekspor")->name('ekspor');
             Route::prefix("{$slug}/{id}")->whereNumber(['id', 'detail', 'komponen'])->middleware("hak:{$slug},ubah")->group(function () {
                 Route::post('/hitung-ulang', 'hitungUlang')->name('hitung-ulang');
                 Route::post('/finalkan', 'finalkan')->name('finalkan');
+                Route::post('/kembalikan-ke-draf', 'kembalikanKeDraf')->name('kembalikan-ke-draf');
                 Route::post('/batalkan', 'batalkan')->name('batalkan');
                 Route::put('/detail/{detail}/izin', 'isiIzin')->name('izin');
                 Route::post('/detail/{detail}/komponen', 'tambahKomponen')->name('komponen.tambah');

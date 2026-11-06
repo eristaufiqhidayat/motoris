@@ -337,6 +337,11 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     .data-table th, .data-table td { @apply px-3 py-2 text-left border-b border-gray-100 whitespace-nowrap; }
     .data-table tbody tr:nth-child(odd) { @apply bg-gray-50/60; }
     .data-table tbody tr:hover { @apply bg-blue-50/50; }
+    .data-table .kolom-panah { @apply w-8 ps-0 text-right text-gray-300; }
+    .data-table tr.baris-klik:hover .kolom-panah { @apply text-blue-500; }
+    .data-table tfoot td { @apply bg-gray-50 font-semibold border-t border-gray-200; }
+    .tabel-header-sticky tfoot td { position: sticky; bottom: 0; z-index: 10; }
+    .data-table .kolom-pilih { @apply w-8 pe-0; }
     .data-table th.sortable { @apply cursor-pointer select-none hover:bg-gray-100; }
     .data-table .sort-button { @apply inline-flex items-center gap-1; }
     .data-table .sort-icon { @apply inline-block w-3 h-3 text-gray-400; }
@@ -501,6 +506,15 @@ main { margin-left: 260px; padding: calc(3.5rem + 1rem) 1.5rem 1.5rem; }
     .alert-success { @apply bg-green-50 text-green-700 border border-green-100; }
 
     .dropdown-menu { @apply absolute right-0 z-20 mt-2 min-w-[14rem] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-500 shadow-lg; }
+
+    /* MenuAksi (molecules/MenuAksi.vue): tombol dengan submenu perintah; panel rata kanan di bawah pemicu. */
+    .menu-aksi { @apply relative inline-block; }
+    .menu-aksi-panel { @apply absolute right-0 z-30 mt-1 max-h-72 min-w-[12rem] overflow-y-auto rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg; }
+    .menu-aksi-item { @apply flex w-full items-center gap-2 px-3 py-1.5 text-left text-gray-700 hover:bg-gray-100 focus-visible:bg-gray-100 focus-visible:outline-none; }
+    .menu-aksi-item svg { @apply h-3.5 w-3.5 flex-none; }
+    .menu-aksi-item-bahaya { @apply text-red-600 hover:bg-red-50 focus-visible:bg-red-50; }
+    .menu-aksi-item-nonaktif { @apply cursor-not-allowed text-gray-400 hover:bg-transparent focus-visible:bg-transparent; }
+    .menu-aksi-pemisah { @apply my-1 border-t border-gray-200; }
 
     .page-header-icon { @apply flex h-9 w-9 flex-none items-center justify-center rounded-md bg-blue-50 text-blue-600; }
     .page-header-icon svg { @apply h-5 w-5; }
